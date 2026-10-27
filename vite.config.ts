@@ -99,6 +99,12 @@ export default defineConfig({
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        screenshots: [
+          { src: '/screenshots/wide-citas.png', sizes: '1280x800', type: 'image/png', form_factor: 'wide', label: 'Agenda de citas con tablero del día' },
+          { src: '/screenshots/wide-estadisticas.png', sizes: '1280x800', type: 'image/png', form_factor: 'wide', label: 'Estadísticas y cierre del mes' },
+          { src: '/screenshots/narrow-citas.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow', label: 'Citas desde el celular' },
+          { src: '/screenshots/narrow-fichas.png', sizes: '390x844', type: 'image/png', form_factor: 'narrow', label: 'Fichas de mascotas' },
+        ],
         shortcuts: [
           { name: 'Nueva cita', short_name: 'Nueva cita', url: '/admin?nueva=1', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
           { name: 'Fichas', short_name: 'Fichas', url: '/admin/fichas', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
@@ -108,6 +114,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
+        globIgnores: ['screenshots/**'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
