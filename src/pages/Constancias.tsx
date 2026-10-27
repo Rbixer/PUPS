@@ -26,7 +26,7 @@ export function Constancias() {
         <p className="empty">Todavía no hay constancias. En Documento de egreso elige la visita y pulsa Guardar.</p>
       ) : (
         <div className="doc-archive">
-          <div className="doc-list" role="listbox" aria-label="Constancias guardadas">
+          <div className="doc-list" role="group" aria-label="Constancias guardadas">
             {docs.map((item) => (
               <button
                 key={item.id}

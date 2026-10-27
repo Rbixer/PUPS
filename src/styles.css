@@ -6,7 +6,7 @@
   --muted: #6d645c;
   --line: #e6dcd0;
   --accent: #1c1917;
-  --accent-2: #c4784a;
+  --accent-2: #a9622f;
   --accent-soft: #f6eadf;
   --green: #2f6b4e;
   --amber: #9a6700;
@@ -517,7 +517,7 @@ p { margin: 0; }
   cursor: pointer;
   text-align: left;
 }
-.cal-day.out { opacity: 0.38; }
+.cal-day.out { opacity: 0.62; }
 .cal-day.selected { background: var(--accent-soft); }
 .cal-day.drop { outline: 2px dashed var(--accent); }
 .cal-num {
@@ -1359,7 +1359,7 @@ p { margin: 0; }
   --muted: #6f675f;
   --line: #e7dfd4;
   --accent: #1c1917;
-  --accent-2: #c4784a;
+  --accent-2: #a9622f;
   --accent-soft: #f6eadf;
   --green: #2f6b4e;
   --amber: #9a6700;
@@ -1790,7 +1790,7 @@ p { margin: 0; }
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8b919c;
+  color: #6b7280;
 }
 .admin .kpi strong { font-size: 1.85rem; font-weight: 700; }
 .admin .slot {
@@ -1993,7 +1993,7 @@ p { margin: 0; }
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8b909a;
+  color: #6b7280;
 }
 .tutor-grid { grid-template-columns: 1.3fr 0.8fr 1.4fr; }
 .pet-grid { grid-template-columns: 1.25fr 1fr 0.7fr 0.75fr 0.8fr 0.85fr; }
@@ -2008,7 +2008,7 @@ p { margin: 0; }
 }
 .check-head {
   padding: 0 0 8px;
-  color: #8b909a;
+  color: #6b7280;
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.06em;

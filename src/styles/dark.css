@@ -8,7 +8,8 @@
     --ink: #f3ece3;
     --muted: #a99d90;
     --line: #38312b;
-    --accent: #c4784a;
+    --accent: #a9622f;
+    --accent-2: #a9622f;
     --accent-soft: #3a2a1f;
     --green: #6fc79a;
     --amber: #e0a94a;
@@ -107,16 +108,15 @@
   }
   html[data-theme="dark"] .admin .btn-ghost:hover { background: rgba(196, 120, 74, 0.12); border-color: #6b4a34; }
   html[data-theme="dark"] .admin .btn-primary {
-    background: linear-gradient(180deg, #d58a5c, #b96c3f);
+    background: linear-gradient(180deg, #b56a3a, #94552a);
     color: #fff;
   }
-  html[data-theme="dark"] .admin .btn-primary:hover { background: linear-gradient(180deg, #e09a6e, #c4784a); }
+  html[data-theme="dark"] .admin .btn-primary:hover { background: linear-gradient(180deg, #c27545, #a9622f); }
   html[data-theme="dark"] .admin .who .btn-ghost { color: #f5f6f8; border-color: rgba(255, 255, 255, 0.16); }
 
   /* Calendario y agenda */
   html[data-theme="dark"] .admin .cal-day.selected { background: rgba(196, 120, 74, 0.14); }
   html[data-theme="dark"] .admin .cal-day:hover { background: rgba(196, 120, 74, 0.1); }
-  html[data-theme="dark"] .admin .cal-day.out .cal-num { color: #6f655a; }
   html[data-theme="dark"] .admin .cal-chip.pendiente,
   html[data-theme="dark"] .admin .day-block.pendiente { background: #3a2a1f; color: #f1c8a6; box-shadow: none; }
   html[data-theme="dark"] .admin .cal-chip.completada,
@@ -184,6 +184,26 @@
   }
   html[data-theme="dark"] .admin .report-sheet *,
   html[data-theme="dark"] .admin .sheet * { border-color: #e5ded4; }
+
+  /* Colores escritos a mano que quedaban oscuros sobre fondo oscuro */
+  html[data-theme="dark"] .admin .slot time,
+  html[data-theme="dark"] .admin .photo-slot,
+  html[data-theme="dark"] .admin .control-table tfoot td,
+  html[data-theme="dark"] .admin .control-table tfoot th,
+  html[data-theme="dark"] .admin .permit[aria-pressed='true'] { background: var(--cream); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .admin .permit[aria-pressed='true'] { border-color: var(--caramel); }
+  html[data-theme="dark"] .admin .control-calc,
+  html[data-theme="dark"] .admin .report-form > .sheet-voice,
+  html[data-theme="dark"] .admin .constancia-page .sheet-voice,
+  html[data-theme="dark"] .admin .report-shell .sheet-voice { color: var(--ink); }
+  html[data-theme="dark"] .admin .visit-pick button span,
+  html[data-theme="dark"] .admin .photo-empty,
+  html[data-theme="dark"] .admin .report-shell .report-form h3,
+  html[data-theme="dark"] .admin .check-head { color: var(--muted); }
+
+  html[data-theme="dark"] .admin .choice-row button:not([aria-pressed='true']) { background: var(--cream); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .admin .choice-row button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  html[data-theme="dark"] .admin .kpi span { color: var(--muted); }
 
   /* Avisos */
   html[data-theme="dark"] .route-loading span { background: linear-gradient(100deg, #26201b 30%, #302823 50%, #26201b 70%); background-size: 200% 100%; }
