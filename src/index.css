@@ -1,0 +1,26 @@
+/* Orden de capas: lo heredado abajo, Tailwind arriba. Así las utilidades siempre ganan. */
+@layer legacy, theme, components, utilities;
+
+@import './styles.css' layer(legacy);
+@import './styles/premium.css' layer(legacy);
+@import './styles/dark.css' layer(legacy);
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import './styles/ui.css';
+
+@custom-variant dark (&:where(html[data-theme='dark'], html[data-theme='dark'] *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', 'Iowan Old Style', 'Palatino Linotype', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-caramel: #c4784a;
+  --color-caramel-deep: #8a4e2a;
+  --color-caramel-ink: #6b3a1c;
+  --color-charcoal: #1c1917;
+  --color-cream: #f6f3ee;
+  --breakpoint-side: 981px;
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+}

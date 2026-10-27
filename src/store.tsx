@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { allows as userAllows } from './access'
+import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, hashPassword, newId, normalizePhone } from './format'
 import type { Appointment, AppState, ControlField, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
@@ -66,6 +67,57 @@ function shared(state: AppState): AppState {
   return { ...state, sessionUserId: null }
 }
 
+/** Copia ligera para localStorage: las fotos pesan y el cupo del navegador es corto. */
+function lightweight(state: AppState): AppState {
+  return {
+    ...state,
+    appointments: state.appointments.map((item) => ({
+      ...item,
+      beforePhoto: undefined,
+      afterPhoto: undefined,
+      report: item.report ? { ...item.report, photos: item.report.photos?.map(() => '') } : item.report,
+    })),
+  }
+}
+
+function persist(payload: AppState) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(payload))
+  } catch {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(lightweight(payload)))
+    } catch {
+      /* Sin cupo: el equipo del local sigue siendo la copia principal. */
+    }
+  }
+}
+
+const REMEMBER = 'pups-remember'
+const LOCK = 'pups-login-lock'
+const MAX_TRIES = 5
+const LOCK_MS = 30_000
+
+function readLock() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCK) ?? 'null') as { tries: number; until: number } | null
+    return raw && typeof raw.tries === 'number' ? raw : { tries: 0, until: 0 }
+  } catch {
+    return { tries: 0, until: 0 }
+  }
+}
+
+export function lockSeconds() {
+  const { until } = readLock()
+  return Math.max(0, Math.ceil((until - Date.now()) / 1000))
+}
+
+function failLogin() {
+  const current = readLock()
+  const tries = current.until && current.until < Date.now() ? 1 : current.tries + 1
+  const until = tries >= MAX_TRIES ? Date.now() + LOCK_MS : 0
+  localStorage.setItem(LOCK, JSON.stringify({ tries: tries >= MAX_TRIES ? 0 : tries, until }))
+}
+
 function load(): AppState {
   try {
     const raw = localStorage.getItem(KEY)
@@ -91,7 +143,7 @@ type Store = {
   currentUser: User | null
   isAdmin: boolean
   allows: (permission: Permission) => boolean
-  login: (username: string, password: string) => Promise<boolean>
+  login: (username: string, password: string, remember?: boolean) => Promise<boolean>
   logout: () => void
   addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>) => Appointment
   updateAppointment: (id: string, patch: Partial<Appointment>, method?: string) => ChargeNote | null
@@ -120,6 +172,8 @@ type Store = {
   sendMessage: (conversationId: string, body: string) => void
   markRead: (conversationId: string) => void
   resetDemo: () => void
+  exportBackup: () => string | null
+  importBackup: (raw: string) => string | null
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -127,7 +181,7 @@ const Ctx = createContext<Store | null>(null)
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => {
     const initial = load()
-    const session = sessionStorage.getItem(SESSION) || initial.sessionUserId
+    const session = sessionStorage.getItem(SESSION) || localStorage.getItem(REMEMBER) || initial.sessionUserId
     if (session) sessionStorage.setItem(SESSION, session)
     return { ...initial, sessionUserId: session }
   })
@@ -171,8 +225,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     void boot()
-    const timer = window.setInterval(() => {
-      if (!booted.current) return
+    const poll = () => {
+      if (!booted.current || document.hidden || !navigator.onLine) return
       void fetch('/api/state')
         .then(async (response) => {
           if (!response.ok) return
@@ -183,17 +237,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           })
         })
         .catch(() => undefined)
-    }, 2000)
+    }
+    const timer = window.setInterval(poll, 2500)
+    const wake = () => {
+      if (!document.hidden) poll()
+    }
+    const resync = () => {
+      wake()
+      setState((current) => ({ ...current }))
+    }
+    document.addEventListener('visibilitychange', wake)
+    window.addEventListener('online', resync)
     return () => {
       cancel = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', wake)
+      window.removeEventListener('online', resync)
     }
   }, [])
 
   useEffect(() => {
     if (!booted.current) return
     const payload = shared(state)
-    localStorage.setItem(KEY, JSON.stringify(payload))
+    persist(payload)
+    if (!navigator.onLine) return
     const handle = window.setTimeout(() => {
       void fetch('/api/state', {
         method: 'PUT',
@@ -218,7 +285,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       currentUser,
       isAdmin: currentUser?.role === 'Administrador',
       allows: (permission) => userAllows(currentUser, permission),
-      login: async (username, password) => {
+      login: async (username, password, remember = false) => {
+        if (lockSeconds() > 0) return false
         const hashed = await hashPassword(password)
         const user = state.users.find(
           (item) =>
@@ -226,8 +294,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             (item.password === hashed || item.password === password) &&
             item.active,
         )
-        if (!user) return false
+        if (!user) {
+          failLogin()
+          return false
+        }
+        localStorage.removeItem(LOCK)
         sessionStorage.setItem(SESSION, user.id)
+        if (remember) localStorage.setItem(REMEMBER, user.id)
+        else localStorage.removeItem(REMEMBER)
         setState((current) => ({
           ...current,
           sessionUserId: user.id,
@@ -241,6 +315,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         sessionStorage.removeItem(SESSION)
+        localStorage.removeItem(REMEMBER)
         setState((current) => ({ ...current, sessionUserId: null }))
       },
       addAppointment: (appointment) => {
@@ -453,6 +528,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)),
           }),
         )
+      },
+      exportBackup: () => {
+        if (!userAllows(currentUser, 'equipo')) return null
+        return JSON.stringify({ ...shared(state), exportedAt: new Date().toISOString() })
+      },
+      importBackup: (raw) => {
+        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para restaurar datos.'
+        const result = parseBackup(raw, state)
+        if ('error' in result) return result.error
+        setState(result.state)
+        return null
       },
       resetDemo: () => {
         if (currentUser?.role !== 'Administrador') return

@@ -37,7 +37,7 @@ export function Egresos() {
         <p className="empty">Todavía no hay visitas para armar una constancia.</p>
       ) : (
         <>
-          <div className="visit-pick" role="listbox" aria-label="Visitas">
+          <div className="visit-pick" role="group" aria-label="Visitas">
             {visits.map((item) => (
               <button
                 key={item.id}

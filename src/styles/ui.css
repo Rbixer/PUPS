@@ -1,0 +1,399 @@
+/* Componentes de interfaz escritos con Tailwind. Viven en la capa components,
+   por encima de lo heredado, así que redefinen formularios, botones y paneles en todo el panel. */
+@layer components {
+  .admin {
+    @apply side:grid-cols-[272px_minmax(0,1fr)];
+  }
+
+  /* Campos */
+  .field {
+    @apply grid gap-1.5;
+  }
+  .field > span {
+    @apply text-[13px] font-medium leading-none text-stone-600 dark:text-stone-300;
+  }
+  .field > input,
+  .field > select,
+  .field > textarea,
+  .dialog input,
+  .wa-compose textarea,
+  .filters input,
+  .filters select {
+    @apply w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 shadow-xs outline-none
+      transition-[border-color,box-shadow,background-color] duration-150 ease-out-soft
+      placeholder:text-stone-400 hover:border-stone-300
+      focus:border-caramel focus:ring-4 focus:ring-caramel/15
+      disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400
+      dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500 dark:hover:border-stone-600 dark:focus:border-caramel;
+  }
+  .field > select {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.8rem center;
+    background-size: 1rem;
+  }
+  .field > textarea {
+    @apply min-h-24 resize-y leading-relaxed;
+  }
+  .field > input[type='date'],
+  .field > input[type='time'] {
+    @apply font-mono text-[13px];
+  }
+  .field > input[type='file'] {
+    @apply cursor-pointer border-dashed px-3 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-stone-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-stone-700 dark:file:bg-stone-800 dark:file:text-stone-200;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    @apply size-4 cursor-pointer accent-caramel;
+  }
+  .login-panel .field > span {
+    @apply text-stone-300;
+  }
+  .login-panel .field > input {
+    @apply border-white/10 bg-white/[0.06] py-3 text-white placeholder:text-stone-500 hover:border-white/20 focus:border-caramel focus:bg-white/[0.08] focus:ring-caramel/25;
+  }
+  .form-error {
+    @apply rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300;
+  }
+  .login-panel .hint {
+    @apply text-stone-400;
+  }
+  .login-panel .form-error {
+    @apply border-rose-400/30 bg-rose-500/10 text-rose-200;
+  }
+  .hint {
+    @apply text-[13px] leading-relaxed text-stone-600 dark:text-stone-400;
+  }
+  .book-summary .hint {
+    @apply text-stone-300;
+  }
+
+  /* Botones */
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-transparent px-4 py-2.5 text-sm font-semibold leading-none
+      transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out-soft
+      focus-visible:ring-4 focus-visible:ring-caramel/25 focus-visible:outline-none
+      active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-stone-900 text-white shadow-sm hover:bg-stone-800 dark:bg-caramel dark:hover:bg-caramel-deep;
+  }
+  .btn-ghost {
+    @apply border-stone-200 bg-white text-stone-800 shadow-xs hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800;
+  }
+  .login .btn-primary {
+    @apply min-h-12 rounded-xl bg-white bg-none text-stone-900 shadow-[0_8px_24px_-12px_rgba(255,255,255,0.5)] hover:bg-cream hover:bg-none;
+  }
+  .btn-sm {
+    @apply rounded-lg px-3 py-2 text-[13px];
+  }
+  .text-btn {
+    @apply cursor-pointer rounded-md px-1 text-[13px] text-stone-500 underline-offset-4 hover:text-stone-900 hover:underline dark:text-stone-400 dark:hover:text-stone-100;
+  }
+
+  /* Paneles y tarjetas de formulario */
+  .admin .panel,
+  .admin .book-card,
+  .admin .team-form,
+  .admin .team-shop,
+  .admin .staff-form,
+  .admin .cash-desk > form,
+  .admin .wa-connect,
+  .admin .report-form,
+  .admin .backup {
+    @apply rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-18px_rgba(28,25,23,0.18)] dark:border-stone-800 dark:bg-stone-900;
+  }
+  .admin .panel > h2,
+  .admin .team-form > h2,
+  .admin .team-shop > h2,
+  .admin .book-card h3 {
+    @apply font-sans text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100;
+  }
+  .admin .book-card > header span {
+    @apply grid size-7 place-items-center rounded-lg bg-stone-900 font-mono text-[11px] text-white dark:bg-caramel-deep;
+  }
+
+  /* Interruptores y opciones */
+  .permit {
+    @apply cursor-pointer rounded-xl border border-stone-200 bg-white p-3 text-left transition duration-150 ease-out-soft hover:border-stone-300 hover:bg-stone-50
+      aria-pressed:border-caramel aria-pressed:bg-caramel/[0.06] aria-pressed:shadow-[inset_0_0_0_1px_var(--color-caramel)]
+      dark:border-stone-700 dark:bg-stone-900 dark:hover:bg-stone-800 dark:aria-pressed:bg-caramel/10;
+  }
+  .permit strong {
+    @apply text-sm font-semibold text-stone-900 dark:text-stone-100;
+  }
+  .permit small {
+    @apply text-xs text-stone-600 dark:text-stone-400;
+  }
+  .choice-row button,
+  .slot-pick,
+  .visit-pick button,
+  .doc-list button {
+    @apply cursor-pointer rounded-lg border border-stone-200 bg-white text-stone-700 transition duration-150 ease-out-soft hover:border-stone-300 hover:bg-stone-50
+      aria-pressed:border-stone-900 aria-pressed:bg-stone-900 aria-pressed:text-white
+      dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800 dark:aria-pressed:border-caramel-deep dark:aria-pressed:bg-caramel-deep;
+  }
+  .slot-pick.on {
+    @apply border-stone-900 bg-stone-900 text-white dark:border-caramel-deep dark:bg-caramel-deep;
+  }
+  .visit-pick button[aria-pressed='true'] span,
+  .doc-list button[aria-pressed='true'] span {
+    @apply text-white/85;
+  }
+  .remember {
+    @apply flex cursor-pointer items-center gap-2.5 text-[13px] text-stone-300;
+  }
+  .reveal {
+    @apply rounded-md px-2 py-1 text-xs font-semibold text-stone-400 hover:bg-white/10 hover:text-white;
+  }
+}
+
+/* Tarjetas de datos, encabezado y widgets del panel */
+@layer components {
+  .admin .page-head {
+    @apply sticky top-0 z-[4] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-stone-200/80 bg-white/80 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/80;
+  }
+  .admin .eyebrow {
+    @apply text-[11px] font-semibold tracking-[0.12em] text-caramel-deep uppercase dark:text-caramel;
+  }
+  .admin .page-head h1 {
+    @apply font-display text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-100;
+  }
+  .admin .lede {
+    @apply text-sm text-stone-600 dark:text-stone-400;
+  }
+
+  /* Receta común de tarjeta */
+  .admin .kpis,
+  .admin .records,
+  .admin .cal,
+  .admin .day-board,
+  .admin .filters,
+  .admin .person,
+  .admin .file-card,
+  .admin .file-hero,
+  .admin .file-panel,
+  .admin .stats-hero,
+  .admin .metric-rail article,
+  .admin .wa-shell,
+  .admin .ledger,
+  .admin .module-panel,
+  .admin .dialog,
+  .admin .drawer,
+  .admin .overlay-card,
+  .admin .staff-card,
+  .admin .control-wrap {
+    @apply rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-18px_rgba(28,25,23,0.18)] dark:border-stone-800 dark:bg-stone-900;
+  }
+  .admin .file-card {
+    @apply transition duration-200 ease-out-soft hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_18px_40px_-18px_rgba(28,25,23,0.28)] dark:hover:border-stone-700;
+  }
+  .admin .dialog,
+  .admin .drawer {
+    @apply shadow-2xl;
+  }
+  .admin .overlay {
+    @apply bg-stone-950/40 backdrop-blur-sm;
+  }
+
+  /* Indicadores */
+  .admin .kpis {
+    @apply overflow-hidden;
+  }
+  .admin .kpi {
+    @apply border-r border-stone-200/80 dark:border-stone-800;
+  }
+  .admin .kpi span,
+  .admin .stats-lead span,
+  .admin .stats-figures span,
+  .admin .metric-rail span {
+    @apply text-[11px] font-semibold tracking-[0.1em] text-stone-500 uppercase dark:text-stone-400;
+  }
+  .admin .kpi strong,
+  .admin .stats-figures strong,
+  .admin .metric-rail strong {
+    @apply font-display tracking-tight text-stone-900 dark:text-stone-100;
+  }
+  .admin .hot,
+  .admin .hot-text,
+  .admin .kpis .hot,
+  .admin .metric-rail .hot,
+  .admin .stats-figures .hot {
+    @apply text-amber-700 dark:text-amber-400;
+  }
+  .admin .ok,
+  .admin .ok-text,
+  .admin .kpis .ok,
+  .admin .metric-rail .ok,
+  .admin .stats-figures .ok {
+    @apply text-emerald-700 dark:text-emerald-400;
+  }
+  .admin .cyan,
+  .admin .kpis .cyan,
+  .admin .metric-rail .cyan,
+  .admin .stats-figures .cyan {
+    @apply text-caramel-deep dark:text-caramel;
+  }
+  .admin .stats-lead strong {
+    @apply font-display tracking-tight text-emerald-700 dark:text-emerald-400;
+  }
+  .admin .stats-figures article {
+    @apply border-stone-200/80 dark:border-stone-800;
+  }
+  .admin .legend b {
+    @apply whitespace-nowrap;
+  }
+  .admin .kpi small,
+  .admin .delta {
+    @apply text-xs text-stone-500 dark:text-stone-400;
+  }
+
+  /* Listas y filas */
+  .admin .record {
+    @apply border-b border-stone-200/80 transition-colors hover:bg-stone-50/80 dark:border-stone-800 dark:hover:bg-stone-800/50;
+  }
+  .admin .record:last-child {
+    @apply border-b-0;
+  }
+  .admin .module-bar {
+    @apply border-b border-stone-200/80 bg-stone-50/60 px-5 py-3 dark:border-stone-800 dark:bg-stone-900;
+  }
+  .admin .module-bar h2 {
+    @apply text-sm font-semibold text-stone-900 dark:text-stone-100;
+  }
+  .admin .module-bar span {
+    @apply text-xs text-stone-500 dark:text-stone-400;
+  }
+  .admin .ledger-head {
+    @apply border-b border-stone-200/80 bg-stone-50/60 dark:border-stone-800 dark:bg-stone-900;
+  }
+
+  /* Estados */
+  .admin .pill {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold tracking-[0.06em] uppercase;
+  }
+  .admin .pill-pendiente {
+    @apply border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300;
+  }
+  .admin .pill-completada {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300;
+  }
+  .admin .pill-cancelada {
+    @apply border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300;
+  }
+  .empty {
+    @apply rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-900/40 dark:text-stone-400;
+  }
+  .banner {
+    @apply rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300;
+  }
+  .banner.warn {
+    @apply border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300;
+  }
+
+  /* Calendario y agenda */
+  .admin .cal-head h2 {
+    @apply font-display text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100;
+  }
+  .admin .cal-arrow,
+  .admin .cal-add {
+    @apply size-9 cursor-pointer rounded-lg border border-stone-200 bg-white text-stone-700 shadow-xs transition hover:border-stone-300 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800;
+  }
+  .admin .cal-add {
+    @apply border-stone-900 bg-stone-900 text-white hover:bg-stone-800 dark:border-caramel-deep dark:bg-caramel-deep dark:hover:bg-caramel;
+  }
+  .admin .cal-day {
+    @apply rounded-lg border border-transparent transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/60;
+  }
+  .admin .cal-day.selected {
+    @apply border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-800;
+  }
+  .admin .cal-day.drop {
+    @apply outline-2 outline-dashed outline-caramel;
+  }
+  .admin .cal-num {
+    @apply text-xs font-medium text-stone-700 dark:text-stone-300;
+  }
+  .admin .cal-day.out {
+    @apply opacity-100;
+  }
+  .admin .cal-day.out .cal-num {
+    @apply text-stone-500 dark:text-stone-400;
+  }
+  .admin .cal-day.today .cal-num {
+    @apply rounded-full bg-stone-900 text-white dark:bg-caramel-deep;
+  }
+  .admin .cal-chip,
+  .admin .cal-more {
+    @apply rounded-md text-[11px];
+  }
+  .admin .cal-chip.pendiente {
+    @apply border-l-2 border-l-caramel bg-caramel/10 text-caramel-ink dark:bg-caramel/20 dark:text-orange-200;
+  }
+  .admin .cal-chip.completada {
+    @apply border-l-2 border-l-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200;
+  }
+  .admin .cal-chip.cancelada {
+    @apply bg-transparent text-stone-500 line-through dark:text-stone-400;
+  }
+  .admin .day-block {
+    @apply rounded-lg shadow-none transition hover:brightness-[0.98];
+  }
+  .admin .day-block.pendiente {
+    @apply bg-caramel/10 text-caramel-ink ring-1 ring-caramel/30 dark:bg-caramel/20 dark:text-orange-100 dark:ring-caramel/40;
+  }
+  .admin .day-block.completada {
+    @apply bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-100 dark:ring-emerald-900;
+  }
+
+  /* WhatsApp */
+  .admin .wa-row {
+    @apply cursor-pointer border-b border-stone-200/80 transition-colors hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/60;
+  }
+  .admin .wa-row.active {
+    @apply bg-stone-100 shadow-[inset_3px_0_0_var(--color-caramel)] dark:bg-stone-800;
+  }
+  .admin .wa-row b {
+    @apply bg-caramel text-white;
+  }
+  .admin .wa-list {
+    @apply border-stone-200/80 dark:border-stone-800;
+  }
+  .admin .wa-thread {
+    @apply bg-stone-50/70 bg-none dark:bg-stone-950/40;
+  }
+  .admin .wa-thread header {
+    @apply border-b border-stone-200/80 bg-white dark:border-stone-800 dark:bg-stone-900;
+  }
+  .admin .bubble.in {
+    @apply rounded-2xl rounded-bl-md border border-stone-200/80 bg-white text-stone-900 shadow-xs dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100;
+  }
+  .admin .bubble.out {
+    @apply rounded-2xl rounded-br-md bg-stone-900 text-white shadow-xs dark:bg-caramel-deep;
+  }
+  .admin .bubble.out time {
+    @apply text-white/60;
+  }
+
+  /* Control general */
+  .admin .control-table thead th {
+    @apply bg-stone-900 text-[10px] tracking-[0.08em] text-stone-100 dark:bg-stone-950;
+  }
+  .admin .control-table thead tr:nth-child(2) th {
+    @apply bg-stone-700 dark:bg-stone-800;
+  }
+  .admin .control-table th,
+  .admin .control-table td {
+    @apply border-stone-200/80 dark:border-stone-800;
+  }
+  .admin .control-table tbody tr:hover td {
+    @apply bg-stone-50 dark:bg-stone-800/50;
+  }
+  .admin .control-table input {
+    @apply rounded-md px-1.5 transition hover:bg-stone-100 focus:bg-white focus:ring-2 focus:ring-caramel/40 focus:outline-none dark:hover:bg-stone-800 dark:focus:bg-stone-900;
+  }
+  .admin .control-table tfoot td,
+  .admin .control-table tfoot th {
+    @apply bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-stone-100;
+  }
+}

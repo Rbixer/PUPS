@@ -1,0 +1,209 @@
+@media screen {
+  html[data-theme="dark"],
+  html[data-theme="dark"] .admin {
+    --bg: #14110f;
+    --card: #1e1a17;
+    --surface: #221d1a;
+    --cream: #2a2420;
+    --ink: #f3ece3;
+    --muted: #a99d90;
+    --line: #38312b;
+    --accent: #a9622f;
+    --accent-2: #a9622f;
+    --accent-soft: #3a2a1f;
+    --green: #6fc79a;
+    --amber: #e0a94a;
+    --red: #f08a96;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 18px 44px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+  html[data-theme="dark"] body {
+    background:
+      radial-gradient(900px 420px at 0% -8%, rgba(196, 120, 74, 0.12), transparent 58%),
+      var(--bg);
+  }
+  html[data-theme="dark"] ::selection { background: #5a3a26; color: #fff; }
+
+  /* Barra y encabezados */
+  html[data-theme="dark"] .admin .page-head { background: rgba(20, 17, 15, 0.82); }
+  html[data-theme="dark"] .admin .eyebrow { color: #e3a67e; }
+  html[data-theme="dark"] .admin .page-head h1,
+  html[data-theme="dark"] .admin h1,
+  html[data-theme="dark"] .admin h2,
+  html[data-theme="dark"] .admin h3 { color: var(--ink); }
+  html[data-theme="dark"] .admin .lede,
+  html[data-theme="dark"] .admin .hint { color: var(--muted); }
+
+  /* Superficies */
+  html[data-theme="dark"] .admin .kpis,
+  html[data-theme="dark"] .admin .records,
+  html[data-theme="dark"] .admin .panel,
+  html[data-theme="dark"] .admin .filters,
+  html[data-theme="dark"] .admin .cal,
+  html[data-theme="dark"] .admin .day-board,
+  html[data-theme="dark"] .admin .module-panel,
+  html[data-theme="dark"] .admin .ledger,
+  html[data-theme="dark"] .admin .person,
+  html[data-theme="dark"] .admin .file-card,
+  html[data-theme="dark"] .admin .file-hero,
+  html[data-theme="dark"] .admin .file-panel,
+  html[data-theme="dark"] .admin .stats-hero,
+  html[data-theme="dark"] .admin .stats-lead,
+  html[data-theme="dark"] .admin .metric-rail article,
+  html[data-theme="dark"] .admin .service-row,
+  html[data-theme="dark"] .admin .user-row,
+  html[data-theme="dark"] .admin .book-card,
+  html[data-theme="dark"] .admin .pillar,
+  html[data-theme="dark"] .admin .step,
+  html[data-theme="dark"] .admin .stage-card,
+  html[data-theme="dark"] .admin .hero-metrics,
+  html[data-theme="dark"] .admin .preview,
+  html[data-theme="dark"] .admin .tariff,
+  html[data-theme="dark"] .admin .empty,
+  html[data-theme="dark"] .admin .wa-shell,
+  html[data-theme="dark"] .admin .wa-connect,
+  html[data-theme="dark"] .admin .dialog,
+  html[data-theme="dark"] .admin .drawer {
+    background: var(--card);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  html[data-theme="dark"] .admin .record:hover,
+  html[data-theme="dark"] .admin .kpi:hover { background: rgba(196, 120, 74, 0.08); }
+  html[data-theme="dark"] .admin .file-line article,
+  html[data-theme="dark"] .admin .wa-thread,
+  html[data-theme="dark"] .admin .wa-row.active,
+  html[data-theme="dark"] .admin .bubble.in,
+  html[data-theme="dark"] .admin .cal-chip,
+  html[data-theme="dark"] .admin .cal-more { background: var(--cream); color: var(--ink); }
+  html[data-theme="dark"] .admin .bubble.out { background: #8a4e2a; color: #fff; }
+
+  /* Campos */
+  html[data-theme="dark"] .admin .field input,
+  html[data-theme="dark"] .admin .field select,
+  html[data-theme="dark"] .admin .field textarea,
+  html[data-theme="dark"] .admin .dialog input,
+  html[data-theme="dark"] .admin .wa-compose textarea,
+  html[data-theme="dark"] .admin .yesno input,
+  html[data-theme="dark"] .admin .report-form textarea {
+    background: #17130f;
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  html[data-theme="dark"] .admin .field span { color: #cdbfb0; }
+  html[data-theme="dark"] .admin .field input::placeholder { color: #7d7266; }
+  html[data-theme="dark"] .admin .field input:focus,
+  html[data-theme="dark"] .admin .field select:focus,
+  html[data-theme="dark"] .admin .field textarea:focus { background: #1c1713; }
+
+  /* Botones */
+  html[data-theme="dark"] .admin .btn-ghost,
+  html[data-theme="dark"] .admin .btn-wa,
+  html[data-theme="dark"] .admin .btn-cyan,
+  html[data-theme="dark"] .admin .btn-amber {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  html[data-theme="dark"] .admin .btn-ghost:hover { background: rgba(196, 120, 74, 0.12); border-color: #6b4a34; }
+  html[data-theme="dark"] .admin .btn-primary {
+    background: linear-gradient(180deg, #b56a3a, #94552a);
+    color: #fff;
+  }
+  html[data-theme="dark"] .admin .btn-primary:hover { background: linear-gradient(180deg, #c27545, #a9622f); }
+
+  /* Calendario y agenda */
+  html[data-theme="dark"] .admin .cal-day.selected { background: rgba(196, 120, 74, 0.14); }
+  html[data-theme="dark"] .admin .cal-day:hover { background: rgba(196, 120, 74, 0.1); }
+  html[data-theme="dark"] .admin .cal-chip.pendiente,
+  html[data-theme="dark"] .admin .day-block.pendiente { background: #3a2a1f; color: #f1c8a6; box-shadow: none; }
+  html[data-theme="dark"] .admin .cal-chip.completada,
+  html[data-theme="dark"] .admin .day-block.completada { background: #1f3328; color: #a9e0c1; box-shadow: none; }
+  html[data-theme="dark"] .admin .cal-chip.cancelada { color: #7d7266; }
+  html[data-theme="dark"] .admin .slot-pick { background: var(--card); border-color: var(--line); color: var(--ink); }
+  html[data-theme="dark"] .admin .slot-pick.on { background: var(--accent); color: #fff; }
+
+  /* Estados y etiquetas */
+  html[data-theme="dark"] .admin .pill-pendiente { color: #f0c27a; background: #3a2e17; border-color: #54421f; }
+  html[data-theme="dark"] .admin .pill-completada { color: #8fd8b0; background: #1c3024; border-color: #2c4a38; }
+  html[data-theme="dark"] .admin .pill-cancelada { color: #f0a0ab; background: #3a1f25; border-color: #54303a; }
+  html[data-theme="dark"] .admin .person-tags li,
+  html[data-theme="dark"] .admin .file-tags span,
+  html[data-theme="dark"] .admin .file-fact span,
+  html[data-theme="dark"] .admin .chips li,
+  html[data-theme="dark"] .admin .plan-badge { background: var(--cream); color: #cdbfb0; }
+  html[data-theme="dark"] .admin .plan-badge.premium { background: var(--accent); color: #fff; }
+  html[data-theme="dark"] .admin .person-mark,
+  html[data-theme="dark"] .admin .file-mark { background: var(--cream); color: #f1c8a6; }
+  html[data-theme="dark"] .admin .banner { background: #2a2018; border-color: #4a3524; color: var(--ink); }
+  html[data-theme="dark"] .admin .banner.warn { background: #34191f; border-color: #5a2a33; color: #f0a0ab; }
+
+  /* Estadísticas y tablas */
+  html[data-theme="dark"] .admin .pulse-bar,
+  html[data-theme="dark"] .admin .bar { background: #4a4037; }
+  html[data-theme="dark"] .admin .pulse-col.is-peak .pulse-bar,
+  html[data-theme="dark"] .admin .meter-fill { background: var(--accent); }
+  html[data-theme="dark"] .admin .meter-track { background: #2f2822; }
+  html[data-theme="dark"] .admin .tariff th,
+  html[data-theme="dark"] .admin .tariff td,
+  html[data-theme="dark"] .admin .panel h2 { border-color: var(--line); }
+  html[data-theme="dark"] .admin .hot { color: var(--amber); }
+  html[data-theme="dark"] .admin .ok { color: var(--green); }
+  html[data-theme="dark"] .admin .cyan { color: #e3a67e; }
+
+  /* Pantallas del sitio dentro del panel */
+  html[data-theme="dark"] .admin .site-module h1 em { color: #e3a67e; }
+  html[data-theme="dark"] .admin .float-card em.done { color: var(--ink); }
+
+  html[data-theme="dark"] .admin .module-bar,
+  html[data-theme="dark"] .admin .ledger-head,
+  html[data-theme="dark"] .admin .file-grid,
+  html[data-theme="dark"] .admin .cash-desk .panel { background: var(--card); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .admin .module-bar h2,
+  html[data-theme="dark"] .admin .module-bar span { color: var(--ink); }
+
+  /* El papel (informes, constancias, hojas) siempre se ve claro */
+  html[data-theme="dark"] .admin .report-sheet,
+  html[data-theme="dark"] .admin .sheet,
+  html[data-theme="dark"] .admin .constancia-preview {
+    --bg: #f6f3ee;
+    --card: #ffffff;
+    --surface: #ffffff;
+    --cream: #f4efe8;
+    --ink: #1c1917;
+    --muted: #6f675f;
+    --line: #e5ded4;
+    --green: #2d6a4f;
+    --amber: #9a6a14;
+    --red: #b3342a;
+    color-scheme: light;
+    background: #fffdfb;
+    color: #1c1917;
+  }
+  html[data-theme="dark"] .admin .report-sheet *,
+  html[data-theme="dark"] .admin .sheet * { border-color: #e5ded4; }
+
+  /* Colores escritos a mano que quedaban oscuros sobre fondo oscuro */
+  html[data-theme="dark"] .admin .slot time,
+  html[data-theme="dark"] .admin .photo-slot,
+  html[data-theme="dark"] .admin .control-table tfoot td,
+  html[data-theme="dark"] .admin .control-table tfoot th,
+  html[data-theme="dark"] .admin .permit[aria-pressed='true'] { background: var(--cream); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .admin .permit[aria-pressed='true'] { border-color: var(--caramel); }
+  html[data-theme="dark"] .admin .control-calc,
+  html[data-theme="dark"] .admin .report-form > .sheet-voice,
+  html[data-theme="dark"] .admin .constancia-page .sheet-voice,
+  html[data-theme="dark"] .admin .report-shell .sheet-voice { color: var(--ink); }
+  html[data-theme="dark"] .admin .visit-pick button span,
+  html[data-theme="dark"] .admin .photo-empty,
+  html[data-theme="dark"] .admin .report-shell .report-form h3,
+  html[data-theme="dark"] .admin .check-head { color: var(--muted); }
+
+  html[data-theme="dark"] .admin .choice-row button:not([aria-pressed='true']) { background: var(--cream); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .admin .choice-row button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  html[data-theme="dark"] .admin .kpi span { color: var(--muted); }
+
+  /* Avisos */
+  html[data-theme="dark"] .route-loading span { background: linear-gradient(100deg, #26201b 30%, #302823 50%, #26201b 70%); background-size: 200% 100%; }
+  html[data-theme="dark"] .offline-chip { background: #b37a12; }
+}

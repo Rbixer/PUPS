@@ -97,8 +97,8 @@ export function Estadisticas() {
   const peakHour = Math.max(...report.hours.map((hour) => hour.count), 1)
   const status = [
     { label: 'Completadas', value: report.done.length, color: '#5f7d6c' },
-    { label: 'Pendientes', value: report.pending, color: '#2a2e36' },
-    { label: 'Canceladas', value: report.cancelled, color: '#d5d7dc' },
+    { label: 'Pendientes', value: report.pending, color: '#c4784a' },
+    { label: 'Canceladas', value: report.cancelled, color: '#b3a99d' },
   ]
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function Estadisticas() {
               ? `Día más alto: ${dayCaption(peakDay.date)} · ${money(peakDay.sales)}. La altura es el monto cobrado.`
               : 'Suma de las citas completadas. La altura es el monto, no la cantidad de mascotas.'}
           </p>
-          <div className="pulse" role="list" aria-label="Cobro diario del mes">
+          <div className="pulse" role="list" tabIndex={0} aria-label="Cobro diario del mes, desplazable">
             {report.days.map((day) => (
               <div
                 key={day.date}

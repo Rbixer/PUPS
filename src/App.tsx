@@ -1,24 +1,30 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { allows, homeFor } from './access'
 import { useStore } from './store'
+import { InstallBanner, OfflineChip } from './components/InstallBanner'
 import { AdminLayout } from './pages/AdminLayout'
-import { Citas } from './pages/Citas'
-import { Egresos } from './pages/Egresos'
-import { Constancias } from './pages/Constancias'
-import { Estadisticas } from './pages/Estadisticas'
-import { Fichas } from './pages/Fichas'
-import { Ingresos } from './pages/Ingresos'
-import { Contacto } from './pages/Contacto'
-import { Home } from './pages/Home'
 import { Login } from './pages/Login'
-import { Reservar } from './pages/Reservar'
-import { Servicios } from './pages/Servicios'
-import { ControlGeneral } from './pages/ControlGeneral'
-import { Trabajadores } from './pages/Trabajadores'
-import { Usuarios } from './pages/Usuarios'
-import { WhatsApp } from './pages/WhatsApp'
 import type { Permission } from './types'
-import type { ReactNode } from 'react'
+import { lazy, type ComponentType, type ReactNode } from 'react'
+
+const page = <T extends Record<string, unknown>, K extends keyof T>(load: () => Promise<T>, name: K) =>
+  lazy(() => load().then((module) => ({ default: module[name] as ComponentType })))
+
+const Citas = page(() => import('./pages/Citas'), 'Citas')
+const Egresos = page(() => import('./pages/Egresos'), 'Egresos')
+const Constancias = page(() => import('./pages/Constancias'), 'Constancias')
+const Estadisticas = page(() => import('./pages/Estadisticas'), 'Estadisticas')
+const Fichas = page(() => import('./pages/Fichas'), 'Fichas')
+const Ingresos = page(() => import('./pages/Ingresos'), 'Ingresos')
+const Contacto = page(() => import('./pages/Contacto'), 'Contacto')
+const Home = page(() => import('./pages/Home'), 'Home')
+const Reservar = page(() => import('./pages/Reservar'), 'Reservar')
+const Servicios = page(() => import('./pages/Servicios'), 'Servicios')
+const ControlGeneral = page(() => import('./pages/ControlGeneral'), 'ControlGeneral')
+const Trabajadores = page(() => import('./pages/Trabajadores'), 'Trabajadores')
+const Usuarios = page(() => import('./pages/Usuarios'), 'Usuarios')
+const WhatsApp = page(() => import('./pages/WhatsApp'), 'WhatsApp')
+
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { currentUser } = useStore()
@@ -56,6 +62,9 @@ function Entrada() {
 
 export function App() {
   return (
+    <>
+    <OfflineChip />
+    <InstallBanner />
     <Routes>
       <Route index element={<Entrada />} />
       <Route path="login" element={<Login />} />
@@ -163,5 +172,6 @@ export function App() {
       </Route>
       <Route path="*" element={<Entrada />} />
     </Routes>
+    </>
   )
 }
