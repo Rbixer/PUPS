@@ -106,11 +106,6 @@
     border-color: var(--line);
   }
   html[data-theme="dark"] .admin .btn-ghost:hover { background: rgba(196, 120, 74, 0.12); border-color: #6b4a34; }
-  html[data-theme="dark"] .admin .btn-primary {
-    background: linear-gradient(180deg, #b56a3a, #94552a);
-    color: #fff;
-  }
-  html[data-theme="dark"] .admin .btn-primary:hover { background: linear-gradient(180deg, #c27545, #a9622f); }
 
   /* Calendario y agenda */
   html[data-theme="dark"] .admin .cal-day.selected { background: rgba(196, 120, 74, 0.14); }
@@ -206,4 +201,9 @@
   /* Avisos */
   html[data-theme="dark"] .route-loading span { background: linear-gradient(100deg, #26201b 30%, #302823 50%, #26201b 70%); background-size: 200% 100%; }
   html[data-theme="dark"] .offline-chip { background: #b37a12; }
+
+  /* Fotos antes y después */
+  html[data-theme="dark"] .compare-slot { background: #1c1917; border-color: #3b322c; }
+  html[data-theme="dark"] .compare-slot .photo-empty,
+  html[data-theme="dark"] .compare-slot img { background: #26201b; }
 }
