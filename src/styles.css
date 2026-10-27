@@ -1,16 +1,18 @@
 :root {
-  --bg: #eef1f4;
-  --card: #ffffff;
-  --cream: #f3f5f8;
-  --ink: #12151a;
-  --muted: #5c6570;
-  --line: #e3e6eb;
-  --accent: #12151a;
-  --accent-soft: #f3f5f8;
-  --green: #3f6b52;
-  --amber: #5c6570;
-  --red: #8a4550;
-  --shadow: 0 1px 2px rgba(16, 20, 26, 0.04), 0 16px 40px rgba(16, 20, 26, 0.06);
+  --bg: #f3eee6;
+  --card: #fffdfb;
+  --cream: #f7f1e8;
+  --ink: #1c1917;
+  --muted: #6d645c;
+  --line: #e6dcd0;
+  --accent: #1c1917;
+  --accent-2: #c4784a;
+  --accent-soft: #f6eadf;
+  --green: #2f6b4e;
+  --amber: #9a6700;
+  --red: #9f3a45;
+  --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 18px 44px rgba(28, 25, 23, 0.07);
+  --display: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
   color-scheme: light;
 }
 
@@ -19,19 +21,23 @@ html, body, #root { min-height: 100%; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-size: 15px;
   font-weight: 400;
-  background: var(--bg);
+  background:
+    radial-gradient(920px 420px at 0% -10%, rgba(196, 120, 74, 0.16), transparent 58%),
+    radial-gradient(680px 360px at 100% 0%, rgba(28, 25, 23, 0.05), transparent 52%),
+    var(--bg);
   color: var(--ink);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 #root { position: relative; z-index: 1; }
 img { max-width: 100%; display: block; }
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: inherit; }
-::selection { background: #e5e7eb; color: var(--ink); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+::selection { background: #f0d7c4; color: var(--ink); }
+:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; }
 
 .num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .eyebrow {
@@ -46,11 +52,11 @@ a { color: inherit; }
 h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; line-height: 1.2; }
 h1 { font-size: clamp(2.15rem, 4vw, 3.15rem); margin: 0; font-weight: 700; letter-spacing: -0.045em; line-height: 1.08; }
 h1 em, .login-brand h1 em {
-  font-family: "Plus Jakarta Sans", sans-serif;
-  font-style: normal;
-  font-weight: 400;
-  letter-spacing: -0.045em;
-  color: #5e646e;
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 560;
+  letter-spacing: -0.03em;
+  color: var(--accent-2);
 }
 h2 { font-size: clamp(1.35rem, 2.2vw, 1.8rem); margin: 0; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; }
 h3 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; letter-spacing: -0.015em; }
@@ -250,9 +256,9 @@ p { margin: 0; }
 .preview-kpis b, .kpi strong { display: block; margin-top: 8px; font-size: clamp(1.4rem, 2vw, 2rem); font-weight: 500; }
 .preview-list { display: grid; padding: 0 18px 18px; }
 .preview-list p { display: flex; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
-.hot, .hot-text { color: var(--ink); }
-.ok, .ok-text { color: var(--ink); }
-.cyan { color: var(--ink); }
+.hot, .hot-text { color: var(--amber); }
+.ok, .ok-text { color: var(--green); }
+.cyan { color: var(--accent-2); }
 
 .footer { padding: 36px 7vw 28px; overflow: hidden; border-top: 1px solid var(--line); background: #fff; }
 .giant { display: none; }
@@ -464,7 +470,7 @@ p { margin: 0; }
 .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: end; flex-wrap: wrap; }
 .page-head > div:first-child { flex: 1 1 280px; min-width: 0; }
 .page-head h1 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 600;
   font-size: 1.25rem;
   letter-spacing: -0.02em;
@@ -721,7 +727,7 @@ p { margin: 0; }
 .team-split { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.7fr); gap: 14px; align-items: start; }
 .team-form, .team-shop { display: grid; gap: 14px; align-content: start; }
 .team .panel h2 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 400;
   font-size: 1.85rem;
   letter-spacing: -0.03em;
@@ -826,7 +832,7 @@ p { margin: 0; }
 .stats-lead strong {
   display: block;
   margin-top: 8px;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 400;
   font-size: clamp(3.1rem, 5vw, 4.6rem);
   letter-spacing: -0.03em;
@@ -837,7 +843,7 @@ p { margin: 0; }
 .stats-figures article { padding: 18px 20px 16px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .stats-figures article:nth-child(3), .stats-figures article:nth-child(4) { border-bottom: 0; }
 .stats-figures strong { display: block; margin-top: 8px; font-size: 1.35rem; font-weight: 500; }
-.stats .panel h2 { font-family: "Plus Jakarta Sans", sans-serif; font-weight: 600; font-size: 1rem; letter-spacing: -0.02em; }
+.stats .panel h2 { font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif; font-weight: 600; font-size: 1rem; letter-spacing: -0.02em; }
 .metric-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .metric-rail article { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; }
 .metric-rail strong { display: block; margin-top: 6px; font-size: 1.25rem; font-weight: 500; }
@@ -867,7 +873,7 @@ p { margin: 0; }
 }
 .report-mast img { width: 64px; border-radius: 14px; }
 .report-mast h2 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 400;
   font-size: 2.5rem;
   letter-spacing: -0.03em;
@@ -875,7 +881,7 @@ p { margin: 0; }
 }
 .report-stamp { color: var(--muted); font-size: 0.85rem; text-align: right; }
 .report-sheet h3 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 400;
   font-size: 1.45rem;
   margin: 22px 0 8px;
@@ -1016,7 +1022,7 @@ p { margin: 0; }
   text-transform: uppercase;
 }
 .plan-badge.premium { background: var(--accent); color: white; }
-.sheet-voice { margin: 16px 0; font-family: "Plus Jakarta Sans", sans-serif; font-style: italic; font-size: 1.35rem; }
+.sheet-voice { margin: 16px 0; font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif; font-style: italic; font-size: 1.35rem; }
 .sheet-note { min-height: 2.5rem; }
 .check-table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 0.92rem; }
 .check-table th, .check-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(28, 22, 18, 0.12); vertical-align: top; }
@@ -1344,23 +1350,24 @@ p { margin: 0; }
 
 .admin,
 .login {
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --cream: #f3f4f6;
-  --ink: #17191d;
-  --muted: #6d727c;
-  --line: #e6e7eb;
-  --accent: #17191d;
-  --accent-soft: #f3f4f6;
-  --green: #3f6b52;
-  --amber: #7a6840;
-  --red: #8a4550;
-  --shadow: 0 1px 2px rgba(16, 20, 26, 0.04), 0 16px 40px rgba(16, 20, 26, 0.06);
+  --bg: #f6f3ee;
+  --card: #fffdfb;
+  --cream: #f3ece3;
+  --ink: #1c1917;
+  --muted: #6f675f;
+  --line: #e7dfd4;
+  --accent: #1c1917;
+  --accent-2: #c4784a;
+  --accent-soft: #f6eadf;
+  --green: #2f6b4e;
+  --amber: #9a6700;
+  --red: #9f3a45;
+  --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 16px 40px rgba(28, 25, 23, 0.06);
   color: var(--ink);
   background: var(--bg);
 }
 .admin ::selection,
-.login ::selection { background: #e5e7eb; color: var(--ink); }
+.login ::selection { background: #f0d7c4; color: var(--ink); }
 
 .admin .side {
   padding: 14px 12px 12px;
@@ -1437,7 +1444,7 @@ p { margin: 0; }
 .admin .stats-lead strong,
 .admin .report-mast h2,
 .admin .report-sheet h3 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-style: normal;
   font-weight: 500;
   letter-spacing: -0.035em;
@@ -1446,11 +1453,9 @@ p { margin: 0; }
 .admin .lede,
 .admin .hint,
 .admin .stats-lead p { color: var(--muted); }
-.admin .hot,
-.admin .hot-text,
-.admin .ok,
-.admin .ok-text,
-.admin .cyan { color: var(--ink); }
+.admin .hot, .admin .hot-text { color: var(--amber); }
+.admin .ok, .admin .ok-text { color: var(--green); }
+.admin .cyan { color: var(--accent-2); }
 .admin .kpis {
   gap: 0;
   background: #fff;
@@ -1550,9 +1555,9 @@ p { margin: 0; }
   font-size: 0.68rem;
   padding: 3px 8px;
 }
-.admin .pill-pendiente { color: #5c5346; background: #f6f5f2; border-color: #e6e2da; }
-.admin .pill-completada { color: #355746; background: #f3f6f4; border-color: #dbe5df; }
-.admin .pill-cancelada { color: #7a4e57; background: #f8f4f5; border-color: #eadde0; }
+.admin .pill-pendiente { color: #8a5a12; background: #f8ecd4; border-color: #efd7ae; }
+.admin .pill-completada { color: #1f6b45; background: #e5f5ec; border-color: #cfe6d8; }
+.admin .pill-cancelada { color: #8d3140; background: #f8e4e8; border-color: #efd0d6; }
 
 .admin .cal { padding: 18px 16px 14px; }
 .admin .cal-head h2 { font-size: 1.2rem; font-weight: 500; }
@@ -1632,7 +1637,7 @@ p { margin: 0; }
 .admin .sheet { background: #fff; border: 1px solid var(--line); color: var(--ink); }
 .admin .plan-badge { background: #f3f4f6; color: #3f4550; }
 .admin .plan-badge.premium { background: #17191d; color: #fff; }
-.admin .sheet-voice { font-family: "Plus Jakarta Sans", sans-serif; font-style: normal; }
+.admin .sheet-voice { font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif; font-style: normal; }
 .admin .overlay { background: rgba(17, 19, 24, 0.45); }
 
 .login {
@@ -1647,7 +1652,7 @@ p { margin: 0; }
   padding: 36px 44px;
 }
 .login-brand h1 {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   font-weight: 600;
   font-size: clamp(1.8rem, 3vw, 2.25rem);
   letter-spacing: -0.03em;

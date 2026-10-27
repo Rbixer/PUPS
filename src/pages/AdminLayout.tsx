@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
 import { Brand } from '../components/ui'
@@ -245,7 +245,17 @@ export function AdminLayout() {
         </div>
       </aside>
       <div className="admin-main">
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="route-loading" aria-busy="true" aria-label="Cargando">
+              <span />
+              <span />
+              <span />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   )

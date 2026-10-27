@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
-import { useStore } from '../store'
+import { lockSeconds, useStore } from '../store'
 
 export function Login() {
   const { login, currentUser } = useStore()
@@ -10,6 +10,7 @@ export function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [remember, setRemember] = useState(false)
 
   useEffect(() => {
     document.title = "Entrar · PUP'S"
@@ -38,15 +39,21 @@ export function Login() {
             const data = new FormData(event.currentTarget)
             const userName = String(data.get('username') ?? username)
             const pass = String(data.get('password') ?? password)
+            const wait = lockSeconds()
+            if (wait > 0) {
+              setError(`Demasiados intentos. Espera ${wait} s e inténtalo de nuevo.`)
+              return
+            }
             let ok = false
             try {
-              ok = await login(userName, pass)
+              ok = await login(userName, pass, remember)
             } catch {
               setError('No se pudo comprobar la clave en este celular. Recarga e inténtalo de nuevo.')
               return
             }
             if (!ok) {
-              setError('Usuario o clave incorrectos.')
+              const locked = lockSeconds()
+              setError(locked > 0 ? `Demasiados intentos. Espera ${locked} s e inténtalo de nuevo.` : 'Usuario o clave incorrectos.')
               return
             }
             navigate(destination, { replace: true })
@@ -81,6 +88,10 @@ export function Login() {
               required
             />
           </Field>
+          <label className="remember">
+            <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+            Mantener la sesión en este dispositivo
+          </label>
           {error ? (
             <p className="form-error" role="alert">
               {error}

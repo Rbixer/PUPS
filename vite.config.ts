@@ -4,6 +4,7 @@ import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 function pupsState(): Plugin {
   const file = path.resolve('data/pups.json')
@@ -71,7 +72,33 @@ function pupsState(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [pupsState(), react()],
+  plugins: [
+    pupsState(),
+    react(),
+    VitePWA({
+      injectRegister: null,
+      registerType: 'prompt',
+      manifest: false,
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,ico,woff2}'],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pups-fonts',
+              expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+    }),
+  ],
   server: {
     host: true,
     port: 5173,
