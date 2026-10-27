@@ -293,6 +293,7 @@ export function AdminLayout() {
       firstRender.current = false
       return
     }
+    window.scrollTo({ top: 0, behavior: 'instant' })
     mainRef.current?.focus({ preventScroll: true })
   }, [location.pathname])
 
