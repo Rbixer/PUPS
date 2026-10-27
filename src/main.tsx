@@ -11,6 +11,7 @@ import { startPwa } from './pwa'
 import { StoreProvider } from './store'
 import './styles.css'
 import './styles/premium.css'
+import './styles/dark.css'
 
 startPwa()
 

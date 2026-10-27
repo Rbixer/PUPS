@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
 import { Field } from '../components/ui'
 import { hashPassword } from '../format'
@@ -37,7 +37,9 @@ function draftFrom(user: User): Draft {
 }
 
 export function Usuarios() {
-  const { state, addUser, updateUser, toggleUser, updateSettings } = useStore()
+  const { state, addUser, updateUser, toggleUser, updateSettings, exportBackup, importBackup } = useStore()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [backupNote, setBackupNote] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -244,6 +246,56 @@ export function Usuarios() {
         </div>
       </form>
       </div>
+
+      <section className="panel backup" aria-labelledby="backup-title">
+        <div>
+          <h2 id="backup-title">Respaldo de datos</h2>
+          <p className="hint">
+            Todo vive en este equipo. Descarga una copia con citas, fichas, caja y equipo, y guárdala fuera del local.
+          </p>
+        </div>
+        <div className="team-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              const data = exportBackup()
+              if (!data) return
+              const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `pups-respaldo-${new Date().toISOString().slice(0, 10)}.json`
+              link.click()
+              URL.revokeObjectURL(url)
+              setBackupNote({ tone: 'ok', text: 'Respaldo descargado.' })
+            }}
+          >
+            Descargar respaldo
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+            Restaurar desde archivo
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file) return
+              if (!window.confirm('Restaurar reemplaza los datos de este equipo con los del archivo. ¿Continuar?')) return
+              const problem = importBackup(await file.text())
+              setBackupNote(problem ? { tone: 'error', text: problem } : { tone: 'ok', text: 'Datos restaurados.' })
+            }}
+          />
+        </div>
+        {backupNote ? (
+          <p className={backupNote.tone === 'error' ? 'banner warn' : 'banner'} role="status">
+            {backupNote.text}
+          </p>
+        ) : null}
+      </section>
     </section>
   )
 }

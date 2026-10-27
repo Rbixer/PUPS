@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { allows as userAllows } from './access'
+import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, hashPassword, newId, normalizePhone } from './format'
 import type { Appointment, AppState, ControlField, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
@@ -171,6 +172,8 @@ type Store = {
   sendMessage: (conversationId: string, body: string) => void
   markRead: (conversationId: string) => void
   resetDemo: () => void
+  exportBackup: () => string | null
+  importBackup: (raw: string) => string | null
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -525,6 +528,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)),
           }),
         )
+      },
+      exportBackup: () => {
+        if (!userAllows(currentUser, 'equipo')) return null
+        return JSON.stringify({ ...shared(state), exportedAt: new Date().toISOString() })
+      },
+      importBackup: (raw) => {
+        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para restaurar datos.'
+        const result = parseBackup(raw, state)
+        if ('error' in result) return result.error
+        setState(result.state)
+        return null
       },
       resetDemo: () => {
         if (currentUser?.role !== 'Administrador') return

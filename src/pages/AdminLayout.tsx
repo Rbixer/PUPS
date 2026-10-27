@@ -1,8 +1,10 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
 import { Brand } from '../components/ui'
 import { todayLabel } from '../format'
+import { DEMO_MODE } from '../env'
+import { applyTheme, readTheme, resolveTheme, saveTheme } from '../theme'
 import { useStore } from '../store'
 import type { Permission } from '../types'
 
@@ -175,7 +177,10 @@ export function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const mainRef = useRef<HTMLElement>(null)
+  const firstRender = useRef(true)
   const [armReset, setArmReset] = useState(false)
+  const [dark, setDark] = useState(() => resolveTheme(readTheme()) === 'dark')
   const links = GROUPS.flatMap((group) => group.links).filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false))
 
   useEffect(() => {
@@ -185,10 +190,18 @@ export function AdminLayout() {
   useEffect(() => {
     const current = LINKS.find((link) => (link.end ? location.pathname === link.to : location.pathname.startsWith(link.to)))
     document.title = `${current?.label ?? 'Panel'} · PUP'S`
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    mainRef.current?.focus({ preventScroll: true })
   }, [location.pathname])
 
   return (
     <div className="admin">
+      <a className="skip-link" href="#contenido">
+        Saltar al contenido
+      </a>
       <div className="mobile-bar">
         <button type="button" className="nav-toggle" aria-label="Abrir menú" onClick={() => setOpen(true)}>
           <span />
@@ -218,6 +231,19 @@ export function AdminLayout() {
           <span className="who-date">{todayLabel()}</span>
           <button
             type="button"
+            className="btn btn-ghost btn-sm theme-toggle"
+            aria-pressed={dark}
+            onClick={() => {
+              const next = dark ? 'light' : 'dark'
+              saveTheme(next)
+              applyTheme(next)
+              setDark(!dark)
+            }}
+          >
+            {dark ? 'Modo claro' : 'Modo oscuro'}
+          </button>
+          <button
+            type="button"
             className="btn btn-ghost btn-sm"
             onClick={() => {
               logout()
@@ -226,7 +252,7 @@ export function AdminLayout() {
           >
             Cerrar sesión
           </button>
-          {isAdmin ? (
+          {isAdmin && DEMO_MODE ? (
             <button
               type="button"
               className="text-btn"
@@ -244,7 +270,7 @@ export function AdminLayout() {
           ) : null}
         </div>
       </aside>
-      <div className="admin-main">
+      <main id="contenido" className="admin-main" ref={mainRef} tabIndex={-1}>
         <Suspense
           fallback={
             <div className="route-loading" aria-busy="true" aria-label="Cargando">
@@ -256,7 +282,7 @@ export function AdminLayout() {
         >
           <Outlet />
         </Suspense>
-      </div>
+      </main>
     </div>
   )
 }

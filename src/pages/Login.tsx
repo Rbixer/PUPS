@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
+import { DEMO_MODE } from '../env'
 import { lockSeconds, useStore } from '../store'
 
 export function Login() {
@@ -11,6 +12,7 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [remember, setRemember] = useState(false)
+  const [reveal, setReveal] = useState(false)
 
   useEffect(() => {
     document.title = "Entrar · PUP'S"
@@ -77,7 +79,7 @@ export function Login() {
           <Field label="Clave">
             <input
               name="password"
-              type="password"
+              type={reveal ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
@@ -87,6 +89,9 @@ export function Login() {
               enterKeyHint="go"
               required
             />
+            <button type="button" className="reveal" aria-pressed={reveal} onClick={() => setReveal((value) => !value)}>
+              {reveal ? 'Ocultar' : 'Ver'}
+            </button>
           </Field>
           <label className="remember">
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
@@ -100,11 +105,36 @@ export function Login() {
           <button type="submit" className="btn btn-primary">
             Entrar
           </button>
-          <p className="hint">
-            La agenda se comparte en este equipo mientras el panel está abierto. Administración:{' '}
-            <span className="num">admin</span> · <span className="num">pups2026</span>. Recepción:{' '}
-            <span className="num">recepcion</span> · <span className="num">pups2026</span>.
-          </p>
+          {DEMO_MODE ? (
+            <div className="demo-access">
+              <p className="eyebrow">Acceso de demostración</p>
+              <div className="demo-grid">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsername('admin')
+                    setPassword('pups2026')
+                    setError('')
+                  }}
+                >
+                  <strong>Administración</strong>
+                  <span>Acceso completo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsername('recepcion')
+                    setPassword('pups2026')
+                    setError('')
+                  }}
+                >
+                  <strong>Recepción</strong>
+                  <span>Citas, fichas y caja</span>
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <p className="hint">La agenda se comparte en este equipo mientras el panel está abierto.</p>
         </form>
       </section>
     </main>

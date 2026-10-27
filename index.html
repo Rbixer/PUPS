@@ -16,6 +16,13 @@
     />
     <title>PUP'S · Pet Shop y Grooming</title>
     <link rel="icon" href="/logo.png" />
+    <script>
+      try {
+        var t = localStorage.getItem('pups-theme')
+        var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
