@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { SERVICES } from '../catalog'
 import { money } from '../format'
 import { PLAN_MINUTES, TARIFF } from '../visit'
 
 export function Servicios() {
+  const inAdmin = useLocation().pathname.startsWith('/admin')
+  const reservar = inAdmin ? '/admin/reservar' : '/reservar'
+
   return (
     <section className="section page">
       <div className="section-head">
@@ -21,7 +24,7 @@ export function Servicios() {
               <h3>{service.name}</h3>
               <p>{service.detail}</p>
             </div>
-            <Link className="btn btn-ghost btn-sm" to={`/admin/reservar?servicio=${encodeURIComponent(service.name)}`}>
+            <Link className="btn btn-ghost btn-sm" to={`${reservar}?servicio=${encodeURIComponent(service.name)}`}>
               Reservar
             </Link>
           </article>

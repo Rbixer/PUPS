@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
 import { useStore } from '../store'
 
@@ -90,10 +90,13 @@ export function Login() {
             Entrar
           </button>
           <p className="hint">
-            La agenda se comparte en este equipo mientras el panel está abierto. Administración:{' '}
+            La agenda se comparte en este equipo mientras el panel está abierto. Demostración, administración:{' '}
             <span className="num">admin</span> · <span className="num">pups2026</span>. Recepción:{' '}
             <span className="num">recepcion</span> · <span className="num">pups2026</span>.
           </p>
+          <Link to="/" className="back-link">
+            Volver al sitio
+          </Link>
         </form>
       </section>
     </main>

@@ -1,6 +1,10 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 export function Home() {
+  const inAdmin = useLocation().pathname.startsWith('/admin')
+  const reservar = inAdmin ? '/admin/reservar' : '/reservar'
+  const servicios = inAdmin ? '/admin/servicios' : '/servicios'
+
   return (
     <>
       <section className="hero">
@@ -16,10 +20,10 @@ export function Home() {
             aparece en el panel del equipo, con la ficha de la mascota lista.
           </p>
           <div className="hero-actions">
-            <Link to="/admin/reservar" className="btn btn-primary">
+            <Link to={reservar} className="btn btn-primary">
               Reservar cita
             </Link>
-            <Link to="/admin/servicios" className="btn btn-ghost">
+            <Link to={servicios} className="btn btn-ghost">
               Ver servicios
             </Link>
           </div>
@@ -158,7 +162,7 @@ export function Home() {
             <p>Al completar, el costo queda en la ficha. La constancia sale lista para firmar.</p>
           </li>
         </ol>
-        <Link to="/admin/reservar" className="btn btn-primary">
+        <Link to={reservar} className="btn btn-primary">
           Reservar ahora
         </Link>
       </section>

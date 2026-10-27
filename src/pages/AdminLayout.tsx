@@ -176,7 +176,10 @@ export function AdminLayout() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
   const [armReset, setArmReset] = useState(false)
-  const links = GROUPS.flatMap((group) => group.links).filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false))
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false)),
+  })).filter((group) => group.links.length > 0)
 
   useEffect(() => {
     setOpen(false)
@@ -202,14 +205,19 @@ export function AdminLayout() {
           <Brand compact />
         </div>
         <nav className="side-nav" aria-label="Módulos">
-          {links.map((link) => (
-            <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'side-link active' : 'side-link')}>
-              <span className="side-link-label">
-                <NavIcon to={link.to} />
-                {link.label}
-              </span>
-              {link.to === '/admin/whatsapp' && unread > 0 ? <b className="nav-count">{unread}</b> : null}
-            </NavLink>
+          {groups.map((group) => (
+            <div key={group.label} className="side-group">
+              <p>{group.label}</p>
+              {group.links.map((link) => (
+                <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'side-link active' : 'side-link')}>
+                  <span className="side-link-label">
+                    <NavIcon to={link.to} />
+                    {link.label}
+                  </span>
+                  {link.to === '/admin/whatsapp' && unread > 0 ? <b className="nav-count">{unread}</b> : null}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="who">

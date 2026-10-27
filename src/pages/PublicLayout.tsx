@@ -10,6 +10,8 @@ const LINKS = [
   { to: '/contacto', label: 'Contacto' },
 ]
 
+const TICKER = ['Grooming', 'Veterinaria', 'Pet shop', 'Ficha de la mascota', 'Constancia', 'Caja del día', 'WhatsApp']
+
 export function PublicLayout() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
@@ -66,6 +68,13 @@ export function PublicLayout() {
         </div>
       </header>
       {open ? <button type="button" className="scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} /> : null}
+      <div className="marquee" aria-hidden="true">
+        <div className="marquee-track">
+          {[...TICKER, ...TICKER].map((item, index) => (
+            <span key={`${item}-${index}`}>{item}</span>
+          ))}
+        </div>
+      </div>
       <main>
         <Outlet />
       </main>

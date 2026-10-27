@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { allows, homeFor } from './access'
+import { InstallBanner, OfflineChip } from './components/InstallBanner'
 import { useStore } from './store'
 import { AdminLayout } from './pages/AdminLayout'
 import { Citas } from './pages/Citas'
@@ -11,6 +12,7 @@ import { Ingresos } from './pages/Ingresos'
 import { Contacto } from './pages/Contacto'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
+import { PublicLayout } from './pages/PublicLayout'
 import { Reservar } from './pages/Reservar'
 import { Servicios } from './pages/Servicios'
 import { ControlGeneral } from './pages/ControlGeneral'
@@ -49,15 +51,32 @@ function SinAcceso() {
   )
 }
 
-function Entrada() {
-  const { currentUser } = useStore()
-  return <Navigate to={currentUser ? '/admin' : '/login'} replace />
+function NoEncontrado() {
+  return (
+    <section className="section page">
+      <p className="eyebrow">404</p>
+      <h2>Esa página no está en la tienda.</h2>
+      <p className="lede">El panel, los servicios y la reserva siguen en su lugar.</p>
+      <Link to="/" className="btn btn-primary">
+        Volver al inicio
+      </Link>
+    </section>
+  )
 }
 
 export function App() {
   return (
-    <Routes>
-      <Route index element={<Entrada />} />
+    <>
+      <OfflineChip />
+      <InstallBanner />
+      <Routes>
+      <Route element={<PublicLayout />}>
+        <Route index element={<Home />} />
+        <Route path="servicios" element={<Servicios />} />
+        <Route path="reservar" element={<Reservar />} />
+        <Route path="contacto" element={<Contacto />} />
+        <Route path="*" element={<NoEncontrado />} />
+      </Route>
       <Route path="login" element={<Login />} />
       <Route
         path="admin"
@@ -161,7 +180,7 @@ export function App() {
         />
         <Route path="sin-acceso" element={<SinAcceso />} />
       </Route>
-      <Route path="*" element={<Entrada />} />
     </Routes>
+    </>
   )
 }
