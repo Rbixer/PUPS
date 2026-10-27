@@ -213,7 +213,7 @@ html.has-install .admin-main { padding-bottom: 128px; }
 }
 .install-banner p { margin: 0; font-size: 0.9rem; line-height: 1.4; }
 .install-actions { display: flex; gap: 8px; flex: none; }
-.install-banner .btn-primary { background: var(--caramel); color: #fff; box-shadow: none; }
+.install-banner .btn-primary { background: var(--caramel); color: #1c1917; box-shadow: none; }
 .install-banner .btn-primary:hover { background: #d48958; }
 .install-banner .btn-ghost { background: transparent; color: #fffdfb; border-color: rgba(255, 253, 251, 0.22); }
 .install-banner .btn-ghost:hover { background: rgba(255, 253, 251, 0.08); border-color: rgba(255, 253, 251, 0.3); }
