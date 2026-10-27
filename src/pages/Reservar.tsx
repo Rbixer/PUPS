@@ -22,9 +22,9 @@ export function Reservar() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [form, setForm] = useState({
-    clientName: '',
-    phone: '',
-    petName: '',
+    clientName: params.get('tutor') ?? '',
+    phone: params.get('tel') ?? '',
+    petName: params.get('mascota') ?? '',
     sex: 'Hembra',
     breed: '',
     size: 'Pequeño',
