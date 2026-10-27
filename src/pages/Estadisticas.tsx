@@ -96,9 +96,9 @@ export function Estadisticas() {
   const peakDay = report.days.reduce((best, day) => (day.sales > best.sales ? day : best), report.days[0])
   const peakHour = Math.max(...report.hours.map((hour) => hour.count), 1)
   const status = [
-    { label: 'Completadas', value: report.done.length, color: '#2c6a45' },
-    { label: 'Pendientes', value: report.pending, color: '#c4492c' },
-    { label: 'Canceladas', value: report.cancelled, color: '#c4b6a6' },
+    { label: 'Completadas', value: report.done.length, color: '#5f7d6c' },
+    { label: 'Pendientes', value: report.pending, color: '#2a2e36' },
+    { label: 'Canceladas', value: report.cancelled, color: '#d5d7dc' },
   ]
 
   useEffect(() => {

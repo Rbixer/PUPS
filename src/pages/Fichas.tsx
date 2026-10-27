@@ -126,6 +126,11 @@ function Directory({ files }: { files: PetFile[] }) {
       {files.length === 0 ? <p className="empty">Todavía no hay mascotas.</p> : null}
       {files.length > 0 && visible.length === 0 ? <p className="empty">Ninguna ficha coincide con la búsqueda.</p> : null}
 
+      <section className="module-panel">
+      <header className="module-bar">
+        <h2>Directorio</h2>
+        <span>{visible.length === 1 ? '1 ficha' : `${visible.length} fichas`}</span>
+      </header>
       <div className="file-grid">
         {visible.map((file) => {
           const last = file.visits[0]
@@ -158,6 +163,7 @@ function Directory({ files }: { files: PetFile[] }) {
           )
         })}
       </div>
+      </section>
     </section>
   )
 }

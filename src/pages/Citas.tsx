@@ -23,6 +23,7 @@ type Draft = {
   coat: string
   allergies: string
   cost: string
+  employeeCode: string
 }
 
 function blankDraft(): Draft {
@@ -40,6 +41,7 @@ function blankDraft(): Draft {
     coat: '',
     allergies: '',
     cost: '',
+    employeeCode: '',
   }
 }
 
@@ -58,11 +60,13 @@ function fromAppointment(item: Appointment): Draft {
     coat: item.coat,
     allergies: item.allergies,
     cost: String(item.cost),
+    employeeCode: item.employeeCode ?? '',
   }
 }
 
 export function Citas() {
-  const { state, allows, addAppointment, updateAppointment } = useStore()
+  const { state, currentUser, allows, addAppointment, updateAppointment } = useStore()
+  const workers = state.users.filter((item) => item.employeeCode && item.active)
   const today = isoDate()
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(() => monthStart(today))
@@ -112,7 +116,7 @@ export function Citas() {
   const needle = query.trim().toLowerCase()
   const matches = (item: Appointment) => {
     if (!needle) return true
-    return [item.clientName, item.petName, item.phone, item.breed, item.service, String(item.folio)]
+    return [item.clientName, item.petName, item.phone, item.breed, item.service, String(item.folio), item.employeeCode ?? '']
       .join(' ')
       .toLowerCase()
       .includes(needle)
@@ -140,7 +144,7 @@ export function Citas() {
     if (!needle) return
     const latest = state.appointments
       .filter((item) =>
-        [item.clientName, item.petName, item.phone, item.breed, item.service, String(item.folio)]
+        [item.clientName, item.petName, item.phone, item.breed, item.service, String(item.folio), item.employeeCode ?? '']
           .join(' ')
           .toLowerCase()
           .includes(needle),
@@ -159,7 +163,7 @@ export function Citas() {
 
   function openNew(date = selected, time = '09:00') {
     setEditing('new')
-    setDraft({ ...blankDraft(), date, time })
+    setDraft({ ...blankDraft(), date, time, employeeCode: currentUser?.employeeCode ?? '' })
     setSelected(date)
     setMonth(monthStart(date))
     setFormError('')
@@ -372,8 +376,13 @@ export function Citas() {
       </section>
       </div>
 
-      <section>
-        <h2>Detalle</h2>
+      <section className="module-panel">
+        <header className="module-bar">
+          <h2>Detalle del día</h2>
+          <span>
+            {selectedItems.length} {selectedItems.length === 1 ? 'cita' : 'citas'}
+          </span>
+        </header>
         {selectedItems.length === 0 ? (
           <p className="empty">Este día no tiene citas. El + del calendario abre una aquí.</p>
         ) : (
@@ -387,6 +396,7 @@ export function Citas() {
                   </strong>
                   <span>
                     {formatName(item.clientName)} · {show(item.service)} · {visitMinutes(item)} min
+                    {item.employeeCode ? ` · ${item.employeeCode}` : ''}
                   </span>
                   {state.appointments.some((other) => overlaps(item, other)) ? (
                     <em className="clash">
@@ -468,6 +478,7 @@ export function Citas() {
                 coat: draft.coat,
                 allergies: draft.allergies.trim(),
                 cost: allows('costos') || editing === 'new' ? cost : editing.cost,
+                employeeCode: draft.employeeCode,
               }
               if (editing === 'new') {
                 addAppointment(payload)
@@ -497,6 +508,16 @@ export function Citas() {
               </Field>
               <Field label="Hora">
                 <input type="time" value={draft.time} onChange={(event) => patch('time', event.target.value)} required />
+              </Field>
+              <Field label="Empleado">
+                <select value={draft.employeeCode} onChange={(event) => patch('employeeCode', event.target.value)}>
+                  <option value="">Sin código</option>
+                  {workers.map((worker) => (
+                    <option key={worker.id} value={worker.employeeCode}>
+                      {worker.employeeCode} · {[worker.name, worker.lastName].filter(Boolean).join(' ')}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Estado">
                 <select value={draft.status} onChange={(event) => patch('status', event.target.value as AppointmentStatus)}>

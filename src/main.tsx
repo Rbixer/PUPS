@@ -5,6 +5,12 @@ import { App } from './App'
 import { StoreProvider } from './store'
 import './styles.css'
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <StoreProvider>

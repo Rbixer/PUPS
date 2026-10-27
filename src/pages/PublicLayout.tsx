@@ -70,9 +70,6 @@ export function PublicLayout() {
         <Outlet />
       </main>
       <footer className="footer">
-        <p className="giant" aria-hidden="true">
-          PUP'S
-        </p>
         <div className="footer-grid">
           <div>
             <Brand />

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Field } from './ui'
 import { SEXES } from '../catalog'
 import { formatName, longDate, money } from '../format'
-import { EGRESO_GROUPS, EGRESO_ITEMS, INGRESO_ITEMS, PHOTO_LABELS, readReport } from '../grooming'
+import { EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_LABELS, readReport } from '../grooming'
 import { shrinkImage } from '../image'
-import type { Appointment, CheckItem, GroomingReport, Mark } from '../types'
-import { applyPlan, PLAN_MINUTES, premiumGaps, priceFor, type PlanId } from '../visit'
+import type { Appointment, CheckItem, GroomingPackage, GroomingReport, Mark } from '../types'
+import { applyPlan, premiumGaps, priceFor, type PlanId } from '../visit'
 
 type Draft = {
   clientName: string
@@ -42,19 +42,20 @@ export function Constancia({
   appointment,
   history,
   intent = 'form',
+  embedded = false,
   onClose,
   onSave,
 }: {
   appointment: Appointment
   history: Appointment[]
   intent?: 'form' | 'print'
+  embedded?: boolean
   onClose: () => void
   onSave: (patch: Partial<Appointment>) => void
 }) {
   const [draft, setDraft] = useState<Draft>(() => fromAppointment(appointment))
   const [saved, setSaved] = useState(false)
   const [printError, setPrintError] = useState('')
-  const [preview, setPreview] = useState(false)
   const report = draft.report
   const suggested = priceFor(report.plan, appointment.size)
   const missingPremium = report.plan === 'premium' ? premiumGaps(report) : []
@@ -100,12 +101,19 @@ export function Constancia({
     }))
   }
 
-  function setMarks(group: 'ingreso' | 'egreso', marks: Record<string, Mark>) {
+  function setIngreso(key: string, patch: Partial<CheckItem>) {
     setSaved(false)
     setDraft((current) => {
-      const next = { ...current.report[group] }
-      for (const [key, value] of Object.entries(marks)) next[key] = { ...next[key], value }
-      return { ...current, report: { ...current.report, [group]: next } }
+      const next = { ...current.report.ingreso, [key]: { ...current.report.ingreso[key], ...patch } }
+      if (patch.value === 'si') {
+        if (key === 'unas-normales') next['unas-largas'] = { ...next['unas-largas'], value: 'no' }
+        if (key === 'unas-largas') next['unas-normales'] = { ...next['unas-normales'], value: 'no' }
+        if (key === 'nudos-piel') next.nudos = { ...next.nudos, value: 'si' }
+        if (key === 'oidos-sucios') next['oidos-normales'] = { ...next['oidos-normales'], value: 'no' }
+        if (key === 'oidos-normales') next['oidos-sucios'] = { ...next['oidos-sucios'], value: 'no' }
+      }
+      if (patch.value === 'no' && key === 'nudos') next['nudos-piel'] = { ...next['nudos-piel'], value: 'no' }
+      return { ...current, report: { ...current.report, ingreso: next } }
     })
   }
 
@@ -123,6 +131,7 @@ export function Constancia({
         age: report.age.trim(),
         weight: report.weight.trim(),
         recommendations: report.recommendations.trim(),
+        savedAt: new Date().toISOString(),
       },
       beforePhoto: report.photos[0] ?? '',
       afterPhoto: report.photos[2] ?? '',
@@ -130,14 +139,31 @@ export function Constancia({
     setSaved(true)
   }
 
-  const nudos =
-    report.ingreso['nudos-piel']?.value === 'si' ? 'piel' : report.ingreso.nudos?.value === 'si' ? 'nudos' : report.ingreso.nudos?.value === 'no' ? 'ninguno' : ''
-  const oidos = report.ingreso['oidos-sucios']?.value === 'si' ? 'sucios' : report.ingreso['oidos-normales']?.value === 'si' ? 'normales' : ''
-  const pet = formatName(draft.petName) === '—' ? 'tu perrito' : formatName(draft.petName)
+  function printSheet() {
+    const gaps = report.plan === 'premium' ? premiumGaps(report) : []
+    if (gaps.length) {
+      setPrintError(`Premium no se imprime todavía. Falta: ${gaps.join(', ')}.`)
+      return
+    }
+    setPrintError('')
+    save()
+    window.setTimeout(() => window.print(), 60)
+  }
 
-  return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="constancia-title">
-      <div className="report-shell">
+  const pet = formatName(draft.petName) === '—' ? 'tu perrito' : formatName(draft.petName)
+  const encargadoLines = [draft.clientName.trim() ? formatName(draft.clientName) : '', draft.phone.trim(), report.address.trim()].filter(
+    (line) => line.trim() !== '' && line !== '—',
+  )
+  const petTitle = [draft.petName.trim() ? formatName(draft.petName) : '', draft.breed.trim() ? formatName(draft.breed) : '']
+    .filter((line) => line.trim() !== '' && line !== '—')
+    .join(' · ')
+  const petMeta = [draft.sex.trim(), markLabel(report.castrated), report.age.trim(), report.weight.trim()].filter((line) => line.trim() !== '').join(' · ')
+  const allergy = draft.allergies.trim()
+  const ingresoPicked = pickedItems(INGRESO_ITEMS, report.ingreso)
+  const egresoPicked = pickedItems(EGRESO_ITEMS, report.egreso)
+
+  const sheet = (
+    <div className={embedded ? 'constancia-page' : 'report-shell'}>
         <form
           className="report-form no-print"
           onSubmit={(event) => {
@@ -145,37 +171,49 @@ export function Constancia({
             save()
           }}
         >
-          <header className="page-head">
+          <header className="constancia-mast">
+            <img src="/logo.png" alt="" />
             <div>
               <p className="eyebrow">Visita #{appointment.folio}</p>
               <h2 id="constancia-title">Constancia de grooming</h2>
               <p className="hint">
-                {longDate(appointment.date)} · {appointment.time}. El ingreso es cómo llegó. El egreso es el trabajo que sí se hizo.
+                {longDate(appointment.date)} · {appointment.time}
               </p>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-              Cerrar
-            </button>
-          </header>
-
-          <div className="choice" role="group" aria-label="Tipo de servicio">
-            <div className="choice-row">
-              {(['grooming', 'premium'] as PlanId[]).map((plan) => (
-                <button
-                  key={plan}
-                  type="button"
-                  aria-pressed={report.plan === plan}
-                  onClick={() => {
+            <div className="constancia-mast-side">
+              <label className="grooming-pick">
+                <span>Grooming</span>
+                <select
+                  aria-label="Tipo de grooming"
+                  value={report.packageId}
+                  onChange={(event) => {
+                    const packageId = event.target.value as GroomingPackage
+                    const plan: PlanId = packageId === 'premium' ? 'premium' : 'grooming'
                     setSaved(false)
                     setPrintError('')
-                    setDraft((current) => ({ ...current, report: applyPlan(current.report, plan) }))
+                    setDraft((current) => ({
+                      ...current,
+                      report: { ...applyPlan(current.report, plan), packageId },
+                    }))
                   }}
                 >
-                  {plan === 'premium' ? 'Premium' : 'Grooming'} · {PLAN_MINUTES[plan]} min
+                  {GROOMING_PACKAGES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="btn btn-primary btn-sm" onClick={printSheet}>
+                Imprimir
+              </button>
+              {embedded ? null : (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+                  Cerrar
                 </button>
-              ))}
+              )}
             </div>
-          </div>
+          </header>
           <p className="hint">
             {report.plan === 'premium'
               ? 'Premium incluye baño, cepillado, uñas, oídos, deslanado, dientes y glándulas. La impresión pide foto de antes y de después.'
@@ -190,9 +228,51 @@ export function Constancia({
             </button>
           ) : null}
 
+          <section className="report-block photo-block">
+            <h3>Fotografías</h3>
+            <div className="photo-grid">
+              {PHOTO_LABELS.map((label, index) => (
+                <div key={label} className="photo-slot">
+                  <span>{label}</span>
+                  {report.photos[index] ? <img src={report.photos[index]} alt="" /> : <span className="photo-empty">Sin foto</span>}
+                  <label className="photo-shoot">
+                    {report.photos[index] ? 'Cambiar foto' : 'Tomar foto'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ''
+                        if (!file) return
+                        const data = await shrinkImage(file)
+                        const photos = [...report.photos]
+                        photos[index] = data
+                        patchReport({ photos })
+                      }}
+                    />
+                  </label>
+                  {report.photos[index] ? (
+                    <button
+                      type="button"
+                      className="text-btn"
+                      onClick={() => {
+                        const photos = [...report.photos]
+                        photos[index] = ''
+                        patchReport({ photos })
+                      }}
+                    >
+                      Quitar
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section className="report-block">
             <h3>Datos de la encargada o el encargado</h3>
-            <div className="drawer-grid">
+            <div className="drawer-grid tutor-grid">
               <Field label="Nombre">
                 <input
                   list={`tutores-${appointment.id}`}
@@ -235,7 +315,7 @@ export function Constancia({
 
           <section className="report-block">
             <h3>Datos del perrito o la perrita</h3>
-            <div className="drawer-grid">
+            <div className="drawer-grid pet-grid">
               <Field label="Nombre">
                 <input
                   value={draft.petName}
@@ -292,74 +372,28 @@ export function Constancia({
             </div>
           </section>
 
+          <p className="sheet-voice">Hoy fui a grooming. Me llamo {pet} y me realizaron lo siguiente.</p>
           <section className="report-block">
-            <h3>Ingreso · cómo llegó</h3>
-            <Choice
-              label="Nudos"
-              value={nudos}
-              options={[
-                { id: 'ninguno', label: 'Sin nudos' },
-                { id: 'nudos', label: 'Nudos' },
-                { id: 'piel', label: 'Pegados a la piel' },
-              ]}
-              onChange={(id) => setMarks('ingreso', id === 'ninguno' ? { nudos: 'no', 'nudos-piel': 'no' } : id === 'nudos' ? { nudos: 'si', 'nudos-piel': 'no' } : { nudos: 'si', 'nudos-piel': 'si' })}
-            />
-            <Field label="Ubicación de los nudos">
-              <input
-                value={report.ingreso[nudos === 'piel' ? 'nudos-piel' : 'nudos']?.note ?? ''}
-                onChange={(event) => setCheck('ingreso', nudos === 'piel' ? 'nudos-piel' : 'nudos', { note: event.target.value })}
-              />
-            </Field>
-            <p className="hint">Uñas. Normales y largas no se marcan juntas. Encarnadas puede sumarse.</p>
-            <div className="choice-row">
-              <Toggle
-                pressed={report.ingreso['unas-normales']?.value === 'si'}
-                onClick={() => setMarks('ingreso', { 'unas-normales': report.ingreso['unas-normales']?.value === 'si' ? 'no' : 'si', 'unas-largas': 'no' })}
-              >
-                Normales
-              </Toggle>
-              <Toggle
-                pressed={report.ingreso['unas-largas']?.value === 'si'}
-                onClick={() => setMarks('ingreso', { 'unas-largas': report.ingreso['unas-largas']?.value === 'si' ? 'no' : 'si', 'unas-normales': 'no' })}
-              >
-                Largas
-              </Toggle>
-              <Toggle
-                pressed={report.ingreso['unas-encarnadas']?.value === 'si'}
-                onClick={() => setCheck('ingreso', 'unas-encarnadas', { value: report.ingreso['unas-encarnadas']?.value === 'si' ? 'no' : 'si' })}
-              >
-                Encarnadas
-              </Toggle>
+            <h3>Ingreso</h3>
+            <div className="check-sheet">
+              <div className="check-head">
+                <span>Característica</span>
+                <span>Sí / No</span>
+                <span>Otros / ubicación</span>
+              </div>
+              {INGRESO_ITEMS.map((item) => (
+                <YesNo
+                  key={item.key}
+                  label={item.label}
+                  item={report.ingreso[item.key]}
+                  onChange={(patch) => setIngreso(item.key, patch)}
+                />
+              ))}
             </div>
-            <Field label="Nota de uñas">
-              <input value={report.ingreso['unas-encarnadas']?.note ?? ''} onChange={(event) => setCheck('ingreso', 'unas-encarnadas', { note: event.target.value })} />
-            </Field>
-            <Choice
-              label="Oídos"
-              value={oidos}
-              options={[
-                { id: 'normales', label: 'Normales' },
-                { id: 'sucios', label: 'Sucios' },
-              ]}
-              onChange={(id) => setMarks('ingreso', id === 'sucios' ? { 'oidos-sucios': 'si', 'oidos-normales': 'no' } : { 'oidos-normales': 'si', 'oidos-sucios': 'no' })}
-            />
-            <Field label="Nota de oídos">
-              <input value={report.ingreso['oidos-sucios']?.note ?? ''} onChange={(event) => setCheck('ingreso', 'oidos-sucios', { note: event.target.value })} />
-            </Field>
-            <YesNo
-              label="Bultos, hernias, verrugas, tumores o cicatrices"
-              item={report.ingreso.bultos}
-              onChange={(patch) => setCheck('ingreso', 'bultos', patch)}
-            />
-            <YesNo
-              label="Pulgas o garrapatas"
-              item={report.ingreso.parasitos}
-              onChange={(patch) => setCheck('ingreso', 'parasitos', patch)}
-            />
           </section>
 
           <section className="report-block">
-            <h3>Egreso · qué se hizo</h3>
+            <h3>Egreso</h3>
             {EGRESO_GROUPS.map((group) => (
               <div key={group.title} className="report-block">
                 <p className="eyebrow">{group.title}</p>
@@ -385,131 +419,71 @@ export function Constancia({
             />
           </section>
 
-          <section className="report-block">
-            <h3>Fotografías</h3>
-            <div className="photo-grid">
-              {PHOTO_LABELS.map((label, index) => (
-                <label key={label} className="photo-slot">
-                  <span>{label}</span>
-                  {report.photos[index] ? <img src={report.photos[index]} alt="" /> : <span className="photo-empty">Agregar</span>}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0]
-                      event.target.value = ''
-                      if (!file) return
-                      const data = await shrinkImage(file)
-                      const photos = [...report.photos]
-                      photos[index] = data
-                      patchReport({ photos })
-                    }}
-                  />
-                  {report.photos[index] ? (
-                    <button
-                      type="button"
-                      className="text-btn"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        const photos = [...report.photos]
-                        photos[index] = ''
-                        patchReport({ photos })
-                      }}
-                    >
-                      Quitar
-                    </button>
-                  ) : null}
-                </label>
-              ))}
-            </div>
-          </section>
-
-          {saved ? <p className="banner">Constancia guardada en la cita #{appointment.folio}.</p> : null}
+          {saved ? <p className="banner">Constancia guardada. Ya se puede ver en Constancias.</p> : null}
           {printError ? <p className="banner warn">{printError}</p> : null}
           {missingPremium.length ? <p className="hint">Para imprimir Premium falta: {missingPremium.join(', ')}.</p> : null}
           <div className="overlay-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setPreview((value) => !value)}>
-              {preview ? 'Ocultar hoja' : 'Vista previa'}
-            </button>
             <button type="submit" className="btn btn-ghost">
               Guardar
             </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                const gaps = report.plan === 'premium' ? premiumGaps(report) : []
-                if (gaps.length) {
-                  setPrintError(`Premium no se imprime todavía. Falta: ${gaps.join(', ')}.`)
-                  return
-                }
-                setPrintError('')
-                save()
-                window.setTimeout(() => window.print(), 60)
-              }}
-            >
+            <button type="button" className="btn btn-primary" onClick={printSheet}>
               Imprimir
             </button>
           </div>
         </form>
 
-        <article className={preview ? 'sheet' : 'sheet only-print'}>
+        <article className="sheet constancia-sheet only-print">
           <header className="sheet-head">
             <img src="/logo.png" alt="" />
-            <div>
-              <p>PUP'S · Pet Shop y Grooming</p>
+            <div className="sheet-brandblock">
+              <strong>PUP'S</strong>
+              <span>Pet Shop y Grooming</span>
+            </div>
+            <div className="sheet-docmeta">
               <h2>Constancia de grooming</h2>
+              <p className="sheet-folio num">
+                #{appointment.folio} · {longDate(appointment.date)} · {appointment.time}
+              </p>
             </div>
-            <span className={`plan-badge ${report.plan}`}>{report.plan === 'premium' ? 'Premium' : 'Grooming'}</span>
+            <span className={`plan-badge ${report.plan}`}>{packageLabel(report)}</span>
           </header>
-          <p className="sheet-folio num">
-            #{appointment.folio} · {longDate(appointment.date)} · {appointment.time}
-          </p>
-          <dl className="sheet-facts">
-            <div>
-              <dt>Encargado</dt>
-              <dd>{formatName(draft.clientName)}</dd>
+          <div className="sheet-people">
+            <section>
+              <h3>Encargado</h3>
+              {encargadoLines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </section>
+            <section>
+              <h3>Perrito</h3>
+              {petTitle ? <p>{petTitle}</p> : null}
+              {petMeta ? <p>{petMeta}</p> : null}
+              {allergy ? <p>{allergy}</p> : null}
+            </section>
+          </div>
+          <div className="sheet-work">
+            <p className="sheet-voice">Hoy fui a grooming. Me llamo {pet} y me realizaron lo siguiente.</p>
+            <div className="sheet-columns">
+              {ingresoPicked.length ? (
+                <section>
+                  <h3>Ingreso</h3>
+                  <PickedList items={ingresoPicked} values={report.ingreso} />
+                </section>
+              ) : null}
+              {egresoPicked.length ? (
+                <section>
+                  <h3>Egreso</h3>
+                  <PickedList items={egresoPicked} values={report.egreso} />
+                </section>
+              ) : null}
             </div>
-            <div>
-              <dt>Teléfono</dt>
-              <dd>{draft.phone || '—'}</dd>
-            </div>
-            <div>
-              <dt>Dirección</dt>
-              <dd>{report.address || '—'}</dd>
-            </div>
-            <div>
-              <dt>Perrito</dt>
-              <dd>{formatName(draft.petName)}</dd>
-            </div>
-            <div>
-              <dt>Raza</dt>
-              <dd>{formatName(draft.breed)}</dd>
-            </div>
-            <div>
-              <dt>Edad / peso</dt>
-              <dd>
-                {report.age || '—'} · {report.weight || '—'}
-              </dd>
-            </div>
-            <div>
-              <dt>Sexo / castrado</dt>
-              <dd>
-                {draft.sex || '—'} · {markLabel(report.castrated) || '—'}
-              </dd>
-            </div>
-            <div>
-              <dt>Alergias</dt>
-              <dd>{draft.allergies.trim() || '—'}</dd>
-            </div>
-          </dl>
-          <p className="sheet-voice">Hoy fui a grooming. Me llamo {pet} y me realizaron lo siguiente.</p>
-          <h3>Ingreso</h3>
-          <CheckTable items={INGRESO_ITEMS} values={report.ingreso} />
-          <h3>Egreso</h3>
-          <CheckTable items={EGRESO_ITEMS} values={report.egreso} />
-          <h3>Recomendaciones</h3>
-          <p className="sheet-note">{report.recommendations.trim() || '—'}</p>
+            {report.recommendations.trim() ? (
+              <div className="sheet-reco">
+                <h3>Recomendaciones</h3>
+                <p className="sheet-note">{report.recommendations.trim()}</p>
+              </div>
+            ) : null}
+          </div>
           {report.photos.some(Boolean) ? (
             <div className="sheet-photos">
               {PHOTO_LABELS.map((label, index) =>
@@ -522,46 +496,22 @@ export function Constancia({
               )}
             </div>
           ) : null}
-          <div className="sheet-sign">
-            <span>Revisé cómo llegó</span>
-            <span>Recibí el egreso</span>
-          </div>
+          <footer className="sheet-close">
+            <div className="sheet-sign">
+              <span>Revisé cómo llegó</span>
+              <span>Recibí el egreso</span>
+            </div>
+            <p className="sheet-foot">PUP'S · Pet Shop y Grooming · Constancia #{appointment.folio}</p>
+          </footer>
         </article>
       </div>
-    </div>
   )
-}
 
-function Choice({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: { id: string; label: string }[]
-  onChange: (id: string) => void
-}) {
+  if (embedded) return sheet
   return (
-    <div className="choice" role="group" aria-label={label}>
-      <span>{label}</span>
-      <div className="choice-row">
-        {options.map((option) => (
-          <button key={option.id} type="button" aria-pressed={value === option.id} onClick={() => onChange(option.id)}>
-            {option.label}
-          </button>
-        ))}
-      </div>
+    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="constancia-title">
+      {sheet}
     </div>
-  )
-}
-
-function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: string }) {
-  return (
-    <button type="button" aria-pressed={pressed} onClick={onClick}>
-      {children}
-    </button>
   )
 }
 
@@ -578,39 +528,35 @@ function YesNo({ label, item, onChange }: { label: string; item?: CheckItem; onC
           No
         </button>
       </div>
-      {value === 'si' ? (
-        <input
-          value={item?.note ?? ''}
-          placeholder="Ubicación u otro detalle"
-          onChange={(event) => onChange({ note: event.target.value })}
-        />
-      ) : null}
+      <input
+        value={item?.note ?? ''}
+        placeholder="Ubicación u otro"
+        onChange={(event) => onChange({ note: event.target.value })}
+      />
     </div>
   )
 }
 
-function CheckTable({ items, values }: { items: readonly { key: string; label: string }[]; values: Record<string, CheckItem> }) {
+function pickedItems(items: readonly { key: string; label: string }[], values: Record<string, CheckItem>) {
+  return items.filter((item) => {
+    const current = values[item.key]
+    return current?.value === 'si' || current?.value === 'no' || Boolean(current?.note?.trim())
+  })
+}
+
+function PickedList({ items, values }: { items: readonly { key: string; label: string }[]; values: Record<string, CheckItem> }) {
   return (
-    <table className="check-table">
-      <thead>
-        <tr>
-          <th>Característica</th>
-          <th>Marca</th>
-          <th>Ubicación / otro</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => {
-          const current = values[item.key]
-          return (
-            <tr key={item.key}>
-              <td>{item.label}</td>
-              <td>{markLabel(current?.value ?? '') || '☐'}</td>
-              <td>{current?.note?.trim() || ''}</td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <ul className="sheet-picks">
+      {items.map((item) => {
+        const note = values[item.key]?.note?.trim()
+        const mark = markLabel(values[item.key]?.value ?? '')
+        return (
+          <li key={item.key} className={values[item.key]?.value === 'no' ? 'is-no' : undefined}>
+            {mark ? <b>{mark}</b> : null} {item.label}
+            {note ? <em> · {note}</em> : null}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

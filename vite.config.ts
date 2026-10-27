@@ -73,6 +73,7 @@ function pupsState(): Plugin {
 export default defineConfig({
   plugins: [pupsState(), react()],
   server: {
+    host: true,
     port: 5173,
     strictPort: true,
   },

@@ -19,8 +19,14 @@ export type CheckItem = {
   note: string
 }
 
+export type GroomingPackage = 'premium' | 'estandar' | 'basico' | 'paquete' | 'stripping'
+
 export type GroomingReport = {
   plan: 'grooming' | 'premium'
+  /** Opción elegida en Grooming: premium, estándar, básico, paquete o stripping. */
+  packageId: GroomingPackage
+  /** Se llena al guardar, para que el módulo Constancias la muestre. */
+  savedAt?: string
   address: string
   age: string
   weight: string
@@ -40,6 +46,43 @@ export type User = {
   active: boolean
   /** Si falta, el rol aporta los permisos de siempre. */
   permissions?: Permission[]
+  /** Código fijo del trabajador. Se imprime en las citas que registra. */
+  employeeCode?: string
+  lastName?: string
+  phone?: string
+  email?: string
+  salary?: number
+}
+
+export type ControlField =
+  | 'hospedaje'
+  | 'domicilio'
+  | 'bien'
+  | 'local'
+  | 'telefono'
+  | 'internet'
+  | 'luz'
+  | 'impuesto'
+  | 'afp'
+  | 'planilla'
+  | 'deas'
+  | 'extra'
+  | 'bonos'
+  | 'comision'
+  | 'prestamo'
+  | 'proveedores'
+  | 'basico'
+  | 'estandar'
+  | 'premium'
+  | 'diferencia'
+  | 'hospedajeCant'
+  | 'domicilioCant'
+  | 'ventas'
+
+export type ControlRow = {
+  year: number
+  month: number
+  values: Partial<Record<ControlField, number>>
 }
 
 export type Appointment = {
@@ -58,6 +101,9 @@ export type Appointment = {
   coat: string
   allergies: string
   cost: number
+  /** Trabajador que registró la cita. */
+  employeeCode?: string
+  employeeId?: string
   report?: GroomingReport
   /** Foto de cómo llegó. Si falta, se usa la de la constancia. */
   beforePhoto?: string
@@ -120,4 +166,5 @@ export type AppState = {
   leads: Lead[]
   settings: Settings
   conversations: Conversation[]
+  controlRows?: ControlRow[]
 }

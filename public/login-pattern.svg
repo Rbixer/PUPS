@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="520" viewBox="0 0 520 520">
+  <defs>
+    <g id="paw" fill="#b7bec8">
+      <ellipse cx="0" cy="8" rx="8.4" ry="9.6"/>
+      <ellipse cx="-9.4" cy="-6" rx="3.6" ry="4.8"/>
+      <ellipse cx="-3.1" cy="-10.2" rx="3.6" ry="4.8"/>
+      <ellipse cx="3.5" cy="-10.2" rx="3.6" ry="4.8"/>
+      <ellipse cx="9.6" cy="-5.8" rx="3.6" ry="4.8"/>
+    </g>
+    <g id="bone" fill="#b7bec8">
+      <rect x="-18" y="-3.6" width="36" height="7.2" rx="3.6"/>
+      <circle cx="-18" cy="-4.6" r="5.6"/>
+      <circle cx="-18" cy="4.6" r="5.6"/>
+      <circle cx="18" cy="-4.6" r="5.6"/>
+      <circle cx="18" cy="4.6" r="5.6"/>
+    </g>
+    <g id="dog" fill="#aeb6c2">
+      <path d="M4 28c-8 2-10-8-3-9" fill="none" stroke="#aeb6c2" stroke-width="4.2" stroke-linecap="round"/>
+      <ellipse cx="24" cy="32" rx="16" ry="11"/>
+      <rect x="14" y="38" width="5" height="13" rx="2.4"/>
+      <rect x="24" y="38" width="5" height="13" rx="2.4"/>
+      <rect x="32" y="36" width="5" height="15" rx="2.4"/>
+      <circle cx="42" cy="20" r="12"/>
+      <ellipse cx="34" cy="18" rx="5.5" ry="9" transform="rotate(-28 34 18)"/>
+      <ellipse cx="52" cy="23" rx="8" ry="4.6"/>
+      <circle cx="58.2" cy="22.2" r="1.8" fill="#8d96a2"/>
+    </g>
+  </defs>
+  <use href="#dog" transform="translate(36 28)"/>
+  <use href="#bone" transform="translate(196 62) rotate(-18)"/>
+  <use href="#paw" transform="translate(318 52)"/>
+  <use href="#dog" transform="translate(470 132) scale(-1 1)"/>
+  <use href="#bone" transform="translate(92 188) rotate(24)"/>
+  <use href="#paw" transform="translate(214 176) scale(0.72)"/>
+  <use href="#dog" transform="translate(312 186)"/>
+  <use href="#paw" transform="translate(48 268)"/>
+  <use href="#bone" transform="translate(188 304) rotate(14)"/>
+  <use href="#dog" transform="translate(430 318) scale(-1 1)"/>
+  <use href="#paw" transform="translate(268 348)"/>
+  <use href="#bone" transform="translate(78 418) rotate(-22)"/>
+  <use href="#dog" transform="translate(176 400)"/>
+  <use href="#paw" transform="translate(412 438)"/>
+  <use href="#paw" transform="translate(392 96) scale(0.62)"/>
+  <use href="#bone" transform="translate(448 228) rotate(30) scale(0.78)"/>
+</svg>

@@ -21,7 +21,7 @@ export function Servicios() {
               <h3>{service.name}</h3>
               <p>{service.detail}</p>
             </div>
-            <Link className="btn btn-ghost btn-sm" to={`/reservar?servicio=${encodeURIComponent(service.name)}`}>
+            <Link className="btn btn-ghost btn-sm" to={`/admin/reservar?servicio=${encodeURIComponent(service.name)}`}>
               Reservar
             </Link>
           </article>

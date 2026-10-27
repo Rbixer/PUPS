@@ -1,7 +1,4 @@
 import { Link } from 'react-router-dom'
-import { SERVICES } from '../catalog'
-
-const RAIL = [...SERVICES.map((service) => service.name), 'Ficha de alergias', 'Constancia impresa']
 
 export function Home() {
   return (
@@ -19,10 +16,10 @@ export function Home() {
             aparece en el panel del equipo, con la ficha de la mascota lista.
           </p>
           <div className="hero-actions">
-            <Link to="/reservar" className="btn btn-primary">
+            <Link to="/admin/reservar" className="btn btn-primary">
               Reservar cita
             </Link>
-            <Link to="/servicios" className="btn btn-ghost">
+            <Link to="/admin/servicios" className="btn btn-ghost">
               Ver servicios
             </Link>
           </div>
@@ -42,6 +39,7 @@ export function Home() {
           </dl>
         </div>
         <div className="hero-stage">
+          <article className="stage-card">
           <div className="logo-badge hero-logo">
             <img src="/logo.png" alt="Logo de PUP'S, un shih tzu sobre el letrero de la tienda" />
           </div>
@@ -66,16 +64,9 @@ export function Home() {
             </ul>
             <p className="float-note">La reserva del sitio entra a esta lista.</p>
           </article>
+          </article>
         </div>
       </section>
-
-      <div className="marquee" aria-hidden="true">
-        <div className="marquee-track">
-          {[...RAIL, ...RAIL].map((item, index) => (
-            <span key={`${item}-${index}`}>{item}</span>
-          ))}
-        </div>
-      </div>
 
       <section className="section">
         <div className="section-head">
@@ -167,7 +158,7 @@ export function Home() {
             <p>Al completar, el costo queda en la ficha. La constancia sale lista para firmar.</p>
           </li>
         </ol>
-        <Link to="/reservar" className="btn btn-cyan">
+        <Link to="/admin/reservar" className="btn btn-primary">
           Reservar ahora
         </Link>
       </section>

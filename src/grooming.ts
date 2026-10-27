@@ -1,4 +1,22 @@
-import type { CheckItem, GroomingReport } from './types'
+import type { CheckItem, GroomingPackage, GroomingReport } from './types'
+
+export const GROOMING_PACKAGES: { id: GroomingPackage; label: string }[] = [
+  { id: 'premium', label: 'Premium' },
+  { id: 'estandar', label: 'Estándar' },
+  { id: 'basico', label: 'Básico' },
+  { id: 'paquete', label: 'Paquete' },
+  { id: 'stripping', label: 'Stripping' },
+]
+
+export function packageOf(report?: Pick<GroomingReport, 'plan' | 'packageId'>): GroomingPackage {
+  if (report?.packageId && GROOMING_PACKAGES.some((item) => item.id === report.packageId)) return report.packageId
+  return report?.plan === 'premium' ? 'premium' : 'estandar'
+}
+
+export function packageLabel(report?: Pick<GroomingReport, 'plan' | 'packageId'>) {
+  const id = packageOf(report)
+  return GROOMING_PACKAGES.find((item) => item.id === id)?.label ?? 'Estándar'
+}
 
 export const INGRESO_ITEMS: { key: string; label: string }[] = [
   { key: 'nudos', label: 'Nudos' },
@@ -48,6 +66,7 @@ export function emptyReport(): GroomingReport {
   for (const item of EGRESO_ITEMS) egreso[item.key] = blank()
   return {
     plan: 'grooming',
+    packageId: 'estandar',
     address: '',
     age: '',
     weight: '',
@@ -65,6 +84,7 @@ export function readReport(report?: GroomingReport): GroomingReport {
   return {
     ...base,
     ...report,
+    packageId: packageOf(report),
     ingreso: { ...base.ingreso, ...report.ingreso },
     egreso: { ...base.egreso, ...report.egreso },
     photos: PHOTO_LABELS.map((_, index) => report.photos?.[index] ?? ''),

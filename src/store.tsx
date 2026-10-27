@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { allows as userAllows } from './access'
 import { createSeed, DATA_VERSION } from './seed'
-import { digits, hashPassword, normalizePhone } from './format'
-import type { Appointment, AppState, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
+import { digits, hashPassword, newId, normalizePhone } from './format'
+import type { Appointment, AppState, ControlField, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
 
 export type ChargeNote = { document: string; amount: number; created: boolean; removed?: boolean }
 
@@ -30,7 +30,7 @@ function syncIncome(appointment: Appointment, movements: Movement[], method?: st
   const existing = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio)
   if (!existing) {
     const created: Movement = {
-      id: crypto.randomUUID(),
+      id: newId(),
       type: 'ingreso',
       date: appointment.date,
       concept: `Servicio cita #${appointment.folio}`,
@@ -78,6 +78,7 @@ function load(): AppState {
       settings: { ...seed.settings, ...parsed.settings },
       conversations: parsed.conversations?.length ? parsed.conversations : seed.conversations,
       leads: parsed.leads ?? [],
+      controlRows: parsed.controlRows ?? [],
       revision: parsed.revision ?? 1,
     }
   } catch {
@@ -98,8 +99,19 @@ type Store = {
   addUser: (user: Omit<User, 'id' | 'active'>) => string | null
   updateUser: (
     id: string,
-    patch: { name: string; username: string; role: User['role']; permissions: Permission[]; password?: string },
+    patch: {
+      name: string
+      lastName?: string
+      phone?: string
+      email?: string
+      salary?: number
+      username: string
+      role: User['role']
+      permissions: Permission[]
+      password?: string
+    },
   ) => string | null
+  setControl: (year: number, month: number, field: ControlField, value: number) => void
   toggleUser: (id: string) => string | null
   addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Movement | null
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => void
@@ -233,7 +245,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       addAppointment: (appointment) => {
         const folio = state.appointments.reduce((max, item) => Math.max(max, item.folio), 900) + 1
-        const next: Appointment = { ...appointment, id: crypto.randomUUID(), folio, phone: normalizePhone(appointment.phone) }
+        const employeeCode = (appointment.employeeCode || currentUser?.employeeCode || '').trim()
+        const employeeId = employeeCode ? state.users.find((item) => item.employeeCode === employeeCode)?.id : undefined
+        const next: Appointment = {
+          ...appointment,
+          id: newId(),
+          folio,
+          phone: normalizePhone(appointment.phone),
+          employeeCode: employeeCode || undefined,
+          employeeId,
+        }
         setState((current) => {
           const charged = syncIncome(next, current.movements)
           return bump(current, { movements: charged.movements, appointments: [next, ...current.appointments] })
@@ -249,6 +270,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const nextPatch = { ...patch }
           if (nextPatch.cost !== undefined && nextPatch.cost !== previous.cost && !userAllows(currentUser, 'costos')) {
             nextPatch.cost = previous.cost
+          }
+          if (nextPatch.employeeCode !== undefined) {
+            const employeeCode = nextPatch.employeeCode.trim()
+            nextPatch.employeeCode = employeeCode || undefined
+            nextPatch.employeeId = employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined
           }
           const next = {
             ...previous,
@@ -300,7 +326,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!name || !username || !user.password.trim()) return 'Completa nombre, usuario y clave.'
         const exists = state.users.some((item) => item.username.toLowerCase() === username.toLowerCase())
         if (exists) return 'Ese usuario ya existe.'
-        const next: User = { ...user, id: crypto.randomUUID(), name, username, active: true }
+        const next: User = { ...user, id: newId(), name, username, active: true }
         setState((current) => bump(current, { users: [...current.users, next] }))
         return null
       },
@@ -316,6 +342,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const next: User = {
           ...target,
           name,
+          lastName: patch.lastName !== undefined ? patch.lastName.trim() : target.lastName,
+          phone: patch.phone !== undefined ? patch.phone.trim() : target.phone,
+          email: patch.email !== undefined ? patch.email.trim() : target.email,
+          salary: patch.salary !== undefined ? patch.salary : target.salary,
           username,
           role: patch.role,
           permissions: patch.permissions,
@@ -327,6 +357,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         setState((current) => bump(current, { users }))
         return null
+      },
+      setControl: (year, month, field, value) => {
+        if (!userAllows(currentUser, 'equipo')) return
+        const amount = Number.isFinite(value) ? value : 0
+        setState((current) => {
+          const rows = current.controlRows ?? []
+          const index = rows.findIndex((item) => item.year === year && item.month === month)
+          const previous = index >= 0 ? rows[index] : { year, month, values: {} }
+          const nextRow = { ...previous, values: { ...previous.values, [field]: amount } }
+          const controlRows = index >= 0 ? rows.map((item, itemIndex) => (itemIndex === index ? nextRow : item)) : [...rows, nextRow]
+          return bump(current, { controlRows })
+        })
       },
       toggleUser: (id) => {
         if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para gestionar el equipo.'
@@ -349,14 +391,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }, movement.type === 'egreso' ? 12 : 100)
         const prefix = movement.type === 'egreso' ? 'EG' : 'ING'
         const document = movement.document?.trim() || `${prefix}-${String(seq + 1).padStart(3, '0')}`
-        const next: Movement = { ...movement, id: crypto.randomUUID(), document, concept: movement.concept.trim(), notes: movement.notes.trim() }
+        const next: Movement = { ...movement, id: newId(), document, concept: movement.concept.trim(), notes: movement.notes.trim() }
         setState((current) => bump(current, { movements: [next, ...current.movements] }))
         return next
       },
       addLead: (lead) => {
         const next: Lead = {
           ...lead,
-          id: crypto.randomUUID(),
+          id: newId(),
           createdAt: new Date().toISOString(),
           name: lead.name.trim(),
           phone: lead.phone.trim(),
@@ -375,7 +417,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const found = state.conversations.find((item) => digits(item.phone) === key)
         if (found) return found.id
         const next: Conversation = {
-          id: crypto.randomUUID(),
+          id: newId(),
           phone: phone.trim(),
           name: name.trim() || 'Cliente',
           petName: petName.trim(),
@@ -390,7 +432,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const text = body.trim()
         if (!text) return
         const message: WaMessage = {
-          id: crypto.randomUUID(),
+          id: newId(),
           direction: 'out',
           body: text,
           at: new Date().toISOString(),

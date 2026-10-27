@@ -3,16 +3,18 @@ import { allows, homeFor } from './access'
 import { useStore } from './store'
 import { AdminLayout } from './pages/AdminLayout'
 import { Citas } from './pages/Citas'
-import { Contacto } from './pages/Contacto'
 import { Egresos } from './pages/Egresos'
+import { Constancias } from './pages/Constancias'
 import { Estadisticas } from './pages/Estadisticas'
 import { Fichas } from './pages/Fichas'
-import { Home } from './pages/Home'
 import { Ingresos } from './pages/Ingresos'
+import { Contacto } from './pages/Contacto'
+import { Home } from './pages/Home'
 import { Login } from './pages/Login'
-import { PublicLayout } from './pages/PublicLayout'
 import { Reservar } from './pages/Reservar'
 import { Servicios } from './pages/Servicios'
+import { ControlGeneral } from './pages/ControlGeneral'
+import { Trabajadores } from './pages/Trabajadores'
 import { Usuarios } from './pages/Usuarios'
 import { WhatsApp } from './pages/WhatsApp'
 import type { Permission } from './types'
@@ -47,15 +49,15 @@ function SinAcceso() {
   )
 }
 
+function Entrada() {
+  const { currentUser } = useStore()
+  return <Navigate to={currentUser ? '/admin' : '/login'} replace />
+}
+
 export function App() {
   return (
     <Routes>
-      <Route element={<PublicLayout />}>
-        <Route index element={<Home />} />
-        <Route path="servicios" element={<Servicios />} />
-        <Route path="reservar" element={<Reservar />} />
-        <Route path="contacto" element={<Contacto />} />
-      </Route>
+      <Route index element={<Entrada />} />
       <Route path="login" element={<Login />} />
       <Route
         path="admin"
@@ -98,6 +100,22 @@ export function App() {
           }
         />
         <Route
+          path="trabajadores"
+          element={
+            <Guard permission="equipo">
+              <Trabajadores />
+            </Guard>
+          }
+        />
+        <Route
+          path="control"
+          element={
+            <Guard permission="equipo">
+              <ControlGeneral />
+            </Guard>
+          }
+        />
+        <Route
           path="usuarios"
           element={
             <Guard permission="equipo">
@@ -113,6 +131,10 @@ export function App() {
             </Guard>
           }
         />
+        <Route path="inicio" element={<div className="site-module"><Home /></div>} />
+        <Route path="servicios" element={<div className="site-module"><Servicios /></div>} />
+        <Route path="reservar" element={<div className="site-module"><Reservar /></div>} />
+        <Route path="contacto" element={<div className="site-module"><Contacto /></div>} />
         <Route
           path="ingresos"
           element={
@@ -129,9 +151,17 @@ export function App() {
             </Guard>
           }
         />
+        <Route
+          path="constancias"
+          element={
+            <Guard permission="caja">
+              <Constancias />
+            </Guard>
+          }
+        />
         <Route path="sin-acceso" element={<SinAcceso />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Entrada />} />
     </Routes>
   )
 }

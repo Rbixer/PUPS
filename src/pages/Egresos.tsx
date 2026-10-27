@@ -1,13 +1,17 @@
 import { useState } from 'react'
 import { METHODS } from '../catalog'
+import { Constancia } from '../components/Constancia'
 import { Field } from '../components/ui'
-import { isoDate, longDate, money } from '../format'
+import { formatName, isoDate, longDate, money } from '../format'
 import { useStore } from '../store'
 import type { Movement } from '../types'
 
 export function Egresos() {
-  const { state, addMovement } = useStore()
+  const { state, addMovement, updateAppointment } = useStore()
   const egresos = state.movements.filter((item) => item.type === 'egreso')
+  const visits = [...state.appointments].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+  const [visitId, setVisitId] = useState<string | null>(visits[0]?.id ?? null)
+  const visit = visits.find((item) => item.id === visitId) ?? visits[0] ?? null
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [doc, setDoc] = useState<Movement | null>(null)
@@ -25,8 +29,49 @@ export function Egresos() {
         <div>
           <p className="eyebrow">Caja</p>
           <h1>Documento de egreso</h1>
+          <p className="hint">Constancia de la visita. El registro de caja queda abajo.</p>
         </div>
       </header>
+
+      {visits.length === 0 ? (
+        <p className="empty">Todavía no hay visitas para armar una constancia.</p>
+      ) : (
+        <>
+          <div className="visit-pick" role="listbox" aria-label="Visitas">
+            {visits.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={visit?.id === item.id}
+                onClick={() => setVisitId(item.id)}
+              >
+                <strong>{formatName(item.petName)}</strong>
+                <span>
+                  #{item.folio} · {longDate(item.date)} · {item.time}
+                </span>
+              </button>
+            ))}
+          </div>
+          {visit ? (
+            <Constancia
+              key={visit.id}
+              embedded
+              appointment={visit}
+              history={state.appointments}
+              onClose={() => setVisitId(visits[0]?.id ?? null)}
+              onSave={(patch) => {
+                updateAppointment(visit.id, patch)
+              }}
+            />
+          ) : null}
+        </>
+      )}
+
+      <header className="module-bar">
+        <h2>Registro de caja</h2>
+        <span>{egresos.length}</span>
+      </header>
+      <div className="cash-desk">
       <form
         className="panel form-grid"
         onSubmit={(event) => {
@@ -81,6 +126,11 @@ export function Egresos() {
         </button>
       </form>
 
+      <div className="ledger">
+      <header className="module-bar">
+        <h2>Documentos emitidos</h2>
+        <span>{egresos.length}</span>
+      </header>
       <div className="records">
         {egresos.map((item) => (
           <article key={item.id} className="record compact-record">
@@ -99,6 +149,8 @@ export function Egresos() {
             </button>
           </article>
         ))}
+      </div>
+      </div>
       </div>
 
       {doc ? (

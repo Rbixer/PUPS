@@ -26,6 +26,7 @@ export function Ingresos() {
           <h1>Registrar ingreso</h1>
         </div>
       </header>
+      <div className="cash-desk">
       <form
         className="panel form-grid"
         onSubmit={(event) => {
@@ -87,6 +88,11 @@ export function Ingresos() {
           Registrar ingreso
         </button>
       </form>
+      <div className="ledger">
+      <header className="module-bar">
+        <h2>Ingresos registrados</h2>
+        <span>{ingresos.length}</span>
+      </header>
       <div className="records">
         {ingresos.map((item) => (
           <article key={item.id} className="record compact-record">
@@ -103,6 +109,8 @@ export function Ingresos() {
             {item.notes ? <p>{item.notes}</p> : null}
           </article>
         ))}
+      </div>
+      </div>
       </div>
     </section>
   )

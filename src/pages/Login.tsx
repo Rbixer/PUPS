@@ -22,25 +22,29 @@ export function Login() {
 
   return (
     <main className="login">
-      <section className="login-brand">
-        <a href="/" className="back-link">
-          Volver al sitio
-        </a>
-        <div>
-          <p className="eyebrow on-light">Sistema interno</p>
-          <h1>
-            Entra al <em>panel.</em>
-          </h1>
-          <p>Citas del día, ficha de la mascota, constancia y caja en quetzales.</p>
+      <section className="login-stage">
+        <div className="login-mark">
+          <img className="login-logo" src="/logo.png" alt="PUP'S Pet Shop y Grooming" />
+          <div>
+            <p className="eyebrow">Sistema interno</p>
+            <h1>Panel de operación</h1>
+            <p>Citas, fichas, caja y equipo en un solo lugar.</p>
+          </div>
         </div>
-        <img className="login-logo" src="/logo.png" alt="PUP'S Pet Shop y Grooming" />
-      </section>
-      <section className="login-panel">
         <form
-          className="form-grid"
+          className="login-panel form-grid"
           onSubmit={async (event) => {
             event.preventDefault()
-            const ok = await login(username, password)
+            const data = new FormData(event.currentTarget)
+            const userName = String(data.get('username') ?? username)
+            const pass = String(data.get('password') ?? password)
+            let ok = false
+            try {
+              ok = await login(userName, pass)
+            } catch {
+              setError('No se pudo comprobar la clave en este celular. Recarga e inténtalo de nuevo.')
+              return
+            }
             if (!ok) {
               setError('Usuario o clave incorrectos.')
               return
@@ -52,18 +56,28 @@ export function Login() {
           <h2>Panel de administración</h2>
           <Field label="Usuario">
             <input
+              name="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
               required
             />
           </Field>
           <Field label="Clave">
             <input
+              name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="go"
               required
             />
           </Field>
