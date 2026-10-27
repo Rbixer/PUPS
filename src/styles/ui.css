@@ -215,14 +215,23 @@
     @apply font-display tracking-tight text-stone-900 dark:text-stone-100;
   }
   .admin .hot,
-  .admin .hot-text {
+  .admin .hot-text,
+  .admin .kpis .hot,
+  .admin .metric-rail .hot,
+  .admin .stats-figures .hot {
     @apply text-amber-700 dark:text-amber-400;
   }
   .admin .ok,
-  .admin .ok-text {
+  .admin .ok-text,
+  .admin .kpis .ok,
+  .admin .metric-rail .ok,
+  .admin .stats-figures .ok {
     @apply text-emerald-700 dark:text-emerald-400;
   }
-  .admin .cyan {
+  .admin .cyan,
+  .admin .kpis .cyan,
+  .admin .metric-rail .cyan,
+  .admin .stats-figures .cyan {
     @apply text-caramel-deep dark:text-caramel;
   }
   .admin .stats-lead strong {
@@ -230,6 +239,9 @@
   }
   .admin .stats-figures article {
     @apply border-stone-200/80 dark:border-stone-800;
+  }
+  .admin .legend b {
+    @apply whitespace-nowrap;
   }
   .admin .kpi small,
   .admin .delta {
