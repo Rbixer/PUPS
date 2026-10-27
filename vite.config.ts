@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
@@ -72,7 +73,7 @@ function pupsState(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [
+  plugins: [tailwindcss(), 
     pupsState(),
     react(),
     VitePWA({

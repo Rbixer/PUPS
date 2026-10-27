@@ -25,7 +25,6 @@
   html[data-theme="dark"] ::selection { background: #5a3a26; color: #fff; }
 
   /* Barra y encabezados */
-  html[data-theme="dark"] .admin .side { background: radial-gradient(260px 200px at 0% 0%, rgba(196, 120, 74, 0.2), transparent 70%), #0f0d0c; }
   html[data-theme="dark"] .admin .page-head { background: rgba(20, 17, 15, 0.82); }
   html[data-theme="dark"] .admin .eyebrow { color: #e3a67e; }
   html[data-theme="dark"] .admin .page-head h1,
@@ -112,7 +111,6 @@
     color: #fff;
   }
   html[data-theme="dark"] .admin .btn-primary:hover { background: linear-gradient(180deg, #c27545, #a9622f); }
-  html[data-theme="dark"] .admin .who .btn-ghost { color: #f5f6f8; border-color: rgba(255, 255, 255, 0.16); }
 
   /* Calendario y agenda */
   html[data-theme="dark"] .admin .cal-day.selected { background: rgba(196, 120, 74, 0.14); }

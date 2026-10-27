@@ -250,7 +250,7 @@ export function Estadisticas() {
               ? `Día más alto: ${dayCaption(peakDay.date)} · ${money(peakDay.sales)}. La altura es el monto cobrado.`
               : 'Suma de las citas completadas. La altura es el monto, no la cantidad de mascotas.'}
           </p>
-          <div className="pulse" role="list" aria-label="Cobro diario del mes">
+          <div className="pulse" role="list" tabIndex={0} aria-label="Cobro diario del mes, desplazable">
             {report.days.map((day) => (
               <div
                 key={day.date}

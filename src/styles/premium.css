@@ -19,26 +19,6 @@ body {
 .num { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 :focus-visible { outline: 2px solid var(--caramel); outline-offset: 3px; }
 
-/* Barra lateral */
-.admin .side {
-  background:
-    radial-gradient(260px 200px at 0% 0%, rgba(196, 120, 74, 0.16), transparent 70%),
-    #1a1715;
-}
-.admin .side-link {
-  position: relative;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
-}
-.admin .side-link:hover { transform: translateX(2px); }
-.admin .side-link.active {
-  background: linear-gradient(90deg, rgba(196, 120, 74, 0.26), rgba(196, 120, 74, 0.06));
-  color: #fff;
-  box-shadow: inset 2px 0 0 var(--caramel);
-}
-.admin .side-link.active svg { color: #f1b78f; opacity: 1; }
-.admin .nav-count { background: var(--caramel); color: #fff; }
-.admin .who strong { font-family: var(--display); font-weight: 600; font-size: 1.02rem; letter-spacing: -0.01em; }
-
 /* Encabezados */
 .admin .page-head {
   background: rgba(246, 243, 238, 0.82);
@@ -323,7 +303,6 @@ html.has-install .offline-chip { bottom: 112px; }
 .backup { display: grid; gap: 14px; margin-top: 14px; padding: 20px; }
 .backup h2 { margin-bottom: 4px; }
 
-.admin .who .theme-toggle { margin-top: 8px; }
 
 /* Accesibilidad */
 .skip-link {

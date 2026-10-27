@@ -9,9 +9,7 @@ import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { startPwa } from './pwa'
 import { StoreProvider } from './store'
-import './styles.css'
-import './styles/premium.css'
-import './styles/dark.css'
+import './index.css'
 
 startPwa()
 
