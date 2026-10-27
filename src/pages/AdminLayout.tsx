@@ -1,21 +1,19 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
+import { CommandPalette, type PaletteLink } from '../components/CommandPalette'
+import { Icon, routeIcon } from '../components/Icon'
+import { useToast } from '../components/Toast'
 import { Brand } from '../components/ui'
 import { todayLabel } from '../format'
+import { usePwa } from '../pwa'
 import { useStore } from '../store'
+import { useTheme } from '../theme'
 import type { Permission } from '../types'
 
-const GROUPS: { label: string; links: { to: string; label: string; end: boolean; permission?: Permission }[] }[] = [
-  {
-    label: 'Sitio',
-    links: [
-      { to: '/admin/inicio', label: 'Inicio', end: false },
-      { to: '/admin/servicios', label: 'Servicios', end: false },
-      { to: '/admin/reservar', label: 'Reservar', end: false },
-      { to: '/admin/contacto', label: 'Contacto', end: false },
-    ],
-  },
+type NavItem = { to: string; label: string; end: boolean; permission?: Permission }
+
+const GROUPS: { label: string; collapsible?: boolean; links: NavItem[] }[] = [
   {
     label: 'Operación',
     links: [
@@ -41,212 +39,276 @@ const GROUPS: { label: string; links: { to: string; label: string; end: boolean;
       { to: '/admin/usuarios', label: 'Usuarios', end: false, permission: 'equipo' },
     ],
   },
+  {
+    label: 'Sitio',
+    collapsible: true,
+    links: [
+      { to: '/admin/inicio', label: 'Inicio', end: false },
+      { to: '/admin/servicios', label: 'Servicios', end: false },
+      { to: '/admin/reservar', label: 'Reservar', end: false },
+      { to: '/admin/contacto', label: 'Contacto', end: false },
+    ],
+  },
 ]
 
-const LINKS = GROUPS.flatMap((group) => group.links)
+const ALL_LINKS = GROUPS.flatMap((group) => group.links)
+const TAB_ORDER = ['/admin', '/admin/fichas', '/admin/whatsapp', '/admin/ingresos', '/admin/estadisticas']
+const TAB_LABEL: Record<string, string> = { '/admin/ingresos': 'Caja' }
 
-function NavIcon({ to }: { to: string }) {
-  const common = {
-    width: 16,
-    height: 16,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
-  }
-  if (to === '/admin') {
-    return (
-      <svg {...common}>
-        <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
-        <path d="M8 3.5v3M16 3.5v3M3.5 9.5h17" />
-      </svg>
-    )
-  }
-  if (to === '/admin/fichas') {
-    return (
-      <svg {...common}>
-        <path d="M7 3.5h7l5 5V20.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z" />
-        <path d="M14 3.5V9h5.5M8.5 13.5h7M8.5 17h5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/inicio') {
-    return (
-      <svg {...common}>
-        <path d="M4 11.5 12 4.5l8 7" />
-        <path d="M7 10.5V19.5h10V10.5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/servicios') {
-    return (
-      <svg {...common}>
-        <path d="M8 7.5h11M8 12h11M8 16.5h11" />
-        <path d="M4.5 7.5h.01M4.5 12h.01M4.5 16.5h.01" />
-      </svg>
-    )
-  }
-  if (to === '/admin/reservar') {
-    return (
-      <svg {...common}>
-        <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
-        <path d="M8 3.5v3M16 3.5v3M3.5 9.5h17M12 13v4M10 15h4" />
-      </svg>
-    )
-  }
-  if (to === '/admin/contacto') {
-    return (
-      <svg {...common}>
-        <path d="M4.5 6.5h15v11h-15z" />
-        <path d="M4.5 7.5 12 13l7.5-5.5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/whatsapp') {
-    return (
-      <svg {...common}>
-        <path d="M6 17.5 4.5 20.5l3.2-1.2A8.2 8.2 0 1 0 6 17.5z" />
-      </svg>
-    )
-  }
-  if (to === '/admin/ingresos') {
-    return (
-      <svg {...common}>
-        <path d="M12 4.5v15M7 14.5 12 19.5l5-5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/egresos') {
-    return (
-      <svg {...common}>
-        <path d="M12 19.5v-15M7 9.5 12 4.5l5 5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/constancias') {
-    return (
-      <svg {...common}>
-        <path d="M7 3.5h7l5 5V20.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z" />
-        <path d="M14 3.5V9h5.5M8.5 13.5h7M8.5 17h4" />
-      </svg>
-    )
-  }
-  if (to === '/admin/control') {
-    return (
-      <svg {...common}>
-        <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
-        <path d="M3.5 9h17M3.5 13.5h17M9 4.5v15M14.5 4.5v15" />
-      </svg>
-    )
-  }
-  if (to === '/admin/trabajadores') {
-    return (
-      <svg {...common}>
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <circle cx="12" cy="10" r="2" />
-        <path d="M8.5 16.2c.6-1.6 1.8-2.4 3.5-2.4s2.9.8 3.5 2.4" />
-      </svg>
-    )
-  }
-  if (to === '/admin/estadisticas') {
-    return (
-      <svg {...common}>
-        <path d="M4.5 19.5h15" />
-        <path d="M7.5 16.5v-4M12 16.5v-8M16.5 16.5V8" />
-      </svg>
-    )
-  }
+function PageSkeleton() {
   return (
-    <svg {...common}>
-      <circle cx="9" cy="8" r="2.4" />
-      <path d="M4.8 18.2c.7-2.4 2.4-3.6 4.2-3.6s3.5 1.2 4.2 3.6" />
-      <circle cx="16.2" cy="9" r="1.8" />
-      <path d="M15.2 14.6c1.4.2 2.6 1 3.3 2.4" />
-    </svg>
+    <div className="stack" aria-busy="true" aria-label="Cargando módulo">
+      <div className="skeleton" style={{ height: 56, width: '38%', marginTop: 20 }} />
+      <div className="kpis">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="skeleton" style={{ height: 96, borderRadius: 20 }} />
+        ))}
+      </div>
+      <div className="skeleton" style={{ height: 320, borderRadius: 20 }} />
+    </div>
   )
+}
+
+function groupActive(links: NavItem[], pathname: string) {
+  return links.some((link) => (link.end ? pathname === link.to : pathname.startsWith(link.to)))
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'P'
 }
 
 export function AdminLayout() {
   const { state, currentUser, logout, isAdmin, resetDemo } = useStore()
-  const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
+  const { resolved, toggle } = useTheme()
+  const pwa = usePwa()
+  const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [palette, setPalette] = useState(false)
   const [armReset, setArmReset] = useState(false)
-  const links = GROUPS.flatMap((group) => group.links).filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false))
+  const [scrolled, setScrolled] = useState(false)
+  const [siteOpen, setSiteOpen] = useState(false)
+
+  const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
+  const visibleGroups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        ...group,
+        links: group.links.filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false)),
+      })).filter((group) => group.links.length > 0),
+    [currentUser],
+  )
+  const links = useMemo(() => visibleGroups.flatMap((group) => group.links), [visibleGroups])
+  const tabs = useMemo(() => TAB_ORDER.map((to) => links.find((link) => link.to === to)).filter((link): link is NavItem => Boolean(link)).slice(0, 4), [links])
 
   useEffect(() => {
     setOpen(false)
+    window.scrollTo({ top: 0 })
   }, [location.pathname])
 
   useEffect(() => {
-    const current = LINKS.find((link) => (link.end ? location.pathname === link.to : location.pathname.startsWith(link.to)))
+    const current = ALL_LINKS.find((link) => (link.end ? location.pathname === link.to : location.pathname.startsWith(link.to)))
     document.title = `${current?.label ?? 'Panel'} · PUP'S`
   }, [location.pathname])
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPalette((value) => !value)
+      } else if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    if (!armReset) return
+    const timer = window.setTimeout(() => setArmReset(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [armReset])
+
+  const installApp = useCallback(() => {
+    if (pwa.canInstall) void pwa.install()
+    else if (pwa.ios) {
+      toast.push({
+        title: 'Instalar en iPhone o iPad',
+        text: 'Toca Compartir y luego “Añadir a pantalla de inicio”.',
+        duration: 9000,
+      })
+    }
+  }, [pwa, toast])
+
+  const showInstall = !pwa.standalone && (pwa.canInstall || pwa.ios)
+
+  const paletteLinks = useMemo<PaletteLink[]>(
+    () =>
+      visibleGroups.flatMap((group) => group.links.map((link) => ({ to: link.to, label: link.label, icon: routeIcon(link.to), group: group.label }))),
+    [visibleGroups],
+  )
+  const paletteExtra = useMemo(() => {
+    const extra: { id: string; title: string; hint?: string; icon: 'sun' | 'moon' | 'download' | 'logout'; run: () => void }[] = [
+      { id: 'theme', title: resolved === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro', hint: 'Apariencia', icon: resolved === 'dark' ? 'sun' : 'moon', run: toggle },
+    ]
+    if (showInstall) extra.push({ id: 'install', title: 'Instalar la app', hint: 'Añadir a la pantalla de inicio', icon: 'download', run: installApp })
+    extra.push({
+      id: 'logout',
+      title: 'Cerrar sesión',
+      icon: 'logout',
+      run: () => {
+        logout()
+        navigate('/login')
+      },
+    })
+    return extra
+  }, [resolved, toggle, showInstall, installApp, logout, navigate])
+
+  const sideClass = open ? 'side open' : 'side'
+
   return (
     <div className="admin">
-      <div className="mobile-bar">
-        <button type="button" className="nav-toggle" aria-label="Abrir menú" onClick={() => setOpen(true)}>
-          <span />
-          <span />
-        </button>
-        <Brand compact />
-      </div>
-      {open ? <button type="button" className="scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} /> : null}
-      <aside className={open ? 'side open' : 'side'}>
-        <div className="brand-link">
-          <Brand compact />
+      <aside className={sideClass} aria-label="Navegación principal">
+        <div className="side-top">
+          <div className="brand-link">
+            <Brand compact />
+          </div>
+          <button type="button" className="side-close" aria-label="Cerrar menú" onClick={() => setOpen(false)}>
+            <Icon name="close" size={18} />
+          </button>
         </div>
+        <button type="button" className="side-search" onClick={() => setPalette(true)}>
+          <Icon name="search" size={16} />
+          <span>Buscar…</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <nav className="side-nav" aria-label="Módulos">
-          {links.map((link) => (
-            <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'side-link active' : 'side-link')}>
-              <span className="side-link-label">
-                <NavIcon to={link.to} />
-                {link.label}
-              </span>
-              {link.to === '/admin/whatsapp' && unread > 0 ? <b className="nav-count">{unread}</b> : null}
-            </NavLink>
+          {visibleGroups.map((group) => (
+            <div key={group.label} className="side-group">
+              {group.collapsible ? (
+                <button type="button" className="side-group-label toggle" aria-expanded={siteOpen || groupActive(group.links, location.pathname)} onClick={() => setSiteOpen((value) => !value)}>
+                  {group.label}
+                  <Icon name="arrowRight" size={12} strokeWidth={2.2} />
+                </button>
+              ) : (
+                <p className="side-group-label">{group.label}</p>
+              )}
+              {(group.collapsible && !siteOpen && !groupActive(group.links, location.pathname) ? [] : group.links).map((link) => (
+                <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'side-link active' : 'side-link')}>
+                  <span className="side-link-label">
+                    <Icon name={routeIcon(link.to)} size={18} />
+                    {link.label}
+                  </span>
+                  {link.to === '/admin/whatsapp' && unread > 0 ? <b className="nav-count">{unread}</b> : null}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
-        <div className="who">
-          <strong>{currentUser?.name}</strong>
-          <span>{currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}</span>
-          <span className="who-date">{todayLabel()}</span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              logout()
-              navigate('/login')
-            }}
-          >
-            Cerrar sesión
-          </button>
-          {isAdmin ? (
-            <button
-              type="button"
-              className="text-btn"
-              onClick={() => {
-                if (!armReset) {
-                  setArmReset(true)
-                  return
-                }
-                resetDemo()
-                setArmReset(false)
-              }}
-            >
-              {armReset ? 'Confirmar restauración' : 'Restaurar demostración'}
+        <div className="side-foot">
+          <div className="side-tools">
+            <button type="button" className="side-tool" onClick={toggle} aria-label={resolved === 'dark' ? 'Usar tema claro' : 'Usar tema oscuro'}>
+              <Icon name={resolved === 'dark' ? 'sun' : 'moon'} size={16} />
+              {resolved === 'dark' ? 'Claro' : 'Oscuro'}
             </button>
-          ) : null}
+            {showInstall ? (
+              <button type="button" className="side-tool install" onClick={installApp}>
+                <Icon name="download" size={16} />
+                Instalar app
+              </button>
+            ) : null}
+          </div>
+          <div className="who">
+            <span className="who-avatar" aria-hidden="true">
+              {initials(currentUser?.name ?? '')}
+            </span>
+            <strong>{currentUser?.name}</strong>
+            <span>{currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}</span>
+            <span className="who-date">{todayLabel()}</span>
+            <div className="who-actions">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  logout()
+                  navigate('/login')
+                }}
+              >
+                <Icon name="logout" size={15} />
+                Salir
+              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => {
+                    if (!armReset) {
+                      setArmReset(true)
+                      return
+                    }
+                    resetDemo()
+                    setArmReset(false)
+                    toast.push({ title: 'Demostración restaurada', text: 'Se cargaron de nuevo los datos de ejemplo.', tone: 'success' })
+                  }}
+                >
+                  {armReset ? 'Confirmar restauración' : 'Restaurar demostración'}
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       </aside>
-      <div className="admin-main">
-        <Outlet />
+      {open ? <button type="button" className="scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} /> : null}
+
+      <div className={scrolled ? 'admin-main scrolled' : 'admin-main'}>
+        <div className="mobile-bar">
+          <button type="button" className="mobile-icon" aria-label="Abrir menú" aria-expanded={open} onClick={() => setOpen(true)}>
+            <Icon name="menu" size={20} />
+          </button>
+          <Brand compact />
+          <button type="button" className="mobile-icon" aria-label="Buscar" onClick={() => setPalette(true)}>
+            <Icon name="search" size={19} />
+          </button>
+          <button type="button" className="mobile-icon" aria-label={resolved === 'dark' ? 'Usar tema claro' : 'Usar tema oscuro'} onClick={toggle}>
+            <Icon name={resolved === 'dark' ? 'sun' : 'moon'} size={19} />
+          </button>
+        </div>
+        {!pwa.online ? (
+          <div className="pwa-strip" role="status">
+            <i />
+            Sin conexión. Seguimos guardando todo en este dispositivo.
+          </div>
+        ) : null}
+        <div className="page-wrap" key={location.pathname}>
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </div>
       </div>
+
+      <nav className="tabbar" aria-label="Accesos rápidos">
+        {tabs.map((link) => (
+          <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+            <Icon name={routeIcon(link.to)} size={22} />
+            {TAB_LABEL[link.to] ?? link.label}
+            {link.to === '/admin/whatsapp' && unread > 0 ? <b className="nav-count">{unread}</b> : null}
+          </NavLink>
+        ))}
+        <button type="button" className="tab" onClick={() => setOpen(true)}>
+          <Icon name="menu" size={22} />
+          Más
+        </button>
+      </nav>
+
+      {palette ? <CommandPalette links={paletteLinks} extra={paletteExtra} onClose={() => setPalette(false)} /> : null}
     </div>
   )
 }

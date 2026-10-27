@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { COATS, METHODS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
 import { Constancia } from '../components/Constancia'
+import { CountUp } from '../components/CountUp'
 import { DayBoard } from '../components/DayBoard'
+import { Icon } from '../components/Icon'
+import { Modal } from '../components/Modal'
+import { useToast } from '../components/Toast'
 import { Field, StatusPill } from '../components/ui'
 import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, shiftMonth, show } from '../format'
 import { useStore, type ChargeNote } from '../store'
 import type { Appointment, AppointmentStatus } from '../types'
-import { overlaps, petKey, visitMinutes } from '../visit'
+import { overlaps, petKey, planOf, priceFor, visitMinutes } from '../visit'
 
 type Draft = {
   petName: string
@@ -82,16 +86,34 @@ export function Citas() {
   const [costTarget, setCostTarget] = useState<Appointment | null>(null)
   const [costValue, setCostValue] = useState('')
   const [costError, setCostError] = useState('')
-  const [cashNote, setCashNote] = useState<ChargeNote | null>(null)
+  const [completeCost, setCompleteCost] = useState('')
+  const [completeError, setCompleteError] = useState('')
+  const toast = useToast()
   const [params, setParams] = useSearchParams()
 
+  function setCashNote(note: ChargeNote | null) {
+    if (!note) return
+    toast.push({
+      title: note.removed ? `Se retiró ${note.document} de caja` : `${note.created ? 'Cobro registrado' : 'Caja actualizada'} · ${note.document}`,
+      text: note.removed ? undefined : money(note.amount),
+      tone: 'success',
+    })
+  }
+
   useEffect(() => {
+    if (params.get('nueva')) {
+      setEditing('new')
+      setDraft({ ...blankDraft(), employeeCode: currentUser?.employeeCode ?? '' })
+      setFormError('')
+      setParams({}, { replace: true })
+      return
+    }
     const id = params.get('constancia')
     if (!id) return
     const found = state.appointments.find((item) => item.id === id)
     if (found) setSheet(found)
     setParams({}, { replace: true })
-  }, [params, setParams, state.appointments])
+  }, [params, setParams, state.appointments, currentUser])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 800px)')
@@ -105,9 +127,6 @@ export function Citas() {
     function onKey(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
       setSheet(null)
-      setEditing(null)
-      setCostTarget(null)
-      setCompleteTarget(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -188,6 +207,9 @@ export function Citas() {
             onClick={() => {
               setCompleteTarget(item)
               setPayMethod('Efectivo')
+              setCompleteError('')
+              const suggested = item.cost > 0 ? item.cost : (priceFor(planOf(item), item.size) ?? 0)
+              setCompleteCost(suggested > 0 ? String(suggested) : '')
             }}
           >
             Completar
@@ -251,30 +273,30 @@ export function Citas() {
         </button>
       </header>
 
-      {cashNote ? (
-        <p className="banner">
-          {cashNote.removed
-            ? `Se retiró ${cashNote.document} de caja.`
-            : `${cashNote.created ? 'Caja' : 'Caja actualizada'}: ${cashNote.document} · ${money(cashNote.amount)}`}
-        </p>
-      ) : null}
-
       <div className="kpis">
         <article className="kpi">
           <span>Pendientes ({dayLabel})</span>
-          <strong className="num hot">{pending}</strong>
+          <strong className="num hot">
+            <CountUp value={pending} />
+          </strong>
         </article>
         <article className="kpi">
           <span>Completadas ({dayLabel})</span>
-          <strong className="num ok">{done}</strong>
+          <strong className="num ok">
+            <CountUp value={done} />
+          </strong>
         </article>
         <article className="kpi">
           <span>Canceladas ({dayLabel})</span>
-          <strong className="num">{cancelled}</strong>
+          <strong className="num">
+            <CountUp value={cancelled} />
+          </strong>
         </article>
         <article className="kpi">
           <span>Ventas ({dayLabel})</span>
-          <strong className="num cyan">{money(sales)}</strong>
+          <strong className="num cyan">
+            <CountUp value={sales} format={money} />
+          </strong>
         </article>
       </div>
 
@@ -370,6 +392,7 @@ export function Citas() {
         <p className="hint">Arrastra una cita dentro del día o suéltala en otro día del mes. La hora del tablero es de operación, de 8:00 a 19:00.</p>
         <DayBoard
           items={selectedItems}
+          showNow={selected === today}
           onMove={(id, time) => moveAppointment(id, { time })}
           onCreate={(time) => openNew(selected, time)}
         />
@@ -450,7 +473,7 @@ export function Citas() {
       ) : null}
 
       {editing ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+        <Modal labelledBy="edit-title" onClose={() => setEditing(null)} dismissOnBackdrop={false}>
           <form
             className="drawer"
             onSubmit={(event) => {
@@ -578,23 +601,40 @@ export function Citas() {
               Guardar
             </button>
           </form>
-        </div>
+        </Modal>
       ) : null}
 
       {completeTarget ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="done-title">
+        <Modal labelledBy="done-title" onClose={() => setCompleteTarget(null)}>
           <form
             className="dialog"
             onSubmit={(event) => {
               event.preventDefault()
-              setCashNote(updateAppointment(completeTarget.id, { status: 'completada' }, payMethod))
+              const value = Number(completeCost || 0)
+              if (!Number.isFinite(value) || value < 0) {
+                setCompleteError('Escribe un monto válido.')
+                return
+              }
+              const patch: Partial<Appointment> = { status: 'completada' }
+              if (allows('costos') && value !== completeTarget.cost) patch.cost = value
+              setCashNote(updateAppointment(completeTarget.id, patch, payMethod))
               setCompleteTarget(null)
             }}
           >
             <h2 id="done-title">Completar #{completeTarget.folio}</h2>
             <p className="hint">
-              {formatName(completeTarget.petName)} · {money(completeTarget.cost)}. El cobro entra a caja con este medio.
+              {formatName(completeTarget.petName)} · {formatName(completeTarget.clientName)}. El cobro entra a caja con el medio de pago que elijas.
             </p>
+            {allows('costos') ? (
+              <Field label="Monto a cobrar (Q)">
+                <input className="num" inputMode="decimal" value={completeCost} onChange={(event) => setCompleteCost(event.target.value)} placeholder="0.00" />
+              </Field>
+            ) : (
+              <p className="banner">Monto de la cita: {money(completeTarget.cost)}</p>
+            )}
+            {completeTarget.cost === 0 && !allows('costos') ? (
+              <p className="banner warn">Esta cita no tiene costo. Pide a un administrador que lo registre para generar el ingreso.</p>
+            ) : null}
             <Field label="Medio de pago">
               <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
                 {METHODS.map((method) => (
@@ -602,20 +642,22 @@ export function Citas() {
                 ))}
               </select>
             </Field>
+            {completeError ? <p className="form-error">{completeError}</p> : null}
             <div className="overlay-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setCompleteTarget(null)}>
                 Volver
               </button>
               <button type="submit" className="btn btn-primary">
+                <Icon name="check" size={16} strokeWidth={2.2} />
                 Completar y cobrar
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
 
       {costTarget ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="cost-title">
+        <Modal labelledBy="cost-title" onClose={() => setCostTarget(null)}>
           <form
             className="dialog"
             onSubmit={(event) => {
@@ -643,7 +685,7 @@ export function Citas() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       ) : null}
     </section>
   )

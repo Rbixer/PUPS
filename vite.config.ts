@@ -4,6 +4,7 @@ import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 function pupsState(): Plugin {
   const file = path.resolve('data/pups.json')
@@ -71,10 +72,65 @@ function pupsState(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [pupsState(), react()],
+  plugins: [
+    pupsState(),
+    react(),
+    VitePWA({
+      registerType: 'prompt',
+      injectRegister: false,
+      includeAssets: ['logo.png', 'login-pattern.svg', 'icons/*.png'],
+      manifest: {
+        id: '/',
+        name: "PUP'S Pet Shop y Grooming",
+        short_name: "PUP'S",
+        description: 'Citas, fichas de mascotas, caja y reportes. Funciona sin conexión.',
+        lang: 'es',
+        dir: 'ltr',
+        start_url: '/?source=pwa',
+        scope: '/',
+        display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
+        orientation: 'any',
+        background_color: '#f6f2ec',
+        theme_color: '#1d1c1f',
+        categories: ['business', 'productivity'],
+        icons: [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        shortcuts: [
+          { name: 'Nueva cita', short_name: 'Nueva cita', url: '/admin?nueva=1', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Fichas', short_name: 'Fichas', url: '/admin/fichas', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'Registrar ingreso', short_name: 'Caja', url: '/admin/ingresos', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+          { name: 'WhatsApp', short_name: 'WhatsApp', url: '/admin/whatsapp', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [{ urlPattern: ({ url }) => url.pathname.startsWith('/api/'), handler: 'NetworkOnly' }],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   server: {
     host: true,
     port: 5173,
     strictPort: true,
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
   },
 })

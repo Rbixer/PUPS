@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CountUp } from '../components/CountUp'
 import { MonthReport } from '../components/MonthReport'
 import { isoDate, money, monthStart, monthTitle, parseIso, shiftMonth, weekday } from '../format'
 import { buildMonthReport, change, downloadExcel, excelFilename, rate } from '../report'
@@ -30,7 +31,7 @@ function Donut({ parts, total }: { parts: { label: string; value: number; color:
               cy="60"
               r={radius}
               fill="none"
-              stroke={part.color}
+              style={{ stroke: part.color }}
               strokeWidth="14"
               strokeDasharray={dash}
               strokeDashoffset={-offset}
@@ -96,9 +97,9 @@ export function Estadisticas() {
   const peakDay = report.days.reduce((best, day) => (day.sales > best.sales ? day : best), report.days[0])
   const peakHour = Math.max(...report.hours.map((hour) => hour.count), 1)
   const status = [
-    { label: 'Completadas', value: report.done.length, color: '#5f7d6c' },
-    { label: 'Pendientes', value: report.pending, color: '#2a2e36' },
-    { label: 'Canceladas', value: report.cancelled, color: '#d5d7dc' },
+    { label: 'Completadas', value: report.done.length, color: 'var(--chart-done)' },
+    { label: 'Pendientes', value: report.pending, color: 'var(--chart-pending)' },
+    { label: 'Canceladas', value: report.cancelled, color: 'var(--chart-cancel)' },
   ]
 
   useEffect(() => {
@@ -184,7 +185,9 @@ export function Estadisticas() {
       <section className="stats-hero">
         <div className="stats-lead">
           <span>Resultado de caja</span>
-          <strong className={report.result >= 0 ? 'ok' : 'hot'}>{money(report.result)}</strong>
+          <strong className={report.result >= 0 ? 'ok' : 'neg'}>
+            <CountUp value={report.result} format={money} duration={1200} />
+          </strong>
           <small className={`delta ${resultChange.tone}`}>{resultChange.label}</small>
           <p>
             Ingresos {money(report.income)} · egresos {money(report.expense)}
@@ -193,12 +196,16 @@ export function Estadisticas() {
         <div className="stats-figures">
           <article>
             <span>Cobrado en citas</span>
-            <strong className="num">{money(report.sales)}</strong>
+            <strong className="num">
+              <CountUp value={report.sales} format={money} />
+            </strong>
             <small className={`delta ${salesChange.tone}`}>{salesChange.label}</small>
           </article>
           <article>
             <span>Ticket promedio</span>
-            <strong className="num">{money(report.average)}</strong>
+            <strong className="num">
+              <CountUp value={report.average} format={money} />
+            </strong>
             <small className="delta flat">{report.done.length} citas completadas</small>
           </article>
           <article>
@@ -219,11 +226,15 @@ export function Estadisticas() {
       <div className="metric-rail">
         <article>
           <span>Ingresos</span>
-          <strong className="num ok">{money(report.income)}</strong>
+          <strong className="num ok">
+            <CountUp value={report.income} format={money} />
+          </strong>
         </article>
         <article>
           <span>Egresos</span>
-          <strong className="num hot">{money(report.expense)}</strong>
+          <strong className="num hot">
+            <CountUp value={report.expense} format={money} />
+          </strong>
         </article>
         <article>
           <span>WhatsApp</span>

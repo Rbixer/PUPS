@@ -1,4 +1,4 @@
-import { Workbook, type Cell, type Worksheet } from 'exceljs'
+import type { Cell, Worksheet } from 'exceljs'
 import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, type ControlLine } from './control'
 import { isoDate, longDate } from './format'
 
@@ -32,7 +32,7 @@ const COUNT_INPUT = '#,##0;;'
 const COUNT_CALC = '#,##0'
 
 export async function downloadControlExcel(sheet: Sheet) {
-  const workbook = workbookFor(sheet)
+  const workbook = await workbookFor(sheet)
   const raw = await workbook.xlsx.writeBuffer()
   saveFile(raw, controlFilename(sheet.year, 'xlsx'), MIME)
 }
@@ -41,7 +41,8 @@ export function downloadControlPdf(sheet: Sheet) {
   saveFile(controlPdfBytes(sheet), controlFilename(sheet.year, 'pdf'), 'application/pdf')
 }
 
-export function workbookFor(sheet: Sheet) {
+export async function workbookFor(sheet: Sheet) {
+  const { Workbook } = await import('exceljs')
   const workbook = new Workbook()
   workbook.creator = "PUP'S Pet Shop y Grooming"
   workbook.created = new Date()

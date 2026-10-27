@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { formatName } from '../format'
 import type { Appointment } from '../types'
 import { visitMinutes } from '../visit'
@@ -17,15 +18,30 @@ function minutesOf(time: string) {
   return (hour || 0) * 60 + (minute || 0)
 }
 
+function useMinute(active: boolean) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    if (!active) return
+    setNow(new Date())
+    const timer = window.setInterval(() => setNow(new Date()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [active])
+  return now
+}
+
 export function DayBoard({
   items,
+  showNow = false,
   onMove,
   onCreate,
 }: {
   items: Appointment[]
+  showNow?: boolean
   onMove: (id: string, time: string) => void
   onCreate: (time: string) => void
 }) {
+  const now = useMinute(showNow)
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const height = ((CLOSE - OPEN) / 60) * HOUR
   const visible = items.filter((item) => item.status !== 'cancelada')
 
@@ -50,6 +66,9 @@ export function DayBoard({
           <span className="num">{label(minute)}</span>
         </button>
       ))}
+      {showNow && nowMinutes >= OPEN && nowMinutes <= CLOSE ? (
+        <div className="day-now" style={{ top: ((nowMinutes - OPEN) / 60) * HOUR }} aria-hidden="true" />
+      ) : null}
       {visible.map((item) => {
         const start = minutesOf(item.time)
         const top = ((start - OPEN) / 60) * HOUR

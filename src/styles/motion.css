@@ -1,0 +1,67 @@
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px) scale(0.998); } to { opacity: 1; transform: none; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes slide-down { from { opacity: 0; transform: translateY(-100%); } to { opacity: 1; transform: none; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(20px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes toast-out { to { opacity: 0; transform: translateX(24px) scale(0.96); } }
+@keyframes shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.75); } }
+@keyframes grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes grow-x-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes grow-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes donut-in { from { stroke-dasharray: 0 400; opacity: 0.2; } }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
+@keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(40px, 30px) scale(1.15); } }
+@keyframes shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(3px); } 30%, 50%, 70% { transform: translateX(-5px); } 40%, 60% { transform: translateX(5px); } }
+@keyframes bubble-in { from { opacity: 0; transform: scale(0.85) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pop-badge { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* Entrada escalonada de bloques */
+.page-wrap .stack > *,
+.page-wrap .kpis > *,
+.page-wrap .metric-rail > *,
+.page-wrap .file-grid > *,
+.page-wrap .team-board > *,
+.page-wrap .staff-board > *,
+.page-wrap .service-list > *,
+.page-wrap .pillars > *,
+.page-wrap .steps > *,
+.page-wrap .user-list > *,
+.page-wrap .book-main > *,
+.page-wrap .file-facts > * {
+  animation: rise 640ms var(--ease) both;
+}
+.page-wrap .stack > :nth-child(2), .page-wrap .kpis > :nth-child(2), .page-wrap .metric-rail > :nth-child(2), .page-wrap .file-grid > :nth-child(2), .page-wrap .team-board > :nth-child(2), .page-wrap .staff-board > :nth-child(2), .page-wrap .service-list > :nth-child(2), .page-wrap .pillars > :nth-child(2), .page-wrap .steps > :nth-child(2), .page-wrap .user-list > :nth-child(2), .page-wrap .book-main > :nth-child(2), .page-wrap .file-facts > :nth-child(2) { animation-delay: 70ms; }
+.page-wrap .stack > :nth-child(3), .page-wrap .kpis > :nth-child(3), .page-wrap .metric-rail > :nth-child(3), .page-wrap .file-grid > :nth-child(3), .page-wrap .team-board > :nth-child(3), .page-wrap .staff-board > :nth-child(3), .page-wrap .service-list > :nth-child(3), .page-wrap .pillars > :nth-child(3), .page-wrap .steps > :nth-child(3), .page-wrap .user-list > :nth-child(3), .page-wrap .book-main > :nth-child(3), .page-wrap .file-facts > :nth-child(3) { animation-delay: 140ms; }
+.page-wrap .stack > :nth-child(4), .page-wrap .kpis > :nth-child(4), .page-wrap .metric-rail > :nth-child(4), .page-wrap .file-grid > :nth-child(4), .page-wrap .team-board > :nth-child(4), .page-wrap .staff-board > :nth-child(4), .page-wrap .service-list > :nth-child(4), .page-wrap .user-list > :nth-child(4), .page-wrap .file-facts > :nth-child(4) { animation-delay: 210ms; }
+.page-wrap .stack > :nth-child(5), .page-wrap .file-grid > :nth-child(5), .page-wrap .team-board > :nth-child(5), .page-wrap .staff-board > :nth-child(5), .page-wrap .service-list > :nth-child(5), .page-wrap .user-list > :nth-child(5) { animation-delay: 280ms; }
+.page-wrap .stack > :nth-child(n + 6), .page-wrap .file-grid > :nth-child(n + 6), .page-wrap .team-board > :nth-child(n + 6), .page-wrap .staff-board > :nth-child(n + 6), .page-wrap .service-list > :nth-child(n + 6), .page-wrap .user-list > :nth-child(n + 6) { animation-delay: 340ms; }
+.page-wrap .stack > .page-head { animation: none; }
+.page-wrap .file-hero { animation: rise 640ms var(--ease) both; }
+
+.pulse-col:nth-child(3n) .pulse-bar { animation-delay: 60ms; }
+.pulse-col:nth-child(3n + 1) .pulse-bar { animation-delay: 120ms; }
+.pulse-col:nth-child(3n + 2) .pulse-bar { animation-delay: 180ms; }
+.meter-row:nth-child(2) .meter-fill { animation-delay: 80ms; }
+.meter-row:nth-child(3) .meter-fill { animation-delay: 160ms; }
+.meter-row:nth-child(4) .meter-fill { animation-delay: 240ms; }
+.meter-row:nth-child(n + 5) .meter-fill { animation-delay: 320ms; }
+
+.skeleton { border-radius: var(--radius-sm); background: linear-gradient(100deg, var(--surface-3) 30%, var(--surface-2) 50%, var(--surface-3) 70%) 0 0 / 200% 100%; animation: shimmer 1.4s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .stage-card { transform: none; }
+}

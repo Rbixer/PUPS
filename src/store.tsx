@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { allows as userAllows } from './access'
+import { useToast } from './components/Toast'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, hashPassword, newId, normalizePhone } from './format'
 import type { Appointment, AppState, ControlField, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
@@ -57,6 +58,34 @@ function syncIncome(appointment: Appointment, movements: Movement[], method?: st
 
 const KEY = 'pups-monica-v1'
 const SESSION = 'pups-session'
+const REMEMBER = 'pups-remember'
+const REMEMBER_DAYS = 14
+const MAX_TRIES = 5
+const LOCK_MS = 30_000
+
+function rememberedSession() {
+  try {
+    const raw = localStorage.getItem(REMEMBER)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { id?: string; until?: number }
+    if (!saved.id || !saved.until || saved.until < Date.now()) {
+      localStorage.removeItem(REMEMBER)
+      return null
+    }
+    return saved.id
+  } catch {
+    return null
+  }
+}
+
+function rememberSession(id: string | null) {
+  try {
+    if (!id) localStorage.removeItem(REMEMBER)
+    else localStorage.setItem(REMEMBER, JSON.stringify({ id, until: Date.now() + REMEMBER_DAYS * 86_400_000 }))
+  } catch {
+    /* Sin almacenamiento: la sesión solo dura esta pestaña. */
+  }
+}
 
 function bump(current: AppState, patch: Partial<AppState>): AppState {
   return { ...current, ...patch, revision: (current.revision ?? 0) + 1 }
@@ -91,7 +120,7 @@ type Store = {
   currentUser: User | null
   isAdmin: boolean
   allows: (permission: Permission) => boolean
-  login: (username: string, password: string) => Promise<boolean>
+  login: (username: string, password: string, remember?: boolean) => Promise<boolean>
   logout: () => void
   addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>) => Appointment
   updateAppointment: (id: string, patch: Partial<Appointment>, method?: string) => ChargeNote | null
@@ -127,12 +156,17 @@ const Ctx = createContext<Store | null>(null)
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => {
     const initial = load()
-    const session = sessionStorage.getItem(SESSION) || initial.sessionUserId
+    const session = sessionStorage.getItem(SESSION) || rememberedSession() || initial.sessionUserId
     if (session) sessionStorage.setItem(SESSION, session)
     return { ...initial, sessionUserId: session }
   })
   const booted = useRef(false)
   const bootRevision = useRef<number | null>(null)
+  const remoteRevision = useRef<number | null>(null)
+  const failures = useRef({ count: 0, last: 0 })
+  const warned = useRef(false)
+  const tries = useRef({ count: 0, last: 0 })
+  const toast = useToast()
   if (bootRevision.current === null) bootRevision.current = state.revision ?? 0
 
   useEffect(() => {
@@ -148,9 +182,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setState((current) => {
               if ((current.revision ?? 0) !== started) return current
               if ((remote.revision ?? 0) < (current.revision ?? 0)) return current
+              remoteRevision.current = remote.revision ?? 0
               return {
                 ...remote,
-                sessionUserId: sessionStorage.getItem(SESSION),
+                sessionUserId: sessionStorage.getItem(SESSION) || rememberedSession(),
                 conversations: remote.conversations ?? [],
                 leads: remote.leads ?? [],
               }
@@ -171,29 +206,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     void boot()
-    const timer = window.setInterval(() => {
-      if (!booted.current) return
-      void fetch('/api/state')
-        .then(async (response) => {
-          if (!response.ok) return
-          const remote = (await response.json()) as AppState
-          setState((current) => {
-            if ((remote.revision ?? 0) <= (current.revision ?? 0)) return current
-            return { ...remote, sessionUserId: current.sessionUserId, conversations: remote.conversations ?? [], leads: remote.leads ?? [] }
-          })
+
+    async function poll() {
+      if (!booted.current || document.hidden || !navigator.onLine) return
+      const quiet = failures.current.count >= 3 && Date.now() - failures.current.last < 30_000
+      if (quiet) return
+      try {
+        const response = await fetch('/api/state', { headers: { accept: 'application/json' } })
+        if (!response.ok || !response.headers.get('content-type')?.includes('json')) throw new Error('sin servicio')
+        failures.current.count = 0
+        const remote = (await response.json()) as AppState
+        setState((current) => {
+          if ((remote.revision ?? 0) <= (current.revision ?? 0)) return current
+          remoteRevision.current = remote.revision ?? 0
+          return { ...remote, sessionUserId: current.sessionUserId, conversations: remote.conversations ?? [], leads: remote.leads ?? [] }
         })
-        .catch(() => undefined)
-    }, 2000)
+      } catch {
+        failures.current = { count: failures.current.count + 1, last: Date.now() }
+      }
+    }
+    const timer = window.setInterval(() => void poll(), 2000)
+    const wake = () => {
+      if (!document.hidden) {
+        failures.current.count = 0
+        void poll()
+      }
+    }
+    document.addEventListener('visibilitychange', wake)
+    window.addEventListener('online', wake)
     return () => {
       cancel = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', wake)
+      window.removeEventListener('online', wake)
     }
   }, [])
 
   useEffect(() => {
     if (!booted.current) return
     const payload = shared(state)
-    localStorage.setItem(KEY, JSON.stringify(payload))
+    try {
+      localStorage.setItem(KEY, JSON.stringify(payload))
+      warned.current = false
+    } catch {
+      if (!warned.current) {
+        warned.current = true
+        toast.push({
+          title: 'Almacenamiento del dispositivo lleno',
+          text: 'Los cambios siguen en la agenda del equipo, pero este dispositivo no podrá guardarlos sin conexión. Evita fotos pesadas.',
+          tone: 'error',
+          duration: 9000,
+        })
+      }
+    }
+    if (remoteRevision.current !== null && (state.revision ?? 0) === remoteRevision.current) return
     const handle = window.setTimeout(() => {
       void fetch('/api/state', {
         method: 'PUT',
@@ -203,12 +269,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .then(async (response) => {
           if (response.status !== 409) return
           const remote = (await response.json()) as AppState
+          remoteRevision.current = remote.revision ?? 0
           setState((current) => ({ ...remote, sessionUserId: current.sessionUserId }))
         })
         .catch(() => undefined)
     }, 200)
     return () => window.clearTimeout(handle)
-  }, [state])
+  }, [state, toast])
 
   const api = useMemo<Store>(() => {
     const currentUser = state.users.find((user) => user.id === state.sessionUserId && user.active) ?? null
@@ -218,7 +285,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       currentUser,
       isAdmin: currentUser?.role === 'Administrador',
       allows: (permission) => userAllows(currentUser, permission),
-      login: async (username, password) => {
+      login: async (username, password, remember = false) => {
+        if (tries.current.count >= MAX_TRIES && Date.now() - tries.current.last < LOCK_MS) throw new Error('LOCKED')
         const hashed = await hashPassword(password)
         const user = state.users.find(
           (item) =>
@@ -226,8 +294,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             (item.password === hashed || item.password === password) &&
             item.active,
         )
-        if (!user) return false
+        if (!user) {
+          tries.current = { count: tries.current.count + 1, last: Date.now() }
+          return false
+        }
+        tries.current = { count: 0, last: 0 }
         sessionStorage.setItem(SESSION, user.id)
+        rememberSession(remember ? user.id : null)
         setState((current) => ({
           ...current,
           sessionUserId: user.id,
@@ -241,6 +314,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         sessionStorage.removeItem(SESSION)
+        rememberSession(null)
         setState((current) => ({ ...current, sessionUserId: null }))
       },
       addAppointment: (appointment) => {

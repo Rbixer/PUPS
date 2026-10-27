@@ -1,4 +1,4 @@
-import { Workbook, type Cell } from 'exceljs'
+import type { Cell, Workbook } from 'exceljs'
 import { formatName, isoDate, monthTitle } from './format'
 import type { AppState, Appointment, Movement } from './types'
 
@@ -239,6 +239,7 @@ export function excelFilename(report: MonthReport) {
 }
 
 export async function downloadExcel(report: MonthReport) {
+  const { Workbook } = await import('exceljs')
   const workbook = new Workbook()
   workbook.creator = "PUP'S Pet Shop y Grooming"
   workbook.created = new Date()
