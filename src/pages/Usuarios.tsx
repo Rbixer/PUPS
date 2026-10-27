@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
+import { saveBackupFile } from '../backup'
 import { Field } from '../components/ui'
 import { hashPassword } from '../format'
 import { useStore } from '../store'
@@ -261,12 +262,7 @@ export function Usuarios() {
             onClick={() => {
               const data = exportBackup()
               if (!data) return
-              const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
-              const link = document.createElement('a')
-              link.href = url
-              link.download = `pups-respaldo-${new Date().toISOString().slice(0, 10)}.json`
-              link.click()
-              URL.revokeObjectURL(url)
+              saveBackupFile(data)
               setBackupNote({ tone: 'ok', text: 'Respaldo descargado.' })
             }}
           >

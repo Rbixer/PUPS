@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
-import { parseBackup } from '../src/backup'
+import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { addDays, daysBetween, hashPassword, money, normalizePhone } from '../src/format'
 import { buildMonthReport } from '../src/report'
 import { createSeed, DATA_VERSION } from '../src/seed'
@@ -122,5 +122,34 @@ describe('respaldo', () => {
     expect('state' in kept && kept.state.sessionUserId).toBe(admin.id)
     const dropped = parseBackup(JSON.stringify(seed), { sessionUserId: 'otra-persona', revision: 0 })
     expect('state' in dropped && dropped.state.sessionUserId).toBeNull()
+  })
+})
+
+describe('recordatorio de respaldo', () => {
+  const store = new Map<string, string>()
+  const day = 86_400_000
+
+  beforeEach(() => {
+    store.clear()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    })
+  })
+
+  it('no avisa el primer día y avisa a la semana', () => {
+    const start = Date.parse('2026-10-01T12:00:00Z')
+    expect(backupDueDays(start)).toBeNull()
+    expect(backupDueDays(start + 6 * day)).toBeNull()
+    expect(backupDueDays(start + 8 * day)).toBe(8)
+  })
+
+  it('posponer silencia el aviso por unos días y luego vuelve', () => {
+    const start = Date.parse('2026-10-01T12:00:00Z')
+    backupDueDays(start)
+    const late = start + 9 * day
+    snoozeBackupReminder(3, late)
+    expect(backupDueDays(late + day)).toBeNull()
+    expect(backupDueDays(late + 4 * day)).toBe(13)
   })
 })

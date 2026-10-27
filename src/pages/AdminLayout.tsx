@@ -1,6 +1,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
+import { saveBackupFile } from '../backup'
+import { BackupReminder } from '../components/BackupReminder'
+import { CommandPalette, type Command } from '../components/CommandPalette'
 import { Brand } from '../components/ui'
 import { todayLabel } from '../format'
 import { DEMO_MODE } from '../env'
@@ -172,7 +175,7 @@ function NavIcon({ to }: { to: string }) {
 }
 
 export function AdminLayout() {
-  const { state, currentUser, logout, isAdmin, resetDemo } = useStore()
+  const { state, currentUser, logout, isAdmin, resetDemo, exportBackup } = useStore()
   const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
   const navigate = useNavigate()
   const location = useLocation()
@@ -181,11 +184,58 @@ export function AdminLayout() {
   const firstRender = useRef(true)
   const [armReset, setArmReset] = useState(false)
   const [dark, setDark] = useState(() => resolveTheme(readTheme()) === 'dark')
+  const [palette, setPalette] = useState(false)
   const links = GROUPS.flatMap((group) => group.links).filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false))
 
   useEffect(() => {
     setOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPalette((value) => !value)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const toggleTheme = () => {
+    const next = dark ? 'light' : 'dark'
+    saveTheme(next)
+    applyTheme(next)
+    setDark(!dark)
+  }
+  const commands: Command[] = [
+    ...links.map((link) => ({ id: `go-${link.label}`, label: link.label, group: 'Ir a', run: () => navigate(link.to) })),
+    { id: 'theme', label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', group: 'Acción', keywords: 'tema apariencia', run: toggleTheme },
+    ...(currentUser && allows(currentUser, 'equipo')
+      ? [
+          {
+            id: 'backup',
+            label: 'Descargar respaldo de datos',
+            group: 'Acción',
+            keywords: 'copia seguridad exportar',
+            run: () => {
+              const data = exportBackup()
+              if (data) saveBackupFile(data)
+            },
+          },
+        ]
+      : []),
+    {
+      id: 'logout',
+      label: 'Cerrar sesión',
+      group: 'Acción',
+      keywords: 'salir',
+      run: () => {
+        logout()
+        navigate('/login')
+      },
+    },
+  ]
 
   useEffect(() => {
     const current = LINKS.find((link) => (link.end ? location.pathname === link.to : location.pathname.startsWith(link.to)))
@@ -229,16 +279,14 @@ export function AdminLayout() {
           <strong>{currentUser?.name}</strong>
           <span>{currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}</span>
           <span className="who-date">{todayLabel()}</span>
+          <button type="button" className="btn btn-ghost btn-sm palette-open" onClick={() => setPalette(true)}>
+            Buscar <kbd>Ctrl K</kbd>
+          </button>
           <button
             type="button"
             className="btn btn-ghost btn-sm theme-toggle"
             aria-pressed={dark}
-            onClick={() => {
-              const next = dark ? 'light' : 'dark'
-              saveTheme(next)
-              applyTheme(next)
-              setDark(!dark)
-            }}
+            onClick={toggleTheme}
           >
             {dark ? 'Modo claro' : 'Modo oscuro'}
           </button>
@@ -271,6 +319,7 @@ export function AdminLayout() {
         </div>
       </aside>
       <main id="contenido" className="admin-main" ref={mainRef} tabIndex={-1}>
+        {currentUser && allows(currentUser, 'equipo') ? <BackupReminder /> : null}
         <Suspense
           fallback={
             <div className="route-loading" aria-busy="true" aria-label="Cargando">
@@ -283,6 +332,7 @@ export function AdminLayout() {
           <Outlet />
         </Suspense>
       </main>
+      <CommandPalette commands={commands} open={palette} onClose={() => setPalette(false)} />
     </div>
   )
 }
