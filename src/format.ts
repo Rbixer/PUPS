@@ -29,6 +29,10 @@ export function money(value: number) {
   return `Q ${formatted}`
 }
 
+export function count(value: number, one: string, many: string) {
+  return `${value} ${value === 1 ? one : many}`
+}
+
 export function formatName(value: string) {
   const clean = value.trim()
   if (!clean) return '—'

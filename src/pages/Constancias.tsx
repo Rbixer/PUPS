@@ -16,7 +16,7 @@ export function Constancias() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Caja</p>
+          <p className="eyebrow">Ventas y caja</p>
           <h1>Constancias</h1>
           <p className="hint">Lo que se guarda en Documento de egreso, también desde el celular, queda aquí.</p>
         </div>

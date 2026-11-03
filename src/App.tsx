@@ -1,9 +1,10 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { allows, homeFor } from './access'
 import { useStore } from './store'
 import { InstallBanner, OfflineChip } from './components/InstallBanner'
 import { AdminLayout } from './pages/AdminLayout'
 import { Login } from './pages/Login'
+import { PublicLayout } from './pages/PublicLayout'
 import type { Permission } from './types'
 import { lazy, type ComponentType, type ReactNode } from 'react'
 
@@ -24,6 +25,30 @@ const ControlGeneral = page(() => import('./pages/ControlGeneral'), 'ControlGene
 const Trabajadores = page(() => import('./pages/Trabajadores'), 'Trabajadores')
 const Usuarios = page(() => import('./pages/Usuarios'), 'Usuarios')
 const WhatsApp = page(() => import('./pages/WhatsApp'), 'WhatsApp')
+const Tienda = page(() => import('./pages/Tienda'), 'Tienda')
+const Ventas = page(() => import('./pages/Ventas'), 'Ventas')
+const CorteCaja = page(() => import('./pages/CorteCaja'), 'CorteCaja')
+const Clientes = page(() => import('./pages/Clientes'), 'Clientes')
+const Compras = page(() => import('./pages/Compras'), 'Compras')
+const Inventario = page(() => import('./pages/Inventario'), 'Inventario')
+const Gastos = page(() => import('./pages/Gastos'), 'Gastos')
+const CuentasPorPagar = page(() => import('./pages/CuentasPorPagar'), 'CuentasPorPagar')
+const Planilla = page(() => import('./pages/Planilla'), 'Planilla')
+const Contabilidad = page(() => import('./pages/Contabilidad'), 'Contabilidad')
+const Tareas = page(() => import('./pages/Tareas'), 'Tareas')
+
+const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
+  { path: 'ventas', permission: 'caja', element: <Ventas /> },
+  { path: 'corte', permission: 'caja', element: <CorteCaja /> },
+  { path: 'clientes', permission: 'caja', element: <Clientes /> },
+  { path: 'compras', permission: 'compras', element: <Compras /> },
+  { path: 'inventario', permission: 'compras', element: <Inventario /> },
+  { path: 'gastos', permission: 'compras', element: <Gastos /> },
+  { path: 'por-pagar', permission: 'compras', element: <CuentasPorPagar /> },
+  { path: 'planilla', permission: 'planilla', element: <Planilla /> },
+  { path: 'contabilidad', permission: 'contabilidad', element: <Contabilidad /> },
+  { path: 'tareas', permission: 'tareas', element: <Tareas /> },
+]
 
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -55,9 +80,9 @@ function SinAcceso() {
   )
 }
 
-function Entrada() {
-  const { currentUser } = useStore()
-  return <Navigate to={currentUser ? '/admin' : '/login'} replace />
+function PublicTo({ path }: { path: string }) {
+  const location = useLocation()
+  return <Navigate to={{ pathname: path, search: location.search }} replace />
 }
 
 export function App() {
@@ -66,7 +91,16 @@ export function App() {
     <OfflineChip />
     <InstallBanner />
     <Routes>
-      <Route index element={<Entrada />} />
+      <Route element={<PublicLayout />}>
+        <Route index element={<Home />} />
+        <Route path="servicios" element={<Servicios />} />
+        <Route path="reservar" element={<Reservar />} />
+        <Route path="contacto" element={<Contacto />} />
+      </Route>
+      <Route path="admin/inicio" element={<PublicTo path="/" />} />
+      <Route path="admin/servicios" element={<PublicTo path="/servicios" />} />
+      <Route path="admin/reservar" element={<PublicTo path="/reservar" />} />
+      <Route path="admin/contacto" element={<PublicTo path="/contacto" />} />
       <Route path="login" element={<Login />} />
       <Route
         path="admin"
@@ -140,10 +174,14 @@ export function App() {
             </Guard>
           }
         />
-        <Route path="inicio" element={<div className="site-module"><Home /></div>} />
-        <Route path="servicios" element={<div className="site-module"><Servicios /></div>} />
-        <Route path="reservar" element={<div className="site-module"><Reservar /></div>} />
-        <Route path="contacto" element={<div className="site-module"><Contacto /></div>} />
+        <Route
+          path="tienda"
+          element={
+            <Guard permission="caja">
+              <Tienda />
+            </Guard>
+          }
+        />
         <Route
           path="ingresos"
           element={
@@ -168,9 +206,12 @@ export function App() {
             </Guard>
           }
         />
+        {GUARDED.map((item) => (
+          <Route key={item.path} path={item.path} element={<Guard permission={item.permission}>{item.element}</Guard>} />
+        ))}
         <Route path="sin-acceso" element={<SinAcceso />} />
       </Route>
-      <Route path="*" element={<Entrada />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </>
   )

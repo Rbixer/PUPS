@@ -1,13 +1,24 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Metrics } from '../components/ui'
 import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, controlGroups, controlSheet } from '../control'
 import { downloadControlExcel, downloadControlPdf } from '../controlExport'
-import { money } from '../format'
+import { count, isoDate, money } from '../format'
+import { buildJournal, incomeStatement } from '../ledger'
+import { payableBalance, round2 } from '../ops'
 import { useStore } from '../store'
 import type { ControlField } from '../types'
 
 export function ControlGeneral() {
   const { state, setControl } = useStore()
   const [year, setYear] = useState(() => new Date().getFullYear())
+  const entries = useMemo(() => buildJournal(state), [state])
+  const result = incomeStatement(entries, `${year}-01-01`, `${year}-12-31`)
+  const yearEgresos = state.movements.filter((item) => item.type === 'egreso' && item.date.startsWith(String(year)))
+  const fixedSpent = round2(yearEgresos.filter((item) => item.fixedId).reduce((sum, item) => sum + item.amount, 0))
+  const generated = round2(yearEgresos.filter((item) => !item.fixedId).reduce((sum, item) => sum + item.amount, 0))
+  const open = (state.payables ?? []).filter((item) => payableBalance(item) > 0)
+  const owed = round2(open.reduce((sum, item) => sum + payableBalance(item), 0))
+  const late = open.filter((item) => item.dueDate < isoDate()).length
   const [busy, setBusy] = useState<'excel' | 'pdf' | ''>('')
   const [note, setNote] = useState('')
   const [failed, setFailed] = useState(false)
@@ -48,7 +59,7 @@ export function ControlGeneral() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Equipo</p>
+          <p className="eyebrow">Finanzas</p>
           <h1>Control general</h1>
           <p className="hint">Un renglón por mes. Gastos, disponible y los totales se calculan al escribir. PDF y Excel bajan esta misma hoja.</p>
           {note && <p className={failed ? 'excel-note is-error' : 'excel-note'}>{note}</p>}
@@ -66,6 +77,16 @@ export function ControlGeneral() {
           </button>
         </div>
       </header>
+
+      <Metrics
+        items={[
+          { label: `Utilidad neta ${year}`, value: money(result.net), tone: result.net >= 0 ? 'ok' : 'bad', detail: `Ingresos ${money(result.totalRevenue)} · margen ${result.margin} %` },
+          { label: 'Gastos fijos pagados', value: money(fixedSpent), detail: count((state.fixedCosts ?? []).filter((item) => item.active).length, 'gasto fijo activo', 'gastos fijos activos') },
+          { label: 'Gastos generados', value: money(generated), detail: 'Compras, planilla y operación' },
+          { label: 'Facturas pendientes de pago', value: money(owed), tone: late ? 'bad' : owed ? 'hot' : undefined, detail: `${count(open.length, 'abierta', 'abiertas')} · ${count(late, 'vencida', 'vencidas')}` },
+        ]}
+      />
+      <p className="hint" style={{ margin: 0 }}>Las cifras de arriba salen solas del sistema. La hoja de abajo es el control manual de siempre.</p>
 
       <div className="control-scroll">
         <table className="control-table">

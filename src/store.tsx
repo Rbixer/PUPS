@@ -3,21 +3,40 @@ import { allows as userAllows } from './access'
 import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, hashPassword, newId, normalizePhone } from './format'
-import type { Appointment, AppState, ControlField, Conversation, Lead, Movement, Permission, Settings, User, WaMessage } from './types'
+import * as ops from './ops'
+import { nextDocument, type Op } from './ops'
+import type { ShopLine } from './shop'
+import type {
+  Appointment,
+  AppState,
+  CashClose,
+  CatalogItem,
+  ControlField,
+  Conversation,
+  FixedCost,
+  Lead,
+  Movement,
+  Payable,
+  PayrollLine,
+  PayrollRun,
+  Permission,
+  Purchase,
+  Sale,
+  Settings,
+  StockMove,
+  Supplier,
+  Task,
+  TaskStatus,
+  User,
+  WaMessage,
+} from './types'
 
 export type ChargeNote = { document: string; amount: number; created: boolean; removed?: boolean }
 
-const AUTO_CHARGE = 'Cobro al completar la cita.'
+export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
-function nextDocument(movements: Movement[], type: Movement['type']) {
-  const same = movements.filter((item) => item.type === type)
-  const seq = same.reduce((max, item) => {
-    const value = Number(item.document.replace(/\D/g, '')) || 0
-    return Math.max(max, value)
-  }, type === 'egreso' ? 12 : 100)
-  const prefix = type === 'egreso' ? 'EG' : 'ING'
-  return `${prefix}-${String(seq + 1).padStart(3, '0')}`
-}
+const AUTO_CHARGE = 'Cobro al completar la cita.'
+const DENIED = 'No tienes permiso para esta acción.'
 
 function syncIncome(appointment: Appointment, movements: Movement[], method?: string) {
   const auto = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio && item.notes === AUTO_CHARGE)
@@ -77,6 +96,24 @@ function lightweight(state: AppState): AppState {
       afterPhoto: undefined,
       report: item.report ? { ...item.report, photos: item.report.photos?.map(() => '') } : item.report,
     })),
+    products: state.products?.map((item) => ({
+      ...item,
+      image: item.image.startsWith('data:') ? '' : item.image,
+    })),
+  }
+}
+
+function absorb(remote: AppState, sessionUserId: string | null): AppState {
+  const seed = createSeed()
+  return {
+    ...seed,
+    ...remote,
+    sessionUserId,
+    settings: { ...seed.settings, ...remote.settings },
+    conversations: remote.conversations ?? [],
+    leads: remote.leads ?? [],
+    controlRows: remote.controlRows ?? [],
+    products: Array.isArray(remote.products) ? remote.products : seed.products,
   }
 }
 
@@ -131,6 +168,7 @@ function load(): AppState {
       conversations: parsed.conversations?.length ? parsed.conversations : seed.conversations,
       leads: parsed.leads ?? [],
       controlRows: parsed.controlRows ?? [],
+      products: Array.isArray(parsed.products) ? parsed.products : seed.products,
       revision: parsed.revision ?? 1,
     }
   } catch {
@@ -165,8 +203,28 @@ type Store = {
   ) => string | null
   setControl: (year: number, month: number, field: ControlField, value: number) => void
   toggleUser: (id: string) => string | null
-  addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Movement | null
+  addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Result<Movement>
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => void
+  placeShopOrder: (input: { name: string; phone: string; lines: ShopLine[] }) => { ok: true; document: string; total: number } | { ok: false; error: string }
+  saveProduct: (product: CatalogItem) => string | null
+  recordSale: (input: Omit<ops.SaleInput, 'userId'>) => Result<Sale>
+  settleOrder: (movementId: string, method: string) => Result<Movement>
+  voidSale: (saleId: string, reason: string) => Result<Sale>
+  adjustStock: (input: { productId: string; qty: number; kind: 'ajuste' | 'consumo'; note: string }) => Result<StockMove>
+  saveSupplier: (supplier: Supplier) => Result<Supplier>
+  recordPurchase: (input: ops.PurchaseInput) => Result<Purchase>
+  savePayable: (input: Parameters<typeof ops.savePayable>[1]) => Result<Payable>
+  payPayable: (input: { payableId: string; amount: number; method: string; date: string }) => Result<Movement>
+  saveFixedCost: (item: FixedCost) => Result<FixedCost>
+  payFixedCost: (input: { fixedId: string; period: string; amount: number; method: string; date: string }) => Result<Movement>
+  updateWorker: (id: string, patch: Pick<User, 'commissionRate' | 'bonus' | 'hiredAt' | 'salary'>) => Result<User>
+  payPayroll: (input: { period: string; lines: PayrollLine[]; method: string; date: string }) => Result<PayrollRun>
+  voidPayroll: (id: string) => Result<null>
+  saveTask: (task: Omit<Task, 'createdAt'> & { createdAt?: string }) => Result<Task>
+  setTaskStatus: (id: string, status: TaskStatus) => Result<Task>
+  removeTask: (id: string) => Result<null>
+  closeCash: (input: { date: string; opening: number; counted: number; note: string }) => Result<CashClose>
+  setTaxRegime: (regime: Settings['taxRegime']) => void
   updateSettings: (patch: Partial<Settings>) => void
   ensureThread: (phone: string, name: string, petName: string) => string | null
   sendMessage: (conversationId: string, body: string) => void
@@ -185,6 +243,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (session) sessionStorage.setItem(SESSION, session)
     return { ...initial, sessionUserId: session }
   })
+  const latest = useRef(state)
+  latest.current = state
   const booted = useRef(false)
   const bootRevision = useRef<number | null>(null)
   if (bootRevision.current === null) bootRevision.current = state.revision ?? 0
@@ -202,12 +262,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setState((current) => {
               if ((current.revision ?? 0) !== started) return current
               if ((remote.revision ?? 0) < (current.revision ?? 0)) return current
-              return {
-                ...remote,
-                sessionUserId: sessionStorage.getItem(SESSION),
-                conversations: remote.conversations ?? [],
-                leads: remote.leads ?? [],
-              }
+              return absorb(remote, sessionStorage.getItem(SESSION))
             })
           }
         } else if (response.status === 204) {
@@ -233,7 +288,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const remote = (await response.json()) as AppState
           setState((current) => {
             if ((remote.revision ?? 0) <= (current.revision ?? 0)) return current
-            return { ...remote, sessionUserId: current.sessionUserId, conversations: remote.conversations ?? [], leads: remote.leads ?? [] }
+            return absorb(remote, current.sessionUserId)
           })
         })
         .catch(() => undefined)
@@ -270,7 +325,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .then(async (response) => {
           if (response.status !== 409) return
           const remote = (await response.json()) as AppState
-          setState((current) => ({ ...remote, sessionUserId: current.sessionUserId }))
+          setState((current) => absorb(remote, current.sessionUserId))
         })
         .catch(() => undefined)
     }, 200)
@@ -279,6 +334,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo<Store>(() => {
     const currentUser = state.users.find((user) => user.id === state.sessionUserId && user.active) ?? null
+
+    /** Aplica una operación y devuelve su resultado al instante; si el estado cambió antes del render, la repite sobre el vigente. */
+    function run<T>(permission: Permission | null, op: (current: AppState) => Op<T>): Result<T> {
+      if (permission && !userAllows(currentUser, permission)) return { ok: false, error: DENIED }
+      const base = latest.current
+      const result = op(base)
+      if (!result.ok) return result
+      const next = bump(base, result.patch)
+      latest.current = next
+      setState((live) => {
+        if (live === base) return next
+        const again = op(live)
+        return again.ok ? bump(live, again.patch) : live
+      })
+      return { ok: true, value: result.value }
+    }
 
     return {
       state,
@@ -457,18 +528,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState((current) => bump(current, { users }))
         return null
       },
-      addMovement: (movement) => {
-        if (!userAllows(currentUser, 'caja')) return null
-        const same = state.movements.filter((item) => item.type === movement.type)
-        const seq = same.reduce((max, item) => {
-          const value = Number(item.document.replace(/\D/g, '')) || 0
-          return Math.max(max, value)
-        }, movement.type === 'egreso' ? 12 : 100)
-        const prefix = movement.type === 'egreso' ? 'EG' : 'ING'
-        const document = movement.document?.trim() || `${prefix}-${String(seq + 1).padStart(3, '0')}`
-        const next: Movement = { ...movement, id: newId(), document, concept: movement.concept.trim(), notes: movement.notes.trim() }
-        setState((current) => bump(current, { movements: [next, ...current.movements] }))
-        return next
+      addMovement: (movement) =>
+        run('caja', (current) => {
+          const concept = movement.concept.trim()
+          if (!concept || !Number.isFinite(movement.amount) || movement.amount <= 0) return { ok: false, error: 'Concepto y un monto mayor a cero son obligatorios.' }
+          if ((current.cashCloses ?? []).some((item) => item.date === movement.date)) return { ok: false, error: 'La caja de ese día ya se cerró.' }
+          const document = movement.document?.trim() || nextDocument(current.movements, movement.type)
+          const next: Movement = { ...movement, id: newId(), document, concept, notes: movement.notes.trim(), amount: ops.round2(movement.amount) }
+          return { ok: true, value: next, patch: { movements: [next, ...current.movements] } }
+        }),
+      placeShopOrder: (input) => {
+        const result = run(null, (current) => ops.placeOrder(current, input))
+        return result.ok ? { ok: true, ...result.value } : result
+      },
+      saveProduct: (product) => {
+        if (!userAllows(currentUser, 'caja') && !userAllows(currentUser, 'compras')) return DENIED
+        const result = run(null, (current) => ops.saveProduct(current, product))
+        return result.ok ? null : result.error
+      },
+      recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
+      settleOrder: (movementId, method) => run('caja', (current) => ops.settleOrder(current, movementId, method)),
+      voidSale: (saleId, reason) => run('caja', (current) => ops.voidSale(current, saleId, reason)),
+      adjustStock: (input) => run('compras', (current) => ops.adjustStock(current, input)),
+      saveSupplier: (supplier) => run('compras', (current) => ops.saveSupplier(current, supplier)),
+      recordPurchase: (input) => run('compras', (current) => ops.recordPurchase(current, input)),
+      savePayable: (input) => run('compras', (current) => ops.savePayable(current, input)),
+      payPayable: (input) => run('compras', (current) => ops.payPayable(current, input)),
+      saveFixedCost: (item) => run('compras', (current) => ops.saveFixedCost(current, item)),
+      payFixedCost: (input) => run('compras', (current) => ops.payFixedCost(current, input)),
+      updateWorker: (id, patch) => run('planilla', (current) => ops.updateWorker(current, id, patch)),
+      payPayroll: (input) => run('planilla', (current) => ops.payPayroll(current, input)),
+      voidPayroll: (id) => run('planilla', (current) => ops.voidPayroll(current, id)),
+      saveTask: (task) => run('tareas', (current) => ops.saveTask(current, task, currentUser?.id)),
+      setTaskStatus: (id, status) => run('tareas', (current) => ops.setTaskStatus(current, id, status)),
+      removeTask: (id) =>
+        run('tareas', (current) => {
+          const task = (current.tasks ?? []).find((item) => item.id === id)
+          if (task && task.createdBy !== currentUser?.id && !userAllows(currentUser, 'equipo')) {
+            return { ok: false, error: 'Solo quien creó la tarea o un administrador puede borrarla.' }
+          }
+          return ops.removeTask(current, id)
+        }),
+      closeCash: (input) => run('caja', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
+      setTaxRegime: (regime) => {
+        run('contabilidad', (current) => ({ ok: true, value: null, patch: { settings: { ...current.settings, taxRegime: regime } } }))
       },
       addLead: (lead) => {
         const next: Lead = {

@@ -27,7 +27,7 @@ export function Egresos() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Caja</p>
+          <p className="eyebrow">Ventas y caja</p>
           <h1>Documento de egreso</h1>
           <p className="hint">Constancia de la visita. El registro de caja queda abajo.</p>
         </div>
@@ -90,13 +90,14 @@ export function Egresos() {
             method: form.method,
             notes: form.notes,
           })
-          if (!created) {
-            setError('No tienes permiso para registrar en caja.')
+          if (!created.ok) {
+            setError(created.error)
+            setNotice('')
             return
           }
           setError('')
-          setNotice(`Documento ${created.document} listo.`)
-          setDoc(created)
+          setNotice(`Documento ${created.value.document} listo.`)
+          setDoc(created.value)
           setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '' })
         }}
       >

@@ -1,4 +1,5 @@
 import { addDays, daysBetween, isoDate } from './format'
+import { demoCatalog } from './shop'
 import type { AppState, Conversation } from './types'
 
 function ago(minutes: number) {
@@ -248,5 +249,6 @@ export function createSeed(): AppState {
         cost: 155,
       },
     ],
+    products: demoCatalog(),
   }
 }

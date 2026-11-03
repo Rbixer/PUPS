@@ -34,6 +34,7 @@ export function parseBackup(raw: string, current: Current): BackupResult {
       conversations: parsed.conversations ?? [],
       leads: parsed.leads ?? [],
       controlRows: parsed.controlRows ?? [],
+      products: Array.isArray(parsed.products) ? parsed.products : base.products,
       sessionUserId: parsed.users.some((user) => user.id === current.sessionUserId && user.active) ? current.sessionUserId : null,
       revision: Math.max(parsed.revision ?? 0, current.revision ?? 0) + 1,
     },

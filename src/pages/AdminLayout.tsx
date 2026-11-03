@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
 import { saveBackupFile } from '../backup'
@@ -13,36 +13,48 @@ import type { Permission } from '../types'
 
 const GROUPS: { label: string; links: { to: string; label: string; end: boolean; permission?: Permission }[] }[] = [
   {
-    label: 'Sitio',
-    links: [
-      { to: '/admin/inicio', label: 'Inicio', end: false },
-      { to: '/admin/servicios', label: 'Servicios', end: false },
-      { to: '/admin/reservar', label: 'Reservar', end: false },
-      { to: '/admin/contacto', label: 'Contacto', end: false },
-    ],
-  },
-  {
     label: 'Operación',
     links: [
       { to: '/admin', label: 'Citas', end: true, permission: 'citas' },
       { to: '/admin/fichas', label: 'Fichas', end: false, permission: 'fichas' },
+      { to: '/admin/clientes', label: 'Clientes', end: false, permission: 'caja' },
+      { to: '/admin/tareas', label: 'Tareas', end: false, permission: 'tareas' },
       { to: '/admin/whatsapp', label: 'WhatsApp', end: false, permission: 'whatsapp' },
     ],
   },
   {
-    label: 'Caja',
+    label: 'Ventas y caja',
     links: [
+      { to: '/admin/ventas', label: 'Punto de venta', end: false, permission: 'caja' },
+      { to: '/admin/tienda', label: 'Tienda en línea', end: false, permission: 'caja' },
       { to: '/admin/ingresos', label: 'Registrar ingreso', end: false, permission: 'caja' },
       { to: '/admin/egresos', label: 'Documento de egreso', end: false, permission: 'caja' },
+      { to: '/admin/corte', label: 'Corte de caja', end: false, permission: 'caja' },
       { to: '/admin/constancias', label: 'Constancias', end: false, permission: 'caja' },
+    ],
+  },
+  {
+    label: 'Compras y gastos',
+    links: [
+      { to: '/admin/compras', label: 'Compras', end: false, permission: 'compras' },
+      { to: '/admin/inventario', label: 'Inventario', end: false, permission: 'compras' },
+      { to: '/admin/gastos', label: 'Gastos', end: false, permission: 'compras' },
+      { to: '/admin/por-pagar', label: 'Facturas por pagar', end: false, permission: 'compras' },
+    ],
+  },
+  {
+    label: 'Finanzas',
+    links: [
+      { to: '/admin/planilla', label: 'Planilla', end: false, permission: 'planilla' },
+      { to: '/admin/contabilidad', label: 'Contabilidad', end: false, permission: 'contabilidad' },
       { to: '/admin/estadisticas', label: 'Estadísticas', end: false, permission: 'estadisticas' },
+      { to: '/admin/control', label: 'Control general', end: false, permission: 'equipo' },
     ],
   },
   {
     label: 'Equipo',
     links: [
       { to: '/admin/trabajadores', label: 'Trabajadores', end: false, permission: 'equipo' },
-      { to: '/admin/control', label: 'Control general', end: false, permission: 'equipo' },
       { to: '/admin/usuarios', label: 'Usuarios', end: false, permission: 'equipo' },
     ],
   },
@@ -123,42 +135,18 @@ function NavIcon({ to }: { to: string }) {
       </svg>
     )
   }
-  if (to === '/admin/inicio') {
-    return (
-      <svg {...common}>
-        <path d="M4 11.5 12 4.5l8 7" />
-        <path d="M7 10.5V19.5h10V10.5" />
-      </svg>
-    )
-  }
-  if (to === '/admin/servicios') {
-    return (
-      <svg {...common}>
-        <path d="M8 7.5h11M8 12h11M8 16.5h11" />
-        <path d="M4.5 7.5h.01M4.5 12h.01M4.5 16.5h.01" />
-      </svg>
-    )
-  }
-  if (to === '/admin/reservar') {
-    return (
-      <svg {...common}>
-        <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
-        <path d="M8 3.5v3M16 3.5v3M3.5 9.5h17M12 13v4M10 15h4" />
-      </svg>
-    )
-  }
-  if (to === '/admin/contacto') {
-    return (
-      <svg {...common}>
-        <path d="M4.5 6.5h15v11h-15z" />
-        <path d="M4.5 7.5 12 13l7.5-5.5" />
-      </svg>
-    )
-  }
   if (to === '/admin/whatsapp') {
     return (
       <svg {...common}>
         <path d="M6 17.5 4.5 20.5l3.2-1.2A8.2 8.2 0 1 0 6 17.5z" />
+      </svg>
+    )
+  }
+  if (to === '/admin/tienda') {
+    return (
+      <svg {...common}>
+        <path d="M6 8.5h12l-1 11h-10l-1-11z" />
+        <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" />
       </svg>
     )
   }
@@ -201,6 +189,71 @@ function NavIcon({ to }: { to: string }) {
       </svg>
     )
   }
+  const extra: Record<string, ReactNode> = {
+    '/admin/clientes': (
+      <>
+        <circle cx="12" cy="8.5" r="3.2" />
+        <path d="M5.5 19.5c.9-3.2 3.4-4.8 6.5-4.8s5.6 1.6 6.5 4.8" />
+      </>
+    ),
+    '/admin/tareas': (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="2.5" />
+        <path d="m8 12 2.6 2.6L16 9.2" />
+      </>
+    ),
+    '/admin/ventas': (
+      <>
+        <rect x="3.5" y="5" width="17" height="11" rx="1.6" />
+        <path d="M8 20h8M12 16v4M7 9.5h4" />
+      </>
+    ),
+    '/admin/corte': (
+      <>
+        <rect x="3.5" y="7" width="17" height="11" rx="1.6" />
+        <circle cx="12" cy="12.5" r="2.4" />
+        <path d="M6.5 4.5h11" />
+      </>
+    ),
+    '/admin/compras': (
+      <>
+        <path d="M4 5h2l2 10h10l2-7H7" />
+        <circle cx="9.5" cy="19" r="1.3" />
+        <circle cx="16.5" cy="19" r="1.3" />
+      </>
+    ),
+    '/admin/inventario': (
+      <>
+        <path d="M12 3.5 20 8v8l-8 4.5L4 16V8z" />
+        <path d="M4 8l8 4.5L20 8M12 12.5v8" />
+      </>
+    ),
+    '/admin/gastos': (
+      <>
+        <path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2z" />
+        <path d="M9 8.5h6M9 12h6M9 15.5h3" />
+      </>
+    ),
+    '/admin/por-pagar': (
+      <>
+        <rect x="3.5" y="5" width="17" height="14" rx="2" />
+        <path d="M3.5 9.5h17M7 15h4" />
+      </>
+    ),
+    '/admin/planilla': (
+      <>
+        <circle cx="9" cy="9" r="3" />
+        <path d="M3.5 19c.8-3 2.8-4.5 5.5-4.5s4.7 1.5 5.5 4.5M16 7.5h4.5M16 11h4.5M17.5 14.5h3" />
+      </>
+    ),
+    '/admin/contabilidad': (
+      <>
+        <rect x="5" y="3.5" width="14" height="17" rx="2" />
+        <path d="M8.5 7.5h7M8.5 11.5h2M13.5 11.5h2M8.5 15h2M13.5 15h2" />
+      </>
+    ),
+  }
+  if (extra[to]) return <svg {...common}>{extra[to]}</svg>
   if (to === '/admin/estadisticas') {
     return (
       <svg {...common}>
@@ -222,6 +275,8 @@ function NavIcon({ to }: { to: string }) {
 export function AdminLayout() {
   const { state, currentUser, logout, isAdmin, resetDemo, exportBackup } = useStore()
   const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
+  const myTasks = (state.tasks ?? []).filter((item) => item.assigneeId === currentUser?.id && item.status !== 'hecha').length
+  const badges: Record<string, number> = { '/admin/whatsapp': unread, '/admin/tareas': myTasks }
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -367,9 +422,9 @@ export function AdminLayout() {
                             <NavIcon to={link.to} />
                           </span>
                           <span className="truncate">{link.label}</span>
-                          {link.to === '/admin/whatsapp' && unread > 0 ? (
+                          {badges[link.to] ? (
                             <b className={`ml-auto rounded-full px-1.5 text-[11px] leading-5 font-semibold ${isActive ? 'bg-white/20 text-white' : 'bg-caramel text-white'}`}>
-                              {unread}
+                              {badges[link.to]}
                             </b>
                           ) : null}
                         </>

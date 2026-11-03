@@ -4,8 +4,12 @@ export const PERMISSIONS: { id: Permission; label: string; detail: string }[] = 
   { id: 'citas', label: 'Citas', detail: 'Agenda, altas y cambios del día.' },
   { id: 'fichas', label: 'Fichas', detail: 'Historial de cada mascota.' },
   { id: 'whatsapp', label: 'WhatsApp', detail: 'Bandeja y línea del negocio.' },
-  { id: 'caja', label: 'Caja', detail: 'Ingresos y documentos de egreso.' },
+  { id: 'caja', label: 'Caja y ventas', detail: 'Ventas de mostrador, ingresos, egresos, corte de caja y clientes.' },
   { id: 'costos', label: 'Costos', detail: 'Cambiar el monto de una cita ya guardada.' },
+  { id: 'compras', label: 'Compras y gastos', detail: 'Proveedores, compras, inventario, gastos y facturas por pagar.' },
+  { id: 'planilla', label: 'Planilla', detail: 'Pago de planilla, comisiones y pasivo laboral.' },
+  { id: 'contabilidad', label: 'Contabilidad', detail: 'Libro diario, estado de resultados, balance e impuestos.' },
+  { id: 'tareas', label: 'Tareas', detail: 'Ver y asignar tareas del equipo.' },
   { id: 'estadisticas', label: 'Estadísticas', detail: 'Ver el tablero del mes.' },
   { id: 'reportes', label: 'Reportes', detail: 'Descargar Excel y guardar PDF.' },
   { id: 'equipo', label: 'Equipo', detail: 'Usuarios, permisos y datos del negocio.' },
@@ -13,13 +17,17 @@ export const PERMISSIONS: { id: Permission; label: string; detail: string }[] = 
 
 const ALL = PERMISSIONS.map((item) => item.id)
 
-const RECEPTION: Permission[] = ['citas', 'fichas', 'whatsapp', 'caja', 'estadisticas', 'reportes']
+const RECEPTION: Permission[] = ['citas', 'fichas', 'whatsapp', 'caja', 'tareas', 'estadisticas', 'reportes']
 
 export const DESTINATIONS: { permission: Permission; to: string }[] = [
   { permission: 'citas', to: '/admin' },
   { permission: 'fichas', to: '/admin/fichas' },
   { permission: 'whatsapp', to: '/admin/whatsapp' },
-  { permission: 'caja', to: '/admin/ingresos' },
+  { permission: 'caja', to: '/admin/ventas' },
+  { permission: 'tareas', to: '/admin/tareas' },
+  { permission: 'compras', to: '/admin/compras' },
+  { permission: 'planilla', to: '/admin/planilla' },
+  { permission: 'contabilidad', to: '/admin/contabilidad' },
   { permission: 'estadisticas', to: '/admin/estadisticas' },
   { permission: 'equipo', to: '/admin/usuarios' },
 ]

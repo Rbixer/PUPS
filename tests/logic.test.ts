@@ -4,6 +4,7 @@ import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { addDays, daysBetween, hashPassword, money, normalizePhone } from '../src/format'
 import { buildMonthReport } from '../src/report'
 import { createSeed, DATA_VERSION } from '../src/seed'
+import { applyShopOrder, demoCatalog } from '../src/shop'
 import { planOf, priceFor, slotTaken } from '../src/visit'
 
 describe('formato', () => {
@@ -151,5 +152,24 @@ describe('recordatorio de respaldo', () => {
     snoozeBackupReminder(3, late)
     expect(backupDueDays(late + day)).toBeNull()
     expect(backupDueDays(late + 4 * day)).toBe(13)
+  })
+})
+
+describe('tienda', () => {
+  it('descuenta la existencia y conserva el precio del momento', () => {
+    const products = demoCatalog()
+    const result = applyShopOrder(products, [{ id: 'shampoo-suave', qty: 2 }])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.total).toBe(170)
+    expect(result.products.find((item) => item.id === 'shampoo-suave')?.stock).toBe(12)
+    expect(products.find((item) => item.id === 'shampoo-suave')?.stock).toBe(14)
+  })
+
+  it('rechaza un pedido si no alcanza o el producto está oculto', () => {
+    const products = demoCatalog().map((item) => (item.id === 'snack' ? { ...item, active: false } : item))
+    expect(applyShopOrder(products, [{ id: 'shampoo-suave', qty: 99 }]).ok).toBe(false)
+    expect(applyShopOrder(products, [{ id: 'snack', qty: 1 }]).ok).toBe(false)
+    expect(applyShopOrder(products, []).ok).toBe(false)
   })
 })

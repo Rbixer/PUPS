@@ -22,7 +22,7 @@ export function Ingresos() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Caja</p>
+          <p className="eyebrow">Ventas y caja</p>
           <h1>Registrar ingreso</h1>
         </div>
       </header>
@@ -51,12 +51,13 @@ export function Ingresos() {
             notes: form.notes,
             folio,
           })
-          if (!created) {
-            setError('No tienes permiso para registrar en caja.')
+          if (!created.ok) {
+            setError(created.error)
+            setNotice('')
             return
           }
           setError('')
-          setNotice(`Ingreso ${created.document} registrado.`)
+          setNotice(`Ingreso ${created.value.document} registrado.`)
           setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '', folio: '' })
         }}
       >

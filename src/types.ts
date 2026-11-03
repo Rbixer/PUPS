@@ -9,6 +9,10 @@ export type Permission =
   | 'estadisticas'
   | 'reportes'
   | 'equipo'
+  | 'compras'
+  | 'planilla'
+  | 'contabilidad'
+  | 'tareas'
 
 export type AppointmentStatus = 'pendiente' | 'completada' | 'cancelada'
 
@@ -52,6 +56,11 @@ export type User = {
   phone?: string
   email?: string
   salary?: number
+  /** Porcentaje sobre los servicios completados que atiende. */
+  commissionRate?: number
+  /** Bonificación incentivo mensual. Si falta, se usa la de ley. */
+  bonus?: number
+  hiredAt?: string
 }
 
 export type ControlField =
@@ -121,6 +130,192 @@ export type Movement = {
   notes: string
   document: string
   folio?: number
+  category?: string
+  saleId?: string
+  purchaseId?: string
+  payableId?: string
+  payrollId?: string
+  fixedId?: string
+  /** Mes (AAAA-MM) que cubre un gasto fijo. */
+  period?: string
+}
+
+export type ShopCategoryName = 'Shampoo' | 'Accesorios' | 'Cuidado' | 'Snacks' | 'Insumos'
+
+export type CatalogItem = {
+  id: string
+  name: string
+  detail: string
+  category: ShopCategoryName
+  price: number
+  unit: string
+  stock: number
+  image: string
+  /** Si es false, no se muestra en la portada. */
+  active?: boolean
+  /** Costo unitario promedio, se actualiza con cada compra. */
+  cost?: number
+  minStock?: number
+  /** Los insumos se controlan en inventario y no salen en la tienda. */
+  kind?: 'venta' | 'insumo'
+  sku?: string
+}
+
+export type SaleLine = { productId?: string; name: string; qty: number; price: number; cost?: number }
+
+export type SaleStatus = 'pagada' | 'por cobrar' | 'anulada'
+
+export type Sale = {
+  id: string
+  number: string
+  date: string
+  at: string
+  channel: 'mostrador' | 'tienda'
+  clientName: string
+  phone: string
+  lines: SaleLine[]
+  discount: number
+  total: number
+  method: string
+  status: SaleStatus
+  document: string
+  userId?: string
+}
+
+export type StockKind = 'inicial' | 'compra' | 'venta' | 'pedido' | 'ajuste' | 'consumo' | 'anulación'
+
+export type StockMove = {
+  id: string
+  date: string
+  at: string
+  productId: string
+  qty: number
+  kind: StockKind
+  reference: string
+  note: string
+  balance: number
+  unitCost?: number
+}
+
+export type Supplier = {
+  id: string
+  name: string
+  nit: string
+  phone: string
+  email: string
+  contact: string
+  notes: string
+}
+
+export type PurchaseLine = { productId?: string; description: string; qty: number; cost: number }
+
+export type Purchase = {
+  id: string
+  number: string
+  date: string
+  supplierId?: string
+  supplierName: string
+  invoice: string
+  /** Factura con IVA: genera crédito fiscal en el régimen general. */
+  withTax: boolean
+  lines: PurchaseLine[]
+  total: number
+  terms: 'contado' | 'credito'
+  method?: string
+  dueDate?: string
+  payableId?: string
+  document?: string
+  notes: string
+}
+
+export type PayablePayment = { id: string; date: string; amount: number; method: string; document: string }
+
+export type Payable = {
+  id: string
+  number: string
+  date: string
+  dueDate: string
+  supplierId?: string
+  supplierName: string
+  invoice: string
+  concept: string
+  category: string
+  amount: number
+  payments: PayablePayment[]
+  purchaseId?: string
+  payrollId?: string
+}
+
+export type FixedCost = {
+  id: string
+  name: string
+  category: string
+  amount: number
+  /** Día del mes en que vence. */
+  day: number
+  active: boolean
+}
+
+export type PayrollLine = {
+  userId: string
+  name: string
+  code: string
+  salary: number
+  servicesBase: number
+  services: number
+  commissionRate: number
+  commission: number
+  bonus: number
+  extra: number
+  deductions: number
+  igss: number
+  net: number
+  employerIgss: number
+  aguinaldo: number
+  bono14: number
+  vacaciones: number
+  indemnizacion: number
+}
+
+export type PayrollRun = {
+  id: string
+  period: string
+  paidAt: string
+  method: string
+  document: string
+  payableId?: string
+  lines: PayrollLine[]
+}
+
+export type TaskStatus = 'pendiente' | 'en curso' | 'hecha'
+
+export type Task = {
+  id: string
+  title: string
+  detail: string
+  assigneeId?: string
+  dueDate?: string
+  priority: 'alta' | 'media' | 'baja'
+  status: TaskStatus
+  createdBy?: string
+  createdAt: string
+  doneAt?: string
+  folio?: number
+}
+
+export type CashClose = {
+  id: string
+  date: string
+  opening: number
+  cashIn: number
+  cashOut: number
+  expected: number
+  counted: number
+  difference: number
+  byMethod: Record<string, number>
+  closedBy?: string
+  closedAt: string
+  note: string
 }
 
 export type Lead = {
@@ -135,6 +330,9 @@ export type Settings = {
   whatsapp: string
   address: string
   hours: string
+  /** Sin régimen elegido, la contabilidad no separa impuestos. */
+  taxRegime?: 'general' | 'pequeno'
+  cashFloat?: number
 }
 
 export type WaDirection = 'in' | 'out'
@@ -164,7 +362,18 @@ export type AppState = {
   appointments: Appointment[]
   movements: Movement[]
   leads: Lead[]
+  /** Si falta, la tienda usa el catálogo de demostración. */
+  products?: CatalogItem[]
   settings: Settings
   conversations: Conversation[]
   controlRows?: ControlRow[]
+  sales?: Sale[]
+  stockMoves?: StockMove[]
+  suppliers?: Supplier[]
+  purchases?: Purchase[]
+  payables?: Payable[]
+  fixedCosts?: FixedCost[]
+  payrolls?: PayrollRun[]
+  tasks?: Task[]
+  cashCloses?: CashClose[]
 }

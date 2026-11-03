@@ -396,4 +396,19 @@
   .admin .control-table tfoot th {
     @apply bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-stone-100;
   }
+
+  @media (max-width: 720px) {
+    .field > input,
+    .field > select,
+    .field > textarea,
+    .dialog input,
+    .wa-compose textarea,
+    .filters input,
+    .filters select,
+    .login-panel .field > input,
+    .field > input[type='date'],
+    .field > input[type='time'] {
+      font-size: 16px;
+    }
+  }
 }

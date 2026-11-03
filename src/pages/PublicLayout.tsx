@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Brand } from '../components/ui'
 import { useStore } from '../store'
 
 const LINKS = [
   { to: '/', label: 'Inicio' },
+  { to: '/#tienda', label: 'Tienda' },
   { to: '/servicios', label: 'Servicios' },
   { to: '/reservar', label: 'Reservar' },
   { to: '/contacto', label: 'Contacto' },
@@ -51,7 +52,7 @@ export function PublicLayout() {
         </button>
         <nav className="nav-links" aria-label="Secciones">
           {LINKS.map((link) => (
-            <NavLink key={link.to} to={link.to} end={link.to === '/'}>
+            <NavLink key={link.to} to={link.to} end={link.to === '/' || link.to.startsWith('/#')}>
               {link.label}
             </NavLink>
           ))}
@@ -67,7 +68,17 @@ export function PublicLayout() {
       </header>
       {open ? <button type="button" className="scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} /> : null}
       <main>
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="route-loading" aria-busy="true" aria-label="Cargando">
+              <span />
+              <span />
+              <span />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
       <footer className="footer">
         <div className="footer-grid">

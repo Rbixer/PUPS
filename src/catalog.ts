@@ -36,6 +36,6 @@ export const SERVICES = [
 export const SIZES = ['Pequeño', 'Mediano', 'Grande'] as const
 export const SEXES = ['Macho', 'Hembra'] as const
 export const COATS = ['Corto', 'Largo', 'Rizado', 'Duro'] as const
-export const METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Otro'] as const
+export const METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Pedido', 'Otro'] as const
 
 export const SERVICE_NAMES: string[] = SERVICES.map((service) => service.name)

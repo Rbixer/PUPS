@@ -319,7 +319,7 @@ function Dossier({ file }: { file: PetFile }) {
   const total = spent(file.visits)
   const thisYear = file.visits.filter((item) => item.date.startsWith(String(new Date().getFullYear()))).length
   const nextVisit = [...pending].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)).find((item) => daysBetween(item.date) >= 0)
-  const bookUrl = `/admin/reservar?mascota=${encodeURIComponent(file.petName)}&tutor=${encodeURIComponent(file.clientName)}&tel=${phone}`
+  const bookUrl = `/reservar?mascota=${encodeURIComponent(file.petName)}&tutor=${encodeURIComponent(file.clientName)}&tel=${phone}`
 
   const status =
     last.status === 'pendiente'

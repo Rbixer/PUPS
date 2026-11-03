@@ -147,7 +147,7 @@ export function Estadisticas() {
     <section className="stack stats">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Reportería</p>
+          <p className="eyebrow">Finanzas</p>
           <h1>{monthTitle(cursor)}</h1>
           <p className="lede">El mes cerrado en una sola vista. Excel lleva las hojas y el PDF deja el informe listo para guardar.</p>
           {excelNote && <p className={excelError ? 'excel-note is-error' : 'excel-note'}>{excelNote}</p>}

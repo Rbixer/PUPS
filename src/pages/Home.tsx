@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Market } from '../components/Market'
 
 export function Home() {
   return (
@@ -16,10 +17,10 @@ export function Home() {
             aparece en el panel del equipo, con la ficha de la mascota lista.
           </p>
           <div className="hero-actions">
-            <Link to="/admin/reservar" className="btn btn-primary">
+            <Link to="/reservar" className="btn btn-primary">
               Reservar cita
             </Link>
-            <Link to="/admin/servicios" className="btn btn-ghost">
+            <Link to="/servicios" className="btn btn-ghost">
               Ver servicios
             </Link>
           </div>
@@ -67,6 +68,8 @@ export function Home() {
           </article>
         </div>
       </section>
+
+      <Market />
 
       <section className="section">
         <div className="section-head">
@@ -158,7 +161,7 @@ export function Home() {
             <p>Al completar, el costo queda en la ficha. La constancia sale lista para firmar.</p>
           </li>
         </ol>
-        <Link to="/admin/reservar" className="btn btn-primary">
+        <Link to="/reservar" className="btn btn-primary">
           Reservar ahora
         </Link>
       </section>
