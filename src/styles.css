@@ -1449,7 +1449,49 @@ body:has(.nav.open) { overflow: hidden; }
 .admin .empty { border-color: rgba(18, 51, 118, 0.2); background: rgba(92, 225, 230, 0.08); color: var(--muted); }
 
 /* Landing con el estilo del volante: franja turquesa con huellas y cierre en azul marino. */
-.site .hero { background: var(--brand-aqua) url('/login-pattern.svg') 0 0 / 520px 520px; }
+.site .hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-bottom: 104px;
+  background: var(--brand-aqua);
+}
+.site .hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  width: calc(100% + 520px);
+  height: calc(100% + 520px);
+  background: url('/login-pattern.svg') 0 0 / 520px 520px;
+  animation: paw-drift 70s linear infinite;
+  will-change: transform;
+}
+/* El relleno de la onda es el mismo color que --bg del sitio. */
+.site .hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 72px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 72' preserveAspectRatio='none'%3E%3Cpath fill='%23f3fafb' d='M0 40c160-34 340-44 540-18s380 50 560 30 260-44 340-40v60H0Z'/%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.site .stage-card { animation: hero-float 7s ease-in-out infinite; }
+@keyframes paw-drift {
+  from { transform: translate3d(-520px, -520px, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0) rotate(-0.6deg); }
+  50% { transform: translateY(-10px) rotate(0.6deg); }
+}
+@media (max-width: 860px) {
+  .site .hero { padding-bottom: 64px; }
+  .site .hero::after { height: 40px; }
+}
 .site .hero .eyebrow { color: var(--brand-navy); font-weight: 600; }
 .site .hero h1,
 .site .hero h1 em { color: var(--brand-navy); }
