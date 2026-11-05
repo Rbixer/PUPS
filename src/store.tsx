@@ -40,7 +40,7 @@ type Mutation = (current: AppState) => AppState | null
 type PublicData = {
   revision: number
   products: CatalogItem[]
-  settings: Pick<Settings, 'whatsapp' | 'address' | 'hours'>
+  settings: Pick<Settings, 'whatsapp' | 'address' | 'hours' | 'promoText' | 'promoLink'>
   busy: { date: string; time: string; minutes: number }[]
 }
 

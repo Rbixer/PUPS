@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { allows } from '../src/access'
 import { SERVICE_NAMES } from '../src/catalog'
-import { isoDate, newId, normalizePhone } from '../src/format'
+import { isoDate, newId, normalizePhone, PROMO_MAX, safeLink } from '../src/format'
 import { nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
@@ -561,7 +561,13 @@ export function createApi(dataDir = path.resolve('data')) {
     return {
       revision: state.revision ?? 0,
       products: visibleCatalog(state.products).map(({ cost: _cost, minStock: _min, sku: _sku, ...item }) => item),
-      settings: { whatsapp: state.settings.whatsapp, address: state.settings.address, hours: state.settings.hours },
+      settings: {
+        whatsapp: state.settings.whatsapp,
+        address: state.settings.address,
+        hours: state.settings.hours,
+        promoText: typeof state.settings.promoText === 'string' ? state.settings.promoText.trim().slice(0, PROMO_MAX) : '',
+        promoLink: safeLink(typeof state.settings.promoLink === 'string' ? state.settings.promoLink : ''),
+      },
       busy: state.appointments
         .filter((item) => item.status !== 'cancelada' && item.date >= today)
         .map((item) => ({ date: item.date, time: item.time, minutes: visitMinutes(item) })),

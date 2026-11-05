@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
-import { addDays, daysBetween, money, normalizePhone, parseAmount } from '../src/format'
+import { addDays, daysBetween, money, normalizePhone, parseAmount, safeLink } from '../src/format'
 import { buildMonthReport } from '../src/report'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, demoCatalog } from '../src/shop'
@@ -46,6 +46,15 @@ describe('formato', () => {
     expect(parseAmount('1,500')).toBe(1500)
     expect(parseAmount('')).toBe(0)
     expect(parseAmount('doce')).toBeNaN()
+  })
+
+  it('el enlace del aviso solo acepta rutas del sitio o https', () => {
+    expect(safeLink(' /reservar ')).toBe('/reservar')
+    expect(safeLink('https://facebook.com/pups')).toBe('https://facebook.com/pups')
+    expect(safeLink('javascript:alert(1)')).toBe('')
+    expect(safeLink('//otro-sitio.com')).toBe('')
+    expect(safeLink('http://facebook.com')).toBe('')
+    expect(safeLink(undefined)).toBe('')
   })
 })
 

@@ -350,6 +350,9 @@ export type Settings = {
   cashFloat?: number
   /** Meta mensual de paquetes de grooming del control general. */
   controlGoal?: number
+  /** Aviso arriba del sitio público; vacío no se muestra. */
+  promoText?: string
+  promoLink?: string
 }
 
 export type WaDirection = 'in' | 'out'

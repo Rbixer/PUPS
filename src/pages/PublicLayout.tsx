@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Brand } from '../components/ui'
-import { mapUrl, whatsappUrl } from '../format'
+import { mapUrl, safeLink, whatsappUrl } from '../format'
 import { useStore } from '../store'
 import { usePanelTheme } from '../theme'
 
@@ -91,9 +91,23 @@ export function PublicLayout() {
   const hours = state.settings.hours.trim() || 'Horario por confirmar'
   const address = place || 'Guatemala'
   const whatsapp = state.settings.whatsapp.trim()
+  const promo = (state.settings.promoText ?? '').trim()
+  const promoLink = safeLink(state.settings.promoLink)
 
   return (
     <div className="site">
+      {promo ? (
+        <p className="promo-bar">
+          <span>{promo}</span>
+          {promoLink.startsWith('/') ? (
+            <Link to={promoLink}>Ver más</Link>
+          ) : promoLink ? (
+            <a href={promoLink} target="_blank" rel="noopener noreferrer">
+              Ver más
+            </a>
+          ) : null}
+        </p>
+      ) : null}
       <header className={open ? 'nav open' : 'nav'}>
         <NavLink to="/" className="brand-link" aria-label="PUP'S inicio">
           <Brand />

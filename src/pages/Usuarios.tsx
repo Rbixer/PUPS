@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
 import { saveBackupFile } from '../backup'
 import { Field } from '../components/ui'
-import { initials } from '../format'
+import { initials, PROMO_MAX, safeLink } from '../format'
 import { useStore } from '../store'
 import type { Permission, Role, User } from '../types'
 
@@ -42,6 +42,7 @@ export function Usuarios() {
   const [form, setForm] = useState<Draft>(emptyDraft)
   const [settings, setSettings] = useState(state.settings)
   const [settingsTouched, setSettingsTouched] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export function Usuarios() {
   function editSettings(patch: Partial<typeof settings>) {
     setSettingsTouched(true)
     setSaved(false)
+    setSettingsError('')
     setSettings((current) => ({ ...current, ...patch }))
   }
 
@@ -220,17 +222,25 @@ export function Usuarios() {
         className="panel team-shop"
         onSubmit={(event) => {
           event.preventDefault()
+          const promoLink = (settings.promoLink ?? '').trim()
+          if (promoLink && !safeLink(promoLink)) {
+            setSettingsError('El enlace del aviso debe empezar con / (una página del sitio) o con https://.')
+            return
+          }
           updateSettings({
             whatsapp: settings.whatsapp.trim(),
             address: settings.address.trim(),
             hours: settings.hours.trim(),
+            promoText: (settings.promoText ?? '').trim().slice(0, PROMO_MAX),
+            promoLink,
           })
           setSettingsTouched(false)
+          setSettingsError('')
           setSaved(true)
         }}
       >
         <h2>Datos del negocio</h2>
-        <p className="hint">Aparecen en el sitio: contacto, pie y horario.</p>
+        <p className="hint">Aparecen en el sitio: contacto, pie, horario y el aviso de promoción.</p>
         <Field label="WhatsApp del negocio">
           <input
             value={settings.whatsapp}
@@ -244,6 +254,22 @@ export function Usuarios() {
         <Field label="Horario">
           <input value={settings.hours} onChange={(event) => editSettings({ hours: event.target.value })} />
         </Field>
+        <Field label="Aviso arriba del sitio (vacío no se muestra)">
+          <input
+            value={settings.promoText ?? ''}
+            maxLength={PROMO_MAX}
+            onChange={(event) => editSettings({ promoText: event.target.value })}
+            placeholder="Ej. Promoción del mes en baño y corte"
+          />
+        </Field>
+        <Field label="Enlace del aviso (opcional)">
+          <input
+            value={settings.promoLink ?? ''}
+            onChange={(event) => editSettings({ promoLink: event.target.value })}
+            placeholder="/reservar o https://facebook.com/…"
+          />
+        </Field>
+        {settingsError ? <p className="form-error">{settingsError}</p> : null}
         {saved ? <p className="banner">Datos publicados en el sitio.</p> : null}
         <div className="team-actions">
           <button type="submit" className="btn btn-primary">

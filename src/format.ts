@@ -145,3 +145,13 @@ export function whatsappUrl(phone: string, text: string) {
 export function mapUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`PUP'S ${address}`)}`
 }
+
+export const PROMO_MAX = 140
+
+/** Solo rutas del sitio o direcciones https; cualquier otra cosa queda vacía. */
+export function safeLink(value: string | undefined) {
+  const link = (value ?? '').trim()
+  if (/^\/(?!\/)\S*$/.test(link)) return link
+  if (/^https:\/\/[^\s/]+\.[^\s]+$/i.test(link)) return link
+  return ''
+}
