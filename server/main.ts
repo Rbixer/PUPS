@@ -61,6 +61,23 @@ function serveFile(file: string, response: http.ServerResponse) {
   fs.createReadStream(file).pipe(response)
 }
 
+/** WhatsApp y Facebook solo leen la imagen de vista previa si la dirección es completa. */
+function originOf(request: http.IncomingMessage) {
+  const host = request.headers.host ?? ''
+  if (!/^[a-z0-9.-]+(:\d{1,5})?$/i.test(host)) return ''
+  const forwarded = request.headers['x-forwarded-proto']
+  const proto = process.env.PUPS_TRUST_PROXY === '1' && forwarded === 'https' ? 'https' : 'http'
+  return `${proto}://${host.toLowerCase()}`
+}
+
+function serveIndex(request: http.IncomingMessage, response: http.ServerResponse) {
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace('content="/og.jpg"', `content="${originOf(request)}/og.jpg"`)
+  response.statusCode = 200
+  response.setHeader('Content-Type', TYPES['.html'])
+  response.setHeader('Cache-Control', 'no-cache')
+  response.end(html)
+}
+
 function reject(response: http.ServerResponse, status: number) {
   response.statusCode = status
   response.end()
@@ -79,11 +96,11 @@ function serveStatic(request: http.IncomingMessage, response: http.ServerRespons
     reject(response, 400)
     return
   }
-  if (fs.existsSync(target) && fs.statSync(target).isFile()) {
+  if (path.basename(target) !== 'index.html' && fs.existsSync(target) && fs.statSync(target).isFile()) {
     serveFile(target, response)
     return
   }
-  serveFile(path.join(root, 'index.html'), response)
+  serveIndex(request, response)
 }
 
 const server = http.createServer((request, response) => {

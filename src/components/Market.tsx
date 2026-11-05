@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Field } from './ui'
 import { money } from '../format'
 import { SHOP_CATEGORIES, shelfOf, visibleCatalog, type ShopCategory, type ShopProduct } from '../shop'
 import { useStore } from '../store'
 
-export function Market() {
+export function Market({ featured }: { featured?: number }) {
   const { state, placeShopOrder } = useStore()
   const [category, setCategory] = useState<ShopCategory>('Todo')
+  const [expanded, setExpanded] = useState(false)
+  const { hash } = useLocation()
   const [cart, setCart] = useState<Record<string, number>>({})
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -15,7 +18,9 @@ export function Market() {
   const [sending, setSending] = useState(false)
 
   const catalog = shelfOf(state.products)
-  const visible = visibleCatalog(state.products).filter((item) => category === 'Todo' || item.category === category)
+  const matching = visibleCatalog(state.products).filter((item) => category === 'Todo' || item.category === category)
+  const trimmed = featured !== undefined && category === 'Todo' && !expanded && hash !== '#tienda' && matching.length > featured
+  const visible = trimmed ? matching.slice(0, featured) : matching
   const lines = useMemo(
     () =>
       catalog.flatMap((item) => {
@@ -95,6 +100,11 @@ export function Market() {
               </article>
             )
           })}
+          {trimmed ? (
+            <button type="button" className="btn btn-ghost market-more" onClick={() => setExpanded(true)}>
+              Ver los {matching.length} productos
+            </button>
+          ) : null}
         </div>
 
         {lines.length > 0 ? (

@@ -141,3 +141,7 @@ export function newId() {
 export function whatsappUrl(phone: string, text: string) {
   return `https://wa.me/${digits(phone)}?text=${encodeURIComponent(text)}`
 }
+
+export function mapUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`PUP'S ${address}`)}`
+}

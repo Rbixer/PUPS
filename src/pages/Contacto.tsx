@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Field } from '../components/ui'
+import { mapUrl, whatsappUrl } from '../format'
 import { useStore } from '../store'
 
 export function Contacto() {
@@ -9,6 +10,7 @@ export function Contacto() {
   const [sending, setSending] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', message: '' })
   const whatsapp = state.settings.whatsapp.trim()
+  const address = state.settings.address.trim()
 
   return (
     <section className="section page split">
@@ -16,9 +18,22 @@ export function Contacto() {
         <p className="eyebrow">Contacto</p>
         <h1 className="page-title">Escríbenos y te respondemos.</h1>
         <p className="lede">
-          {state.settings.address.trim() || 'Guatemala'}. {state.settings.hours.trim() || 'Horario por confirmar.'}
+          {address || 'Guatemala'}. {state.settings.hours.trim() || 'Horario por confirmar.'}
         </p>
-        {whatsapp ? <p className="num contact-phone">{whatsapp}</p> : null}
+        {whatsapp ? (
+          <p className="contact-phone">
+            <a className="num" href={whatsappUrl(whatsapp, "Hola PUP'S, quiero información.")} target="_blank" rel="noopener noreferrer">
+              WhatsApp {whatsapp}
+            </a>
+          </p>
+        ) : null}
+        {address ? (
+          <p>
+            <a href={mapUrl(address)} target="_blank" rel="noopener noreferrer">
+              Ver en el mapa
+            </a>
+          </p>
+        ) : null}
         {sent ? (
           <p className="banner" role="status">
             Recibimos tu mensaje. Te contactamos pronto.

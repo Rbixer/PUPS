@@ -54,7 +54,6 @@
   html[data-theme="dark"] .admin .step,
   html[data-theme="dark"] .admin .stage-card,
   html[data-theme="dark"] .admin .hero-metrics,
-  html[data-theme="dark"] .admin .preview,
   html[data-theme="dark"] .admin .tariff,
   html[data-theme="dark"] .admin .empty,
   html[data-theme="dark"] .admin .wa-shell,
@@ -137,10 +136,6 @@
   html[data-theme="dark"] .admin .hot { color: var(--amber); }
   html[data-theme="dark"] .admin .ok { color: var(--green); }
   html[data-theme="dark"] .admin .cyan { color: #e3a67e; }
-
-  /* Pantallas del sitio dentro del panel */
-  html[data-theme="dark"] .admin .float-card em.done { color: var(--ink); }
-
   html[data-theme="dark"] .admin .module-bar,
   html[data-theme="dark"] .admin .file-grid,
   html[data-theme="dark"] .admin .cash-desk .panel { background: var(--card); color: var(--ink); border-color: var(--line); }
