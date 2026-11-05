@@ -353,7 +353,17 @@ export type Settings = {
   /** Aviso arriba del sitio público; vacío no se muestra. */
   promoText?: string
   promoLink?: string
+  facebook?: string
+  instagram?: string
+  /** Reseñas reales de clientes; la sección del sitio aparece solo si hay alguna. */
+  reviews?: SiteReview[]
+  /** Fotos de resultados para la galería del sitio. */
+  gallery?: SitePhoto[]
 }
+
+export type SiteReview = { name: string; text: string }
+
+export type SitePhoto = { src: string; caption: string }
 
 export type WaDirection = 'in' | 'out'
 

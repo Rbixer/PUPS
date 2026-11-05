@@ -1,7 +1,8 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Market } from '../components/Market'
-import { money } from '../format'
+import { mapUrl, money, publicSiteContent, whatsappUrl } from '../format'
+import { useStore } from '../store'
 import { PLAN_MINUTES, TARIFF } from '../visit'
 
 const from = (plan: keyof typeof TARIFF) => Math.min(...Object.values(TARIFF[plan]))
@@ -21,10 +22,10 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 /** Marca cada [data-reveal] cuando entra en pantalla; sin IntersectionObserver se muestran de una vez. */
-function useReveal() {
+function useReveal(contentKey: string) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const items = [...(root.current?.querySelectorAll<HTMLElement>('[data-reveal]') ?? [])]
+    const items = [...(root.current?.querySelectorAll<HTMLElement>('[data-reveal]:not(.is-in)') ?? [])]
     if (!('IntersectionObserver' in window)) {
       items.forEach((item) => item.classList.add('is-in'))
       return
@@ -41,12 +42,63 @@ function useReveal() {
     )
     items.forEach((item) => observer.observe(item))
     return () => observer.disconnect()
-  }, [])
+  }, [contentKey])
   return root
 }
 
+const sizes = (plan: keyof typeof TARIFF) =>
+  Object.entries(TARIFF[plan])
+    .map(([size, price]) => `${size.toLowerCase()} ${money(price)}`)
+    .join(', ')
+
+const FAQ: { q: string; a: string; link?: { to: string; label: string } }[] = [
+  {
+    q: '¿Cuánto tiempo toma el grooming?',
+    a: `Apartamos ${PLAN_MINUTES.grooming} minutos para el grooming y ${PLAN_MINUTES.premium} minutos para el premium. Al reservar eliges la hora de entrada.`,
+  },
+  {
+    q: '¿Qué incluye cada paquete?',
+    a: 'El grooming incluye baño, cepillado, corte de uñas y limpieza de oídos. El premium suma deslanado, cepillado de dientes y extracción de glándulas.',
+  },
+  {
+    q: '¿Cuánto cuesta?',
+    a: `Depende del tamaño y del pelaje. Grooming: ${sizes('grooming')}. Premium: ${sizes('premium')}. Son precios de referencia.`,
+    link: { to: '/servicios', label: 'Ver todos los servicios' },
+  },
+  {
+    q: '¿Cómo reservo una cita?',
+    a: 'En línea: eliges el servicio, el día y la hora, y nos cuentas el nombre, la raza y el tamaño de tu mascota. Al enviar te damos un número de folio.',
+    link: { to: '/reservar', label: 'Reservar ahora' },
+  },
+  {
+    q: 'Mi mascota tiene alergias, ¿cómo lo saben?',
+    a: 'Nos lo cuentas al reservar y queda anotado en su ficha, así no hay que repetirlo en cada visita.',
+  },
+  {
+    q: '¿Qué me entregan al terminar?',
+    a: 'Una constancia de la visita con fecha, hora, costo, fotos y recomendaciones para casa.',
+  },
+  {
+    q: '¿Cómo funciona la tienda en línea?',
+    a: 'Agregas los productos, envías el pedido con tu nombre y teléfono, y te los apartamos. Te escribimos para coordinar la entrega y pagas al recogerlos o al recibirlos.',
+    link: { to: '/#tienda', label: 'Ver productos' },
+  },
+]
+
+const faqData = () =>
+  JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })),
+  }).replace(/</g, '\\u003c')
+
 export function Home() {
-  const root = useReveal()
+  const { state } = useStore()
+  const site = publicSiteContent(state.settings)
+  const place = state.settings.address.trim()
+  const hours = state.settings.hours.trim()
+  const whatsapp = state.settings.whatsapp.trim()
+  const root = useReveal(`${site.gallery.length}-${site.reviews.length}-${place ? 1 : 0}`)
   return (
     <div ref={root} className="home">
       <section className="hero">
@@ -177,6 +229,25 @@ export function Home() {
 
       <Market featured={6} />
 
+      {site.gallery.length > 0 ? (
+        <section className="section gallery" aria-labelledby="galeria-title">
+          <div className="section-head" data-reveal>
+            <p className="eyebrow">Recién salidos del baño</p>
+            <h2 id="galeria-title">Así se van de PUP'S.</h2>
+          </div>
+          <ul className="gallery-grid">
+            {site.gallery.map((photo, index) => (
+              <li key={photo.src} data-reveal style={delay(index % 4)}>
+                <figure>
+                  <img src={photo.src} alt={photo.caption || "Mascota después de su visita en PUP'S"} loading="lazy" decoding="async" />
+                  {photo.caption ? <figcaption>{photo.caption}</figcaption> : null}
+                </figure>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="section">
         <div className="section-head" data-reveal>
           <p className="eyebrow">Cómo reservar</p>
@@ -200,6 +271,71 @@ export function Home() {
           </li>
         </ol>
       </section>
+
+      {site.reviews.length > 0 ? (
+        <section className="section reviews" aria-labelledby="resenas-title">
+          <div className="section-head" data-reveal>
+            <p className="eyebrow">Lo que dicen nuestros clientes</p>
+            <h2 id="resenas-title">Peludos felices, dueños tranquilos.</h2>
+          </div>
+          <ul className="review-grid">
+            {site.reviews.map((review, index) => (
+              <li key={`${review.name}-${index}`} data-reveal style={delay(index % 3)}>
+                <blockquote>
+                  <p>{review.text}</p>
+                  <footer>{review.name}</footer>
+                </blockquote>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="section faq" aria-labelledby="faq-title">
+        <div className="section-head" data-reveal>
+          <p className="eyebrow">Preguntas frecuentes</p>
+          <h2 id="faq-title">Lo que más nos preguntan.</h2>
+        </div>
+        <div className="faq-list" data-reveal>
+          {FAQ.map((item) => (
+            <details key={item.q}>
+              <summary>{item.q}</summary>
+              <p>
+                {item.a}
+                {item.link ? (
+                  <>
+                    {' '}
+                    <Link to={item.link.to}>{item.link.label}</Link>
+                  </>
+                ) : null}
+              </p>
+            </details>
+          ))}
+        </div>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqData() }} />
+      </section>
+
+      {place ? (
+        <section className="section visit" aria-labelledby="visita-title">
+          <div className="visit-card" data-reveal>
+            <div>
+              <p className="eyebrow">Visítanos</p>
+              <h2 id="visita-title">{place}</h2>
+              {hours ? <p className="visit-hours">{hours}</p> : null}
+            </div>
+            <div className="hero-actions">
+              <a className="btn btn-primary" href={mapUrl(place)} target="_blank" rel="noopener noreferrer">
+                Cómo llegar
+              </a>
+              {whatsapp ? (
+                <a className="btn btn-ghost" href={whatsappUrl(whatsapp, "Hola PUP'S, quiero información.")} target="_blank" rel="noopener noreferrer">
+                  Escribir por WhatsApp
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="cta-band" data-reveal>
         <div className="cta-copy">

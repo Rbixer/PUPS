@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { allows } from '../src/access'
 import { SERVICE_NAMES } from '../src/catalog'
-import { isoDate, newId, normalizePhone, PROMO_MAX, safeLink } from '../src/format'
+import { isoDate, newId, normalizePhone, publicSiteContent } from '../src/format'
 import { nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
@@ -337,7 +337,9 @@ export function createApi(dataDir = path.resolve('data')) {
       }
     })
     const products = state.products?.map((item) => ({ ...item, image: swap(item.image) ?? '' }))
-    return { state: { ...state, appointments, products }, changed }
+    const gallery = state.settings?.gallery?.map((item) => ({ ...item, src: swap(item.src) ?? '' }))
+    const settings = gallery ? { ...state.settings, gallery } : state.settings
+    return { state: { ...state, appointments, products, settings }, changed }
   }
 
   /** Pasa las claves del archivo de datos al archivo de acceso. Ninguna clave sale del servidor. */
@@ -565,8 +567,7 @@ export function createApi(dataDir = path.resolve('data')) {
         whatsapp: state.settings.whatsapp,
         address: state.settings.address,
         hours: state.settings.hours,
-        promoText: typeof state.settings.promoText === 'string' ? state.settings.promoText.trim().slice(0, PROMO_MAX) : '',
-        promoLink: safeLink(typeof state.settings.promoLink === 'string' ? state.settings.promoLink : ''),
+        ...publicSiteContent(state.settings),
       },
       busy: state.appointments
         .filter((item) => item.status !== 'cancelada' && item.date >= today)

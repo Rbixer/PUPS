@@ -1,3 +1,5 @@
+import type { Settings } from './types'
+
 export function isoDate(date = new Date()) {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -147,6 +149,8 @@ export function mapUrl(address: string) {
 }
 
 export const PROMO_MAX = 140
+export const REVIEW_MAX = 400
+export const SITE_LIST_MAX = 12
 
 /** Solo rutas del sitio o direcciones https; cualquier otra cosa queda vacía. */
 export function safeLink(value: string | undefined) {
@@ -154,4 +158,35 @@ export function safeLink(value: string | undefined) {
   if (/^\/(?!\/)\S*$/.test(link)) return link
   if (/^https:\/\/[^\s/]+\.[^\s]+$/i.test(link)) return link
   return ''
+}
+
+export function socialLink(value: string | undefined) {
+  const link = safeLink(value)
+  return link.startsWith('https://') ? link : ''
+}
+
+/** Lo que el sitio público puede mostrar del contenido editable, ya recortado y validado. */
+export function publicSiteContent(settings: Partial<Settings>) {
+  const reviews = (Array.isArray(settings.reviews) ? settings.reviews : [])
+    .map((item) => ({
+      name: typeof item?.name === 'string' ? item.name.trim().slice(0, 60) : '',
+      text: typeof item?.text === 'string' ? item.text.trim().slice(0, REVIEW_MAX) : '',
+    }))
+    .filter((item) => item.name && item.text)
+    .slice(0, SITE_LIST_MAX)
+  const gallery = (Array.isArray(settings.gallery) ? settings.gallery : [])
+    .map((item) => ({
+      src: typeof item?.src === 'string' && /^\/(?!\/)\S+$/.test(item.src) ? item.src : '',
+      caption: typeof item?.caption === 'string' ? item.caption.trim().slice(0, 80) : '',
+    }))
+    .filter((item) => item.src)
+    .slice(0, SITE_LIST_MAX)
+  return {
+    promoText: typeof settings.promoText === 'string' ? settings.promoText.trim().slice(0, PROMO_MAX) : '',
+    promoLink: safeLink(typeof settings.promoLink === 'string' ? settings.promoLink : ''),
+    facebook: socialLink(typeof settings.facebook === 'string' ? settings.facebook : ''),
+    instagram: socialLink(typeof settings.instagram === 'string' ? settings.instagram : ''),
+    reviews,
+    gallery,
+  }
 }

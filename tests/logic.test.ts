@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
-import { addDays, daysBetween, money, normalizePhone, parseAmount, safeLink } from '../src/format'
+import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteContent, safeLink } from '../src/format'
 import { buildMonthReport } from '../src/report'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, demoCatalog } from '../src/shop'
@@ -55,6 +55,31 @@ describe('formato', () => {
     expect(safeLink('//otro-sitio.com')).toBe('')
     expect(safeLink('http://facebook.com')).toBe('')
     expect(safeLink(undefined)).toBe('')
+  })
+
+  it('el sitio público solo recibe contenido limpio', () => {
+    const site = publicSiteContent({
+      facebook: '/pagina',
+      instagram: 'https://instagram.com/pups',
+      reviews: [
+        { name: ' Ana ', text: ' Muy bien ' },
+        { name: '', text: 'Sin nombre' },
+        { name: 'Luis', text: 'x'.repeat(500) },
+      ],
+      gallery: [
+        { src: '/api/media/abc.jpg', caption: ' Max ' },
+        { src: 'javascript:alert(1)', caption: 'mala' },
+        { src: '//otro.com/foto.jpg', caption: 'externa' },
+      ],
+    })
+    expect(site.facebook).toBe('')
+    expect(site.instagram).toBe('https://instagram.com/pups')
+    expect(site.reviews).toEqual([
+      { name: 'Ana', text: 'Muy bien' },
+      { name: 'Luis', text: 'x'.repeat(400) },
+    ])
+    expect(site.gallery).toEqual([{ src: '/api/media/abc.jpg', caption: 'Max' }])
+    expect(publicSiteContent({ reviews: Array.from({ length: 20 }, () => ({ name: 'A', text: 'B' })) }).reviews).toHaveLength(12)
   })
 })
 

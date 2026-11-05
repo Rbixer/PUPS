@@ -1,13 +1,13 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Brand } from '../components/ui'
-import { mapUrl, safeLink, whatsappUrl } from '../format'
+import { mapUrl, publicSiteContent, whatsappUrl } from '../format'
 import { useStore } from '../store'
 import { usePanelTheme } from '../theme'
 
 const CHAT = "Hola PUP'S, quiero información."
 
-function businessData(address: string, whatsapp: string) {
+function businessData(address: string, whatsapp: string, social: string[]) {
   const data = {
     '@context': 'https://schema.org',
     '@type': 'PetStore',
@@ -18,6 +18,7 @@ function businessData(address: string, whatsapp: string) {
     priceRange: 'Q',
     address: { '@type': 'PostalAddress', streetAddress: address, addressCountry: 'GT' },
     ...(whatsapp ? { telephone: whatsapp } : {}),
+    ...(social.length ? { sameAs: social } : {}),
   }
   return JSON.stringify(data).replace(/</g, '\\u003c')
 }
@@ -91,8 +92,8 @@ export function PublicLayout() {
   const hours = state.settings.hours.trim() || 'Horario por confirmar'
   const address = place || 'Guatemala'
   const whatsapp = state.settings.whatsapp.trim()
-  const promo = (state.settings.promoText ?? '').trim()
-  const promoLink = safeLink(state.settings.promoLink)
+  const { promoText: promo, promoLink, facebook, instagram } = publicSiteContent(state.settings)
+  const social = [facebook, instagram].filter(Boolean)
 
   return (
     <div className="site">
@@ -181,6 +182,20 @@ export function PublicLayout() {
             <p>
               <NavLink to="/contacto">Ir a contacto</NavLink>
             </p>
+            {social.length ? (
+              <p className="footer-social">
+                {facebook ? (
+                  <a href={facebook} target="_blank" rel="noopener noreferrer">
+                    Facebook
+                  </a>
+                ) : null}
+                {instagram ? (
+                  <a href={instagram} target="_blank" rel="noopener noreferrer">
+                    Instagram
+                  </a>
+                ) : null}
+              </p>
+            ) : null}
           </div>
         </div>
         <p className="footer-staff">
@@ -197,7 +212,7 @@ export function PublicLayout() {
           </svg>
         </a>
       ) : null}
-      {place ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: businessData(place, whatsapp) }} /> : null}
+      {place ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: businessData(place, whatsapp, social) }} /> : null}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
 import { saveBackupFile } from '../backup'
+import { SiteContent } from '../components/SiteContent'
 import { Field } from '../components/ui'
 import { initials, PROMO_MAX, safeLink } from '../format'
 import { useStore } from '../store'
@@ -278,6 +279,8 @@ export function Usuarios() {
         </div>
       </form>
       </div>
+
+      <SiteContent />
 
       <section className="panel backup" aria-labelledby="backup-title">
         <div>
