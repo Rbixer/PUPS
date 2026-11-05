@@ -65,6 +65,7 @@ export type User = {
 }
 
 export type ControlField =
+  | 'servicio'
   | 'hospedaje'
   | 'domicilio'
   | 'bien'
@@ -81,6 +82,7 @@ export type ControlField =
   | 'comision'
   | 'prestamo'
   | 'proveedores'
+  | 'gastos'
   | 'basico'
   | 'estandar'
   | 'premium'
@@ -346,6 +348,8 @@ export type Settings = {
   /** Cambios de régimen con su fecha, para que el historial no se recalcule con el régimen nuevo. */
   taxHistory?: { from: string; regime?: 'general' | 'pequeno' }[]
   cashFloat?: number
+  /** Meta mensual de paquetes de grooming del control general. */
+  controlGoal?: number
 }
 
 export type WaDirection = 'in' | 'out'

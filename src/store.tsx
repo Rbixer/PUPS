@@ -402,7 +402,8 @@ type Store = {
       password?: string
     },
   ) => Promise<string | null>
-  setControl: (year: number, month: number, field: ControlField, value: number) => void
+  /** `null` borra la cifra escrita a mano y el mes vuelve al cálculo automático. */
+  setControl: (year: number, month: number, field: ControlField, value: number | null) => void
   toggleUser: (id: string) => string | null
   addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Result<Movement>
   saveProduct: (product: CatalogItem) => string | null
@@ -876,11 +877,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       setControl: (year, month, field, value) => {
         run('equipo', (current) => {
-          const amount = Number.isFinite(value) ? value : 0
           const rows = current.controlRows ?? []
           const index = rows.findIndex((item) => item.year === year && item.month === month)
           const previous = index >= 0 ? rows[index] : { year, month, values: {} }
-          const nextRow = { ...previous, values: { ...previous.values, [field]: amount } }
+          const values = { ...previous.values }
+          if (value === null) {
+            delete values[field]
+            if (field === 'deas') delete values.extra
+          } else values[field] = Number.isFinite(value) ? value : 0
+          const nextRow = { ...previous, values }
           const controlRows = index >= 0 ? rows.map((item, itemIndex) => (itemIndex === index ? nextRow : item)) : [...rows, nextRow]
           return { ok: true, value: null, patch: { controlRows } }
         })

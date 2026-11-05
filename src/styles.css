@@ -690,12 +690,15 @@ body:has(.install-banner) .wa-float { display: none; }
 .control-table input { width: 78px; border: 0; background: transparent; text-align: right; font: inherit; color: inherit; padding: 2px 0; }
 .control-table input:focus { outline: 1px solid #17191d; background: var(--surface); }
 .control-calc { color: #17191d; font-weight: 650; }
-.group-servicio { background: #243028 !important; }
+.control-table td.is-manual { background: #eef3fb; box-shadow: inset 2px 0 0 #3b6fb6; }
+.control-table td.is-manual input { color: #1f4f8f; font-weight: 650; }
+.control-table td.is-loss { color: #8d3b32; }
+.group-ingresos { background: #243028 !important; }
 .group-gastos { background: #3a2c28 !important; }
 .group-planilla { background: #2a3140 !important; }
-.group-comisión, .group-comision { background: #332e24 !important; }
-.group-proveedores, .group-resultado, .group-total { background: #17191d !important; }
-.group-paquetes, .group-cantidad, .group-ventas, .group-diferencia { background: #2c3036 !important; }
+.group-otros { background: #332e24 !important; }
+.group-resultado { background: #17191d !important; }
+.group-paquetes, .group-meta, .group-cantidad { background: #2c3036 !important; }
 .control-actions { align-items: end; }
 .page-head .field { min-width: 120px; }
 .page-head .field input { width: 120px; }

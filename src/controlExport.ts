@@ -1,6 +1,7 @@
 import { Workbook, type Cell, type Worksheet } from 'exceljs'
-import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, type ControlLine } from './control'
+import { CONTROL_COLUMNS, CONTROL_EXPENSE, CONTROL_INCOME, columnValue, controlFilename, controlGroups, type ControlCalc, type ControlColumn, type ControlLine } from './control'
 import { isoDate, longDate } from './format'
+import type { ControlField } from './types'
 
 const INK = 'FF17191D'
 const WHITE = 'FFFFFFFF'
@@ -11,25 +12,24 @@ const LOSS = 'FF8D3B32'
 const MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 const GROUP_FILL: Record<string, string> = {
-  Servicio: 'FF243028',
+  Ingresos: 'FF243028',
   Gastos: 'FF3A2C28',
   Planilla: 'FF2A3140',
-  Comisión: 'FF332E24',
-  Proveedores: 'FF17191D',
+  Otros: 'FF332E24',
   Resultado: 'FF17191D',
   Paquetes: 'FF2C3036',
-  Diferencia: 'FF2C3036',
+  Meta: 'FF2C3036',
   Cantidad: 'FF2C3036',
-  Ventas: 'FF2C3036',
-  Total: 'FF17191D',
 }
 
 type Sheet = ReturnType<typeof import('./control').controlSheet>
 
 const MONEY_INPUT = '"Q "#,##0.00;"Q "-#,##0.00;""'
 const MONEY_CALC = '"Q "#,##0.00;"Q "-#,##0.00'
-const COUNT_INPUT = '#,##0;;'
+const COUNT_INPUT = '#,##0;-#,##0;'
 const COUNT_CALC = '#,##0'
+const NOTE =
+  'Gastos suma local, teléfono, internet, luz, impuesto, app, planilla, días extras, bonos, comisión, préstamos, proveedores y otros gastos. Disponible es ingresos menos gastos. Diferencia es la meta de paquetes del mes menos los paquetes hechos.'
 
 export async function downloadControlExcel(sheet: Sheet) {
   const workbook = workbookFor(sheet)
@@ -39,6 +39,22 @@ export async function downloadControlExcel(sheet: Sheet) {
 
 export function downloadControlPdf(sheet: Sheet) {
   saveFile(controlPdfBytes(sheet), controlFilename(sheet.year, 'pdf'), 'application/pdf')
+}
+
+/** Columna de Excel (1 = A) de cada columna del control; la 1 es el mes. */
+function letter(index: number) {
+  let value = index
+  let text = ''
+  while (value > 0) {
+    const rest = (value - 1) % 26
+    text = String.fromCharCode(65 + rest) + text
+    value = Math.floor((value - 1) / 26)
+  }
+  return text
+}
+
+function columnAt(test: (column: ControlColumn) => boolean) {
+  return CONTROL_COLUMNS.findIndex(test) + 2
 }
 
 export function workbookFor(sheet: Sheet) {
@@ -62,8 +78,9 @@ export function workbookFor(sheet: Sheet) {
     },
   })
   grid.headerFooter.oddFooter = `&L&8&K5C6168PUP'S · Control general ${sheet.year}&R&8&K5C6168&D`
+  const available = letter(columnAt((column) => column.calc === 'disponible'))
   grid.addConditionalFormatting({
-    ref: 'S6:S18',
+    ref: `${available}6:${available}18`,
     rules: [
       {
         type: 'cellIs',
@@ -79,7 +96,7 @@ export function workbookFor(sheet: Sheet) {
 }
 
 function paintSheet(grid: Worksheet, sheet: Sheet) {
-  const columns = 28
+  const columns = CONTROL_COLUMNS.length + 1
   grid.mergeCells(1, 1, 1, columns)
   grid.mergeCells(2, 1, 2, columns)
   const title = grid.getCell(1, 1)
@@ -93,20 +110,11 @@ function paintSheet(grid: Worksheet, sheet: Sheet) {
   grid.getRow(2).height = 18
   grid.getRow(3).height = 8
 
-  const groups = [
-    { label: 'Mes', from: 1, span: 1 },
-    { label: 'Servicio', from: 2, span: 3 },
-    { label: 'Gastos', from: 5, span: 6 },
-    { label: 'Planilla', from: 11, span: 4 },
-    { label: 'Comisión', from: 15, span: 2 },
-    { label: 'Proveedores', from: 17, span: 1 },
-    { label: 'Resultado', from: 18, span: 3 },
-    { label: 'Paquetes', from: 21, span: 3 },
-    { label: 'Diferencia', from: 24, span: 1 },
-    { label: 'Cantidad', from: 25, span: 2 },
-    { label: 'Ventas', from: 27, span: 1 },
-    { label: 'Total', from: 28, span: 1 },
-  ]
+  const groups = [{ label: 'Mes', from: 1, span: 1 }]
+  for (const group of controlGroups(CONTROL_COLUMNS)) {
+    const last = groups[groups.length - 1]
+    groups.push({ label: group.label, from: last.from + last.span, span: group.span })
+  }
   grid.mergeCells(4, 1, 5, 1)
   for (const group of groups) {
     if (group.span > 1) grid.mergeCells(4, group.from, 4, group.from + group.span - 1)
@@ -125,17 +133,9 @@ function paintSheet(grid: Worksheet, sheet: Sheet) {
   grid.getCell(4, 1).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
   grid.getRow(4).height = 18
 
-  const labels = [
-    ...CONTROL_MONEY.map((column) => column.label),
-    'Gastos',
-    'Disponible',
-    'Total',
-    ...CONTROL_COUNTS.map((column) => column.label),
-    'Total',
-  ]
-  labels.forEach((label, index) => {
+  CONTROL_COLUMNS.forEach((column, index) => {
     const cell = grid.getCell(5, index + 2)
-    cell.value = label
+    cell.value = column.label
     cell.font = { name: 'Calibri', bold: true, size: 8, color: { argb: WHITE } }
     cell.fill = solid('FF2C3036')
     cell.alignment = { horizontal: 'center', vertical: 'middle', shrinkToFit: true }
@@ -143,9 +143,9 @@ function paintSheet(grid: Worksheet, sheet: Sheet) {
   })
   grid.getRow(5).height = 20
 
-  const widths = [16, ...Array(16).fill(13), 13, 14, 13, ...Array(7).fill(12), 11]
-  widths.forEach((width, index) => {
-    grid.getColumn(index + 1).width = width
+  grid.getColumn(1).width = 16
+  CONTROL_COLUMNS.forEach((column, index) => {
+    grid.getColumn(index + 2).width = column.money ? (column.calc ? 14 : 13) : 11
   })
 
   sheet.months.forEach((line, index) => writeLine(grid, 6 + index, line, false))
@@ -153,11 +153,11 @@ function paintSheet(grid: Worksheet, sheet: Sheet) {
 
   grid.mergeCells(20, 1, 20, columns)
   const note = grid.getCell(20, 1)
-  note.value = 'Gastos reúne local, teléfono, internet, luz, impuesto, AFP, planilla, DEAS, extra, bonos, comisión, préstamo y proveedores. Disponible es el servicio menos los gastos. El total es el servicio. Las celdas vacías valen cero.'
+  note.value = `${NOTE} Las celdas vacías valen cero.`
   note.font = { name: 'Calibri', size: 9, italic: true, color: { argb: MUTED } }
   note.alignment = { vertical: 'middle', wrapText: true }
   grid.getRow(20).height = 28
-  grid.pageSetup.printArea = 'A1:AB20'
+  grid.pageSetup.printArea = `A1:${letter(columns)}20`
 }
 
 function writeLine(grid: Worksheet, rowNumber: number, line: ControlLine, totals: boolean) {
@@ -170,16 +170,22 @@ function writeLine(grid: Worksheet, rowNumber: number, line: ControlLine, totals
   month.fill = solid(totals ? INK : 'FFFFFFFF')
   month.border = totals ? totalBorder() : hairBorder()
 
-  const money = CONTROL_MONEY.map((column) => roundMoney(line.values[column.field]))
-  const counts = CONTROL_COUNTS.map((column) => Math.round(line.values[column.field]))
-  money.forEach((amount, index) => styleMoney(row.getCell(2 + index), amount, totals))
-
-  const excelRow = rowNumber
-  styleFormula(row.getCell(18), `SUM(E${excelRow}:Q${excelRow})`, roundMoney(line.gastos), true, totals, false)
-  styleFormula(row.getCell(19), `SUM(B${excelRow}:D${excelRow})-R${excelRow}`, roundMoney(line.disponible), true, totals, true)
-  styleFormula(row.getCell(20), `SUM(B${excelRow}:D${excelRow})`, roundMoney(line.servicio), true, totals, false)
-  counts.forEach((amount, index) => styleCount(row.getCell(21 + index), amount, totals))
-  styleFormula(row.getCell(28), `SUM(U${excelRow}:W${excelRow})`, line.paquetes, false, totals, false)
+  const at = (field: ControlField) => `${letter(columnAt((column) => column.field === field))}${rowNumber}`
+  const span = (fields: ControlField[]) => `SUM(${at(fields[0])}:${at(fields[fields.length - 1])})`
+  const gastos = `${letter(columnAt((column) => column.calc === 'gastos'))}${rowNumber}`
+  const formulas: Record<ControlCalc, string> = {
+    gastos: span(CONTROL_EXPENSE),
+    ingresos: span(CONTROL_INCOME),
+    disponible: `${span(CONTROL_INCOME)}-${gastos}`,
+    paquetes: span(['basico', 'estandar', 'premium']),
+  }
+  CONTROL_COLUMNS.forEach((column, index) => {
+    const cell = row.getCell(index + 2)
+    const value = columnValue(line, column)
+    if (column.calc) styleFormula(cell, formulas[column.calc], column.money ? roundMoney(value) : value, column.money, totals, column.calc === 'disponible')
+    else if (column.money) styleMoney(cell, roundMoney(value), totals)
+    else styleCount(cell, Math.round(value), totals)
+  })
 }
 
 function styleMoney(cell: Cell, amount: number, totals: boolean) {
@@ -246,7 +252,7 @@ function drawControl(sheet: Sheet) {
   const top = 22
   const monthW = 96
   const inner = width - marginX * 2
-  const colW = (inner - monthW) / 27
+  const colW = (inner - monthW) / CONTROL_COLUMNS.length
   const groupH = 16
   const labelH = 20
   const rowH = 22
@@ -318,22 +324,18 @@ function drawControl(sheet: Sheet) {
   lineY -= totalH
   pdf.line(marginX, lineY, width - marginX, lineY, 0.8, '17191D')
 
-  const note = 'Gastos reúne local, teléfono, internet, luz, impuesto, AFP, planilla, DEAS, extra, bonos, comisión, préstamo y proveedores. Disponible es el servicio menos los gastos. El total es el servicio.'
-  pdf.text(note, marginX, gridBottom - 16, 7.2, false, '5C6168')
+  pdf.text(NOTE, marginX, gridBottom - 16, 7.2, false, '5C6168')
   return { commands: pdf.commands, width, height }
 }
 
 type PdfColumn = { label: string; group: string; kind: 'money' | 'count' | 'calc-money' | 'calc-count' }
 
 function flatColumns(): PdfColumn[] {
-  return [
-    ...CONTROL_MONEY.map((column) => ({ label: column.label, group: column.group, kind: 'money' as const })),
-    { label: 'Gastos', group: 'Resultado', kind: 'calc-money' },
-    { label: 'Disponible', group: 'Resultado', kind: 'calc-money' },
-    { label: 'Total', group: 'Resultado', kind: 'calc-money' },
-    ...CONTROL_COUNTS.map((column) => ({ label: column.label, group: column.group, kind: 'count' as const })),
-    { label: 'Total', group: 'Total', kind: 'calc-count' },
-  ]
+  return CONTROL_COLUMNS.map((column) => ({
+    label: column.label,
+    group: column.group,
+    kind: column.calc ? (column.money ? 'calc-money' : 'calc-count') : column.money ? 'money' : 'count',
+  }))
 }
 
 function columnGroups(columns: PdfColumn[]) {
@@ -367,14 +369,7 @@ function paintRow(pdf: Pdf, line: ControlLine, bottom: number, rowH: number, tot
 }
 
 function rowAmounts(line: ControlLine) {
-  return [
-    ...CONTROL_MONEY.map((column) => line.values[column.field]),
-    line.gastos,
-    line.disponible,
-    line.servicio,
-    ...CONTROL_COUNTS.map((column) => line.values[column.field]),
-    line.paquetes,
-  ]
+  return CONTROL_COLUMNS.map((column) => columnValue(line, column))
 }
 
 function moneyText(value: number) {

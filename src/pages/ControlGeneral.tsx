@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Metrics } from '../components/ui'
-import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, controlGroups, controlSheet } from '../control'
+import { CONTROL_COLUMNS, CONTROL_GOAL, columnValue, controlFilename, controlGroups, controlSheet, type ControlColumn, type ControlLine } from '../control'
 import { count, isoDate, money, parseAmount } from '../format'
 import { buildJournal, incomeStatement } from '../ledger'
 import { payableBalance, round2 } from '../ops'
@@ -8,7 +8,7 @@ import { useStore } from '../store'
 import type { ControlField } from '../types'
 
 export function ControlGeneral() {
-  const { state, setControl } = useStore()
+  const { state, setControl, updateSettings } = useStore()
   const [year, setYear] = useState(() => new Date().getFullYear())
   const entries = useMemo(() => buildJournal(state), [state])
   const result = incomeStatement(entries, `${year}-01-01`, `${year}-12-31`)
@@ -21,8 +21,10 @@ export function ControlGeneral() {
   const [busy, setBusy] = useState<'excel' | 'pdf' | ''>('')
   const [note, setNote] = useState('')
   const [failed, setFailed] = useState(false)
-  const sheet = controlSheet(year, state.controlRows ?? [])
-  const groups = controlGroups([...CONTROL_MONEY, ...CONTROL_COUNTS])
+  const goal = state.settings.controlGoal ?? CONTROL_GOAL
+  const sheet = useMemo(() => controlSheet(year, state.controlRows ?? [], state, goal), [state, year, goal])
+  const groups = controlGroups(CONTROL_COLUMNS)
+  const manualCount = sheet.months.reduce((total, line) => total + Object.keys(line.manual).length, 0)
 
   async function onExcel() {
     setBusy('excel')
@@ -62,13 +64,29 @@ export function ControlGeneral() {
         <div>
           <p className="eyebrow">Finanzas</p>
           <h1>Control general</h1>
-          <p className="hint">Un renglón por mes. Gastos, disponible y los totales se calculan al escribir. PDF y Excel bajan esta misma hoja.</p>
+          <p className="hint">Un renglón por mes, con las mismas columnas del control en Excel. PDF y Excel bajan esta misma hoja.</p>
           {note && <p className={failed ? 'excel-note is-error' : 'excel-note'}>{note}</p>}
         </div>
         <div className="export-row control-actions">
           <label className="field">
             <span>Año</span>
             <input className="num" type="number" min={2000} max={2100} value={year} onChange={(event) => setYear(Number(event.target.value) || year)} />
+          </label>
+          <label className="field">
+            <span>Meta de paquetes al mes</span>
+            <input
+              className="num"
+              type="number"
+              min={1}
+              max={9999}
+              defaultValue={goal}
+              key={goal}
+              onBlur={(event) => {
+                const next = Math.round(Number(event.target.value))
+                if (!Number.isFinite(next) || next < 1 || next > 9999) event.target.value = String(goal)
+                else if (next !== goal) updateSettings({ controlGoal: next })
+              }}
+            />
           </label>
           <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== ''} onClick={() => void onExcel()}>
             {busy === 'excel' ? 'Preparando…' : 'Excel'}
@@ -87,7 +105,11 @@ export function ControlGeneral() {
           { label: 'Facturas pendientes de pago', value: money(owed), tone: late ? 'bad' : owed ? 'hot' : undefined, detail: `${count(open.length, 'abierta', 'abiertas')} · ${count(late, 'vencida', 'vencidas')}` },
         ]}
       />
-      <p className="hint" style={{ margin: 0 }}>Las cifras de arriba salen solas del sistema. La hoja de abajo es el control manual de siempre.</p>
+      <p className="hint" style={{ margin: 0 }}>
+        Cada mes se llena solo con lo registrado en la app: cobros, ventas, gastos fijos, compras, planilla y constancias de grooming. Si escribes una cifra, queda fija y se marca
+        en azul; bórrala para volver al cálculo.
+        {manualCount > 0 && ` Este año hay ${count(manualCount, 'cifra escrita a mano', 'cifras escritas a mano')}.`}
+      </p>
 
       <div className="control-scroll">
         <table className="control-table">
@@ -103,56 +125,37 @@ export function ControlGeneral() {
               ))}
             </tr>
             <tr>
-              {CONTROL_MONEY.map((column) => (
-                <th key={column.field}>{column.label}</th>
+              {CONTROL_COLUMNS.map((column) => (
+                <th key={column.field ?? `calc-${column.calc}`}>{column.label}</th>
               ))}
-              <th>Gastos</th>
-              <th>Disponible</th>
-              <th>Total</th>
-              {CONTROL_COUNTS.map((column) => (
-                <th key={column.field}>{column.label}</th>
-              ))}
-              <th>Total</th>
             </tr>
           </thead>
           <tbody>
             {sheet.months.map((line) => (
-                <tr key={line.label}>
-                  <th className="month">{line.label}</th>
-                  {CONTROL_MONEY.map((column) => (
-                    <td key={column.field}>
-                      <Cell year={year} month={line.month} field={column.field} label={`${column.label} · ${line.label}`} value={line.values[column.field]} money onSave={setControl} />
+              <tr key={line.label}>
+                <th className="month">{line.label}</th>
+                {CONTROL_COLUMNS.map((column) =>
+                  column.field ? (
+                    <td key={column.field} className={line.manual[column.field] ? 'is-manual' : undefined}>
+                      <Cell year={year} line={line} column={column} field={column.field} onSave={setControl} />
                     </td>
-                  ))}
-                  <td className="control-calc num">{money(line.gastos)}</td>
-                  <td className="control-calc num">{money(line.disponible)}</td>
-                  <td className="control-calc num">{money(line.servicio)}</td>
-                  {CONTROL_COUNTS.map((column) => (
-                    <td key={column.field}>
-                      <Cell year={year} month={line.month} field={column.field} label={`${column.label} · ${line.label}`} value={line.values[column.field]} onSave={setControl} />
+                  ) : (
+                    <td key={`calc-${column.calc}`} className={`control-calc num${column.calc === 'disponible' && line.disponible < 0 ? ' is-loss' : ''}`}>
+                      {shown(columnValue(line, column), column.money)}
                     </td>
-                  ))}
-                  <td className="control-calc num">{line.paquetes || ''}</td>
-                </tr>
-              ))}
+                  ),
+                )}
+              </tr>
+            ))}
           </tbody>
           <tfoot>
             <tr>
               <th className="month">Total</th>
-              {CONTROL_MONEY.map((column) => (
-                <td key={column.field} className="num">
-                  {money(sheet.totals.values[column.field])}
+              {CONTROL_COLUMNS.map((column) => (
+                <td key={column.field ?? `calc-${column.calc}`} className="num">
+                  {column.money ? money(columnValue(sheet.totals, column)) : shown(columnValue(sheet.totals, column), false)}
                 </td>
               ))}
-              <td className="num">{money(sheet.totals.gastos)}</td>
-              <td className="num">{money(sheet.totals.disponible)}</td>
-              <td className="num">{money(sheet.totals.servicio)}</td>
-              {CONTROL_COUNTS.map((column) => (
-                <td key={column.field} className="num">
-                  {sheet.totals.values[column.field] || ''}
-                </td>
-              ))}
-              <td className="num">{sheet.totals.paquetes || ''}</td>
             </tr>
           </tfoot>
         </table>
@@ -161,37 +164,52 @@ export function ControlGeneral() {
   )
 }
 
+function shown(value: number, asMoney: boolean) {
+  if (asMoney) return money(value)
+  return value ? value.toLocaleString('es-GT') : ''
+}
+
 function Cell({
   year,
-  month,
+  line,
+  column,
   field,
-  label,
-  value,
-  money: asMoney,
   onSave,
 }: {
   year: number
-  month: number
+  line: ControlLine
+  column: ControlColumn
   field: ControlField
-  label: string
-  value: number
-  money?: boolean
-  onSave: (year: number, month: number, field: ControlField, value: number) => void
+  onSave: (year: number, month: number, field: ControlField, value: number | null) => void
 }) {
+  const value = line.values[field]
+  const auto = line.auto[field]
+  const manual = Boolean(line.manual[field])
+  const text = value ? String(value) : ''
+  const calculated = column.money ? money(auto) : String(auto)
   return (
     <input
       className="num"
       inputMode="decimal"
-      defaultValue={value ? String(value) : ''}
-      key={`${year}-${month}-${field}-${value}`}
-      aria-label={label}
+      defaultValue={text}
+      key={`${year}-${line.month}-${field}-${value}-${manual}`}
+      aria-label={`${column.label} · ${line.label}`}
+      title={manual ? `Escrito a mano. La app calcula ${calculated}. Bórralo para volver al cálculo.` : 'Calculado por la app. Escribe otra cifra para fijarla.'}
       onBlur={(event) => {
-        const amount = parseAmount(event.target.value)
-        if (!Number.isFinite(amount) || amount < 0) {
-          event.target.value = value ? String(value) : ''
+        const raw = event.target.value.trim()
+        if (!raw) {
+          if (manual) onSave(year, line.month, field, null)
+          else event.target.value = text
           return
         }
-        if (amount !== value) onSave(year, month, field, asMoney ? amount : Math.round(amount))
+        const amount = parseAmount(raw)
+        if (!Number.isFinite(amount) || (amount < 0 && field !== 'diferencia')) {
+          event.target.value = text
+          return
+        }
+        const next = column.money ? amount : Math.round(amount)
+        if (manual && next === auto) onSave(year, line.month, field, null)
+        else if (next !== value) onSave(year, line.month, field, next)
       }}
     />
   )

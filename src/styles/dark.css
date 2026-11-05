@@ -181,6 +181,9 @@
   html[data-theme="dark"] .admin .control-table tfoot th,
   html[data-theme="dark"] .admin .permit[aria-pressed='true'] { background: var(--cream); color: var(--ink); border-color: var(--line); }
   html[data-theme="dark"] .admin .permit[aria-pressed='true'] { border-color: var(--caramel); }
+  html[data-theme="dark"] .admin .control-table td.is-manual { background: rgba(96, 145, 214, 0.16); box-shadow: inset 2px 0 0 #6f9fe0; }
+  html[data-theme="dark"] .admin .control-table td.is-manual input { color: #a9c6f0; }
+  html[data-theme="dark"] .admin .control-table td.is-loss { color: #f0a197; }
   html[data-theme="dark"] .admin .control-calc,
   html[data-theme="dark"] .admin .report-form > .sheet-voice,
   html[data-theme="dark"] .admin .constancia-page .sheet-voice,
