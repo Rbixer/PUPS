@@ -23,7 +23,7 @@ export function applyTheme(choice: ThemeChoice) {
   document.documentElement.dataset.theme = mode
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', mode === 'dark' ? '#14110f' : '#1c1917')
+    ?.setAttribute('content', mode === 'dark' ? '#0a1322' : '#1c1917')
 }
 
 /** El sitio público siempre va en claro; el tema elegido aplica solo al panel y al acceso. */

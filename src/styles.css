@@ -1402,27 +1402,49 @@ body:has(.nav.open) { overflow: hidden; }
   to { transform: translateX(-50%); }
 }
 
+/* Paleta de PUP'S en el panel: turquesa y azul marino del arte de la marca. El sitio público conserva la suya. */
 .admin,
 .login {
+  --brand-aqua: #5ce1e6;
+  --brand-navy: #123376;
   --surface: #ffffff;
-  --bg: #f6f3ee;
-  --card: #fffdfb;
-  --cream: #f3ece3;
-  --ink: #1c1917;
-  --muted: #6f675f;
-  --line: #e7dfd4;
-  --accent: #1c1917;
-  --accent-2: #a9622f;
-  --accent-soft: #f6eadf;
+  --bg: #f3fafb;
+  --card: #ffffff;
+  --cream: #e9f7f8;
+  --ink: #0f1f3d;
+  --muted: #5b6b80;
+  --line: #d9e9ec;
+  --accent: #123376;
+  --accent-2: #123376;
+  --accent-soft: #dcf7f8;
   --green: #2f6b4e;
   --amber: #9a6700;
   --red: #9f3a45;
-  --shadow: 0 1px 2px rgba(28, 25, 23, 0.04), 0 16px 40px rgba(28, 25, 23, 0.06);
+  --shadow: 0 1px 2px rgba(15, 31, 61, 0.04), 0 16px 40px rgba(15, 31, 61, 0.06);
+  --caramel: #12a4ad;
+  --caramel-deep: #123376;
+  --color-caramel: #12a4ad;
+  --color-caramel-deep: #0c2659;
+  --color-caramel-bold: #123376;
+  --color-caramel-ink: #0b2a5c;
+  --color-on-accent: #ffffff;
+  --color-stone-50: #f6fafc;
+  --color-stone-100: #eef4f8;
+  --color-stone-200: #dde7ee;
+  --color-stone-300: #c3d1dc;
+  --color-stone-400: #90a3b6;
+  --color-stone-500: #5f7389;
+  --color-stone-600: #46596f;
+  --color-stone-700: #2f4058;
+  --color-stone-800: #1b2a42;
+  --color-stone-900: #0f1d33;
+  --color-stone-950: #091424;
   color: var(--ink);
   background: var(--bg);
 }
 .admin ::selection,
-.login ::selection { background: #f0d7c4; color: var(--ink); }
+.login ::selection { background: #bdeff1; color: var(--ink); }
+.admin .empty { border-color: rgba(18, 51, 118, 0.2); background: rgba(92, 225, 230, 0.08); color: var(--muted); }
 
 .admin .side {
   padding: 14px 12px 12px;
@@ -1656,23 +1678,23 @@ body:has(.nav.open) { overflow: hidden; }
 
 .login {
   place-items: center;
-  background-color: #fff;
+  background-color: var(--brand-aqua);
   background-image: url('/login-pattern.svg');
   background-size: 520px 520px;
 }
 .login-logo { width: min(168px, 70%); border-radius: 16px; filter: none; }
-.login-panel { background: #121418; color: #f5f6f8; padding: 44px 44px 32px; box-shadow: none; }
+.login-panel { background: var(--brand-navy); color: #f5f6f8; padding: 44px 44px 32px; box-shadow: none; }
 .login-panel h2 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.04em; }
 .login .hint {
   margin-top: 8px;
   padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: #9aa1ab;
+  color: #a9bbd6;
   font-size: 0.82rem;
   line-height: 1.45;
 }
 .login-panel .eyebrow,
-.login-panel .field span { color: #b7bcc4; }
+.login-panel .field span { color: #c4d3ea; }
 .login-panel h2 { color: #fff; }
 .login .eyebrow { color: #8b909a; }
 .login .field input { border-radius: 12px; background: #f6f7f8; border-color: transparent; padding: 14px 14px; }
@@ -1690,7 +1712,7 @@ body:has(.nav.open) { overflow: hidden; }
     justify-items: center;
     align-content: center;
     padding: max(28px, env(safe-area-inset-top)) 22px max(28px, env(safe-area-inset-bottom));
-    background-color: #fff;
+    background-color: var(--brand-aqua);
     background-image: url('/login-pattern.svg');
     background-size: 220px 220px;
   }

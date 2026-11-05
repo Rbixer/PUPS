@@ -28,17 +28,18 @@
   cursor: pointer;
 }
 .tabs button:hover { color: var(--ink); background: var(--cream); }
-.tabs button[aria-selected='true'] { background: var(--ink); color: var(--surface); }
+.tabs button[aria-selected='true'] { background: var(--accent); color: var(--color-on-accent); }
 .tabs b {
   min-width: 20px;
   padding: 0 6px;
   border-radius: 999px;
   background: var(--accent-2);
-  color: #fff;
+  color: var(--color-on-accent);
   font-size: 0.72rem;
   line-height: 18px;
   text-align: center;
 }
+.tabs button[aria-selected='true'] b { background: var(--color-on-accent); color: var(--accent); }
 
 .admin .metric-rail.biz-metrics { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
 @media (max-width: 420px) {

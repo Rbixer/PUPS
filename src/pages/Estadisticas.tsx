@@ -98,8 +98,8 @@ export function Estadisticas() {
   const peakHour = Math.max(...report.hours.map((hour) => hour.count), 1)
   const status = [
     { label: 'Completadas', value: report.done.length, color: '#5f7d6c' },
-    { label: 'Pendientes', value: report.pending, color: '#c4784a' },
-    { label: 'Canceladas', value: report.cancelled, color: '#b3a99d' },
+    { label: 'Pendientes', value: report.pending, color: '#12a4ad' },
+    { label: 'Canceladas', value: report.cancelled, color: '#a9b6c4' },
   ]
 
   useEffect(() => {

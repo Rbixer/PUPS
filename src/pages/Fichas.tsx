@@ -499,7 +499,7 @@ function Dossier({ file }: { file: PetFile }) {
                 <StatusPill status={last.status} />
               </div>
             </article>
-            <article className="rounded-xl border border-caramel/30 bg-orange-50 p-4 dark:border-caramel/30 dark:bg-caramel/10">
+            <article className="rounded-xl border border-caramel/30 bg-caramel/10 p-4 dark:border-caramel/30 dark:bg-caramel/10">
               <p className={`${LABEL} !text-caramel-bold dark:!text-caramel`}>Costo de la cita</p>
               <p className="num mt-1 text-2xl font-bold text-caramel-bold dark:text-caramel">{money(last.cost)}</p>
             </article>

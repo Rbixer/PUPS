@@ -485,7 +485,7 @@ export function AdminLayout() {
                       className={({ isActive }) =>
                         `group flex items-center gap-3 rounded-xl px-3 py-[7px] text-sm font-medium no-underline transition duration-150 ease-out-soft ${
                           isActive
-                            ? 'bg-stone-900 text-white shadow-sm dark:bg-caramel-deep dark:text-white'
+                            ? 'bg-caramel-bold text-on-accent shadow-sm'
                             : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800/70 dark:hover:text-stone-100'
                         }`
                       }
@@ -497,7 +497,7 @@ export function AdminLayout() {
                           </span>
                           <span className="truncate">{link.label}</span>
                           {badges[link.to] ? (
-                            <b className={`ml-auto rounded-full px-1.5 text-[11px] leading-5 font-semibold ${isActive ? 'bg-white/20 text-white' : 'bg-caramel-deep text-white'}`}>
+                            <b className={`ml-auto rounded-full px-1.5 text-[11px] leading-5 font-semibold ${isActive ? 'bg-white/25 text-on-accent' : 'bg-caramel-bold text-on-accent'}`}>
                               {badges[link.to]}
                             </b>
                           ) : null}
@@ -513,7 +513,7 @@ export function AdminLayout() {
 
         <div className="border-t border-stone-200/80 p-3 dark:border-stone-800">
           <div className="flex items-center gap-3 px-2 py-1.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-caramel to-caramel-deep text-sm font-semibold text-white shadow-sm">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-caramel to-caramel-bold text-sm font-semibold text-on-accent shadow-sm">
               {initials(currentUser?.name, 'P')}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
