@@ -133,8 +133,14 @@ async function readJsonBody<T>(request: IncomingMessage, limit: number): Promise
   }
 }
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
+/** Detrás de un proxy local (PUPS_TRUST_PROXY=1) la IP real llega en X-Real-IP; sin esa variable no se confía en encabezados. */
 function clientIp(request: IncomingMessage) {
-  return request.socket.remoteAddress ?? 'desconocido'
+  const direct = request.socket.remoteAddress ?? 'desconocido'
+  if (process.env.PUPS_TRUST_PROXY !== '1' || !LOOPBACK.has(direct)) return direct
+  const forwarded = request.headers['x-real-ip']
+  return typeof forwarded === 'string' && forwarded.trim() ? forwarded.trim().slice(0, 64) : direct
 }
 
 function text(value: unknown, max = 120) {

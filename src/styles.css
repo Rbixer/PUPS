@@ -336,6 +336,7 @@ p { margin: 0; }
 .footer { padding: 36px 7vw 28px; overflow: hidden; border-top: 1px solid var(--line); background: var(--surface); }
 .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 22px; margin-top: 10px; }
 .footer-grid p { color: var(--muted); margin-top: 6px; }
+.footer-grid .logo-badge { width: 48px; flex-shrink: 0; border-radius: 12px; }
 .footer a { color: var(--accent); }
 
 .page { max-width: 1180px; }
