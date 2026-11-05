@@ -136,6 +136,18 @@
   .slot-pick.on {
     @apply border-stone-900 bg-stone-900 text-on-accent dark:border-caramel-deep dark:bg-caramel-deep;
   }
+  .site .choice-row button,
+  .site .slot-pick,
+  .site .visit-pick button,
+  .site .doc-list button {
+    @apply aria-pressed:border-caramel-bold aria-pressed:bg-caramel-bold;
+  }
+  .site .slot-pick.on {
+    @apply border-caramel-bold bg-caramel-bold;
+  }
+  .book-summary .btn-primary {
+    @apply bg-(--brand-aqua) bg-none text-caramel-bold shadow-none hover:bg-white hover:bg-none;
+  }
   .visit-pick button[aria-pressed='true'] span,
   .doc-list button[aria-pressed='true'] span {
     @apply text-white/85;

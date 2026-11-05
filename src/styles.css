@@ -206,7 +206,7 @@ p { margin: 0; }
   padding: 8px 14px;
   cursor: pointer;
 }
-.market-filters button[aria-pressed='true'] { background: var(--ink); color: white; border-color: var(--ink); }
+.market-filters button[aria-pressed='true'] { background: var(--accent); color: var(--color-on-accent); border-color: var(--accent); }
 .market { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 16px; align-items: start; }
 .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
 .product {
@@ -1402,7 +1402,8 @@ body:has(.nav.open) { overflow: hidden; }
   to { transform: translateX(-50%); }
 }
 
-/* Paleta de PUP'S en el panel: turquesa y azul marino del arte de la marca. El sitio público conserva la suya. */
+/* Paleta de PUP'S: turquesa y azul marino del arte de la marca, en el sitio, el acceso y el panel. */
+.site,
 .admin,
 .login {
   --brand-aqua: #5ce1e6;
@@ -1442,9 +1443,52 @@ body:has(.nav.open) { overflow: hidden; }
   color: var(--ink);
   background: var(--bg);
 }
+.site ::selection,
 .admin ::selection,
 .login ::selection { background: #bdeff1; color: var(--ink); }
 .admin .empty { border-color: rgba(18, 51, 118, 0.2); background: rgba(92, 225, 230, 0.08); color: var(--muted); }
+
+/* Landing con el estilo del volante: franja turquesa con huellas y cierre en azul marino. */
+.site .hero { background: var(--brand-aqua) url('/login-pattern.svg') 0 0 / 520px 520px; }
+.site .hero .eyebrow { color: var(--brand-navy); font-weight: 600; }
+.site .hero h1,
+.site .hero h1 em { color: var(--brand-navy); }
+.site .hero h1 em {
+  padding: 0 0.1em;
+  background: linear-gradient(transparent 56%, #ffffff 56%, #ffffff 94%, transparent 94%);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.site .hero .lede { color: #123a5c; }
+.site .hero-metrics,
+.site .stage-card { border-color: transparent; box-shadow: 0 24px 56px -26px rgba(18, 51, 118, 0.6); }
+.site .pillar .num,
+.site .step .num,
+.site .service-row .num { background: var(--brand-navy); color: #ffffff; }
+.site .pillar { border-top: 3px solid var(--brand-aqua); }
+.site .section:has(.steps) { background: var(--cream); }
+.site .steps li { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.site .steps .num {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: var(--brand-navy);
+  color: #ffffff;
+  font-size: 0.72rem;
+}
+.site .steps p { color: var(--muted); }
+.site .book-summary { background: var(--brand-navy); }
+.site .book-card > header span { background: var(--brand-navy); }
+.site .footer { background: var(--brand-navy); color: #eef4ff; border-top: 4px solid var(--brand-aqua); }
+.site .footer .eyebrow,
+.site .footer-grid p,
+.site .footer .brand-name small { color: #b9c8e4; }
+.site .footer a { color: var(--brand-aqua); }
+.site .footer-staff { border-color: rgba(255, 255, 255, 0.14); }
+.site .footer .footer-staff a { color: #9fb2d4; }
 
 .admin .side {
   padding: 14px 12px 12px;
