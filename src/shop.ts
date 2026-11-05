@@ -148,8 +148,9 @@ export function demoCatalog(): CatalogItem[] {
   return SHOP_PRODUCTS.map((item) => ({ ...item, active: true }))
 }
 
+/** Catálogo guardado. Solo un estado antiguo sin catálogo usa el de muestra; uno vacío se queda vacío. */
 export function shelfOf(products?: CatalogItem[]): CatalogItem[] {
-  return products && products.length > 0 ? products : demoCatalog()
+  return products ?? demoCatalog()
 }
 
 export function visibleCatalog(products?: CatalogItem[]): CatalogItem[] {

@@ -1,6 +1,7 @@
 import { addDays, isoDate, money, newId, normalizePhone } from './format'
 import { applyShopOrder, shelfOf, type ShopLine } from './shop'
 import type {
+  Appointment,
   AppState,
   CashClose,
   CatalogItem,
@@ -39,26 +40,128 @@ export const EXPENSE_CATEGORIES = [
   'Pago de impuestos SAT',
   'Transporte',
   'Anticipo a empleado',
+  'Prestaciones laborales',
+  'Pago de préstamo',
   'Otros gastos',
 ] as const
 
+/** Ingresos que no son venta: no generan IVA ni impuesto del pequeño contribuyente. */
+export const INCOME_CATEGORIES = ['Servicio', 'Aporte de capital', 'Préstamo recibido', 'Otro ingreso no gravado'] as const
+
 export const PENDING_ORDER = 'Por cobrar al entregar.'
+export const AUTO_CHARGE = 'Cobro al completar la cita.'
 export const IVA_RATE = 0.12
 
-export function nextDocument(movements: Movement[], type: Movement['type']) {
-  const seq = movements
-    .filter((item) => item.type === type)
-    .reduce((max, item) => Math.max(max, Number(item.document.replace(/\D/g, '')) || 0), type === 'egreso' ? 12 : 100)
-  return `${type === 'egreso' ? 'EG' : 'ING'}-${String(seq + 1).padStart(3, '0')}`
+/** Régimen vigente en una fecha. Sin historial, el régimen elegido aplica a todo. */
+export function regimeOn(settings: AppState['settings'], date: string) {
+  const history = settings.taxHistory ?? []
+  if (history.length === 0) return settings.taxRegime
+  let regime: AppState['settings']['taxRegime']
+  for (const item of [...history].sort((a, b) => a.from.localeCompare(b.from))) if (item.from <= date) regime = item.regime
+  return regime
 }
 
-function nextSerial(items: { number: string }[], prefix: string) {
-  const seq = items.reduce((max, item) => Math.max(max, Number(item.number.replace(/\D/g, '')) || 0), 0)
+/** Cambia el régimen desde hoy y guarda el anterior para el historial. */
+export function changeRegime(settings: AppState['settings'], regime: AppState['settings']['taxRegime'], today = isoDate()): AppState['settings'] {
+  const history = settings.taxHistory?.length ? [...settings.taxHistory] : settings.taxRegime ? [{ from: '0000-01-01', regime: settings.taxRegime }] : []
+  const kept = history.filter((item) => item.from < today)
+  return { ...settings, taxRegime: regime, taxHistory: [...kept, { from: today, regime }] }
+}
+
+const sequence = (value: string) => Number(value.replace(/\D/g, '')) || 0
+
+/** Siguiente ING o EG. Con el estado completo respeta los números ya usados aunque el movimiento se haya borrado. */
+export function nextDocument(source: AppState | Movement[], type: Movement['type']) {
+  const movements = Array.isArray(source) ? source : source.movements
+  const prefix = type === 'egreso' ? 'EG' : 'ING'
+  const floor = Array.isArray(source) ? 0 : source.counters?.[prefix] ?? 0
+  const seq = movements
+    .filter((item) => item.type === type)
+    .reduce((max, item) => Math.max(max, sequence(item.document)), Math.max(floor, type === 'egreso' ? 12 : 100))
+  return `${prefix}-${String(seq + 1).padStart(3, '0')}`
+}
+
+function nextSerial(items: { number: string }[], prefix: string, floor = 0) {
+  const seq = items.reduce((max, item) => Math.max(max, sequence(item.number)), floor)
   return `${prefix}-${String(seq + 1).padStart(4, '0')}`
 }
 
-function closedOn(state: AppState, date: string) {
+/** Guarda el número más alto de cada serie para que un documento anulado o borrado no se repita. */
+export function withCounters(state: AppState): AppState {
+  const counters = { ...(state.counters ?? {}) }
+  const keep = (prefix: string, value: number) => {
+    if (value > (counters[prefix] ?? 0)) counters[prefix] = value
+  }
+  for (const item of state.movements) keep(item.type === 'egreso' ? 'EG' : 'ING', sequence(item.document))
+  for (const item of state.sales ?? []) keep('VEN', sequence(item.number))
+  for (const item of state.purchases ?? []) keep('COM', sequence(item.number))
+  for (const item of state.payables ?? []) keep('CXP', sequence(item.number))
+  for (const item of state.appointments) keep('FOLIO', item.folio)
+  const changed = Object.keys(counters).some((key) => counters[key] !== state.counters?.[key])
+  return changed ? { ...state, counters } : state
+}
+
+export function nextFolio(state: AppState) {
+  return Math.max(state.counters?.FOLIO ?? 0, state.appointments.reduce((max, item) => Math.max(max, item.folio), 900)) + 1
+}
+
+export function closedOn(state: AppState, date: string) {
   return (state.cashCloses ?? []).some((item) => item.date === date)
+}
+
+export type ChargeNote = { document: string; amount: number; created: boolean; removed?: boolean }
+
+/**
+ * Deja el ingreso de una cita al día con su estado: lo crea al completarla, lo ajusta si cambia el costo
+ * y lo quita si deja de estar completada. Mover dinero pide permiso de caja y un día sin corte.
+ */
+export function chargeAppointment(state: AppState, appointment: Appointment, method: string | undefined, canCash: boolean): Op<ChargeNote | null> {
+  const movements = state.movements
+  const unchanged = { ok: true as const, value: null, patch: {} }
+  if (method === 'Pedido') return fail('Elige cómo pagó el cliente.')
+  const auto = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio && item.notes === AUTO_CHARGE)
+  const guard = (date: string) => {
+    if (!canCash) return 'Cobrar o cambiar el cobro de una cita necesita permiso de caja.'
+    if (closedOn(state, date)) return `La caja del ${date} ya se cerró. Ese cobro ya no se puede cambiar.`
+    return null
+  }
+  if (appointment.status !== 'completada' || appointment.cost <= 0) {
+    if (!auto) return unchanged
+    const problem = guard(auto.date)
+    if (problem) return fail(problem)
+    return {
+      ok: true,
+      value: { document: auto.document, amount: auto.amount, created: false, removed: true },
+      patch: { movements: movements.filter((item) => item.id !== auto.id) },
+    }
+  }
+  const existing = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio && !item.reverses)
+  if (!existing) {
+    const date = closedOn(state, appointment.date) ? isoDate() : appointment.date
+    const problem = guard(date)
+    if (problem) return fail(problem)
+    const created: Movement = {
+      id: newId(),
+      type: 'ingreso',
+      date,
+      concept: `Servicio cita #${appointment.folio}`,
+      amount: round2(appointment.cost),
+      method: method ?? 'Efectivo',
+      notes: AUTO_CHARGE,
+      document: nextDocument(state, 'ingreso'),
+      folio: appointment.folio,
+    }
+    return { ok: true, value: { document: created.document, amount: created.amount, created: true }, patch: { movements: [created, ...movements] } }
+  }
+  const nextMethod = method && existing.notes === AUTO_CHARGE ? method : existing.method
+  if (existing.amount === appointment.cost && nextMethod === existing.method) return unchanged
+  const problem = guard(existing.date)
+  if (problem) return fail(problem)
+  return {
+    ok: true,
+    value: { document: existing.document, amount: appointment.cost, created: false },
+    patch: { movements: movements.map((item) => (item.id === existing.id ? { ...item, amount: round2(appointment.cost), method: nextMethod } : item)) },
+  }
 }
 
 /** Mueve existencia sobre una copia del catálogo y devuelve el registro del kárdex. */
@@ -104,7 +207,7 @@ export function recordSale(state: AppState, input: SaleInput): Op<Sale> {
     .filter((line) => line.qty > 0)
   if (wanted.length === 0) return fail('Agrega al menos un producto o servicio.')
   const products = shelfOf(state.products).map((item) => ({ ...item }))
-  const number = nextSerial(state.sales ?? [], 'VEN')
+  const number = nextSerial(state.sales ?? [], 'VEN', state.counters?.VEN)
   const moves: StockMove[] = []
   const lines: Sale['lines'] = []
   for (const line of wanted) {
@@ -141,7 +244,7 @@ export function recordSale(state: AppState, input: SaleInput): Op<Sale> {
     total,
     method: input.method,
     status: 'pagada',
-    document: nextDocument(state.movements, 'ingreso'),
+    document: nextDocument(state, 'ingreso'),
     userId: input.userId,
   }
   const movement: Movement = {
@@ -177,8 +280,8 @@ export function placeOrder(state: AppState, input: { name: string; phone: string
   const applied = applyShopOrder(catalog, input.lines)
   if (!applied.ok) return applied
   const date = isoDate()
-  const number = nextSerial(state.sales ?? [], 'VEN')
-  const document = nextDocument(state.movements, 'ingreso')
+  const number = nextSerial(state.sales ?? [], 'VEN', state.counters?.VEN)
+  const document = nextDocument(state, 'ingreso')
   const lines: Sale['lines'] = []
   const moves: StockMove[] = []
   for (const line of input.lines) {
@@ -211,7 +314,7 @@ export function placeOrder(state: AppState, input: { name: string; phone: string
     phone,
     lines,
     discount: 0,
-    total: applied.total,
+    total: round2(applied.total),
     method: 'Pedido',
     status: 'por cobrar',
     document,
@@ -221,14 +324,14 @@ export function placeOrder(state: AppState, input: { name: string; phone: string
     createdAt: new Date().toISOString(),
     name: client,
     phone,
-    message: ['Pedido de tienda', summary, `Total ${money(applied.total)}`].join('\n'),
+    message: ['Pedido de tienda', summary, `Total ${money(round2(applied.total))}`].join('\n'),
   }
   const movement: Movement = {
     id: newId(),
     type: 'ingreso',
     date,
     concept: `Tienda · ${client}`,
-    amount: applied.total,
+    amount: round2(applied.total),
     method: 'Pedido',
     notes: `${PENDING_ORDER}\n${phone}\n${summary}`,
     document,
@@ -237,7 +340,7 @@ export function placeOrder(state: AppState, input: { name: string; phone: string
   }
   return {
     ok: true,
-    value: { document, total: applied.total },
+    value: { document, total: round2(applied.total) },
     patch: {
       products: applied.products,
       sales: [sale, ...(state.sales ?? [])],
@@ -248,10 +351,10 @@ export function placeOrder(state: AppState, input: { name: string; phone: string
   }
 }
 
-/** Cobra un pedido de la tienda: el ingreso pasa a la fecha y el método del cobro. */
+/** Cobra un pedido de la tienda. El pedido entra a la contabilidad el día del cobro, nunca antes. */
 export function settleOrder(state: AppState, movementId: string, method: string, date = isoDate()): Op<Movement> {
   const movement = state.movements.find((item) => item.id === movementId)
-  if (!movement || movement.method !== 'Pedido') return fail('Ese pedido ya no está por cobrar.')
+  if (!movement || movement.method !== 'Pedido' || movement.type !== 'ingreso') return fail('Ese pedido ya no está por cobrar.')
   if (!method || method === 'Pedido') return fail('Elige cómo pagó el cliente.')
   if (closedOn(state, date)) return fail('La caja de hoy ya se cerró.')
   const next: Movement = {
@@ -270,20 +373,45 @@ export function settleOrder(state: AppState, movementId: string, method: string,
   }
 }
 
-export function voidSale(state: AppState, saleId: string, reason: string): Op<Sale> {
+/**
+ * Anula una venta. Si ya se cobró, deja un egreso de devolución con fecha de hoy y el mes original queda intacto.
+ * Un pedido de la tienda que nunca se cobró simplemente se cancela.
+ */
+export function voidSale(state: AppState, saleId: string, reason: string, date = isoDate()): Op<Sale> {
   const sale = (state.sales ?? []).find((item) => item.id === saleId)
   if (!sale || sale.status === 'anulada') return fail('Esa venta ya no se puede anular.')
   if (!reason.trim()) return fail('Escribe el motivo de la anulación.')
-  const movement = state.movements.find((item) => item.saleId === saleId)
-  if (movement && movement.method !== 'Pedido' && closedOn(state, movement.date)) return fail('La caja de ese día ya se cerró.')
+  const movement = state.movements.find((item) => item.saleId === saleId && item.type === 'ingreso' && !item.reverses)
+  const collected = Boolean(movement && movement.method !== 'Pedido')
+  if (collected && closedOn(state, date)) return fail('La caja de hoy ya se cerró. La devolución se registra mañana.')
   const products = shelfOf(state.products).map((item) => ({ ...item }))
   const moves: StockMove[] = []
   for (const line of sale.lines) {
     if (!line.productId) continue
-    const move = shift(products, line.productId, line.qty, 'anulación', sale.number, reason.trim(), isoDate())
+    const move = shift(products, line.productId, line.qty, 'anulación', sale.number, reason.trim(), date)
     if (move) moves.push(move)
   }
   const next: Sale = { ...sale, status: 'anulada' }
+  let movements = state.movements
+  if (movement && !collected) movements = movements.filter((item) => item.id !== movement.id)
+  if (movement && collected) {
+    movements = [
+      {
+        id: newId(),
+        type: 'egreso',
+        date,
+        concept: `Devolución ${sale.number}${sale.clientName ? ` · ${sale.clientName}` : ''}`,
+        amount: movement.amount,
+        method: movement.method,
+        notes: reason.trim(),
+        document: nextDocument(state, 'egreso'),
+        category: 'Devolución de venta',
+        saleId,
+        reverses: movement.id,
+      },
+      ...movements,
+    ]
+  }
   return {
     ok: true,
     value: next,
@@ -291,12 +419,13 @@ export function voidSale(state: AppState, saleId: string, reason: string): Op<Sa
       products,
       sales: (state.sales ?? []).map((item) => (item.id === saleId ? next : item)),
       stockMoves: [...moves, ...(state.stockMoves ?? [])],
-      movements: state.movements.filter((item) => item.saleId !== saleId),
+      movements,
     },
   }
 }
 
-export function saveProduct(state: AppState, product: CatalogItem): Op<CatalogItem> {
+/** Alta o edición de un producto. La existencia solo se fija al darlo de alta; después se mueve con compras, ventas o ajustes. */
+export function saveProduct(state: AppState, product: CatalogItem, canCost = true): Op<CatalogItem> {
   const name = product.name.trim()
   if (!name) return fail('El nombre es obligatorio.')
   if (!product.category) return fail('Elige una categoría.')
@@ -306,6 +435,9 @@ export function saveProduct(state: AppState, product: CatalogItem): Op<CatalogIt
   if (product.kind !== 'insumo' && !product.image.trim()) return fail('El producto necesita una foto.')
   const products = shelfOf(state.products).map((item) => ({ ...item }))
   const previous = products.find((item) => item.id === product.id)
+  if (previous && product.cost !== undefined && round2(product.cost) !== (previous.cost ?? undefined) && !canCost) {
+    return fail('Cambiar el costo necesita permiso de compras.')
+  }
   const next: CatalogItem = {
     ...product,
     id: product.id || newId(),
@@ -323,10 +455,10 @@ export function saveProduct(state: AppState, product: CatalogItem): Op<CatalogIt
   const index = products.findIndex((item) => item.id === next.id)
   if (index >= 0) products[index] = next
   else products.unshift(next)
-  const target = Math.floor(product.stock)
   const moves: StockMove[] = []
-  if (target !== next.stock) {
-    const move = shift(products, next.id, target - next.stock, previous ? 'ajuste' : 'inicial', previous ? 'Catálogo' : 'Alta', previous ? 'Ajuste desde el catálogo' : 'Existencia inicial', isoDate())
+  const initial = Math.floor(product.stock)
+  if (!previous && initial > 0) {
+    const move = shift(products, next.id, initial, 'inicial', 'Alta', 'Existencia inicial', isoDate())
     if (move) moves.push(move)
   }
   return {
@@ -397,8 +529,8 @@ export function recordPurchase(state: AppState, input: PurchaseInput): Op<Purcha
   if (input.terms === 'contado' && closedOn(state, input.date)) return fail('La caja de ese día ya se cerró.')
   const total = round2(lines.reduce((sum, line) => sum + line.qty * line.cost, 0))
   if (total <= 0) return fail('La compra debe ser mayor a cero.')
-  const credit = state.settings.taxRegime === 'general' && input.withTax
-  const number = nextSerial(state.purchases ?? [], 'COM')
+  const credit = regimeOn(state.settings, input.date) === 'general' && input.withTax
+  const number = nextSerial(state.purchases ?? [], 'COM', state.counters?.COM)
   const products = shelfOf(state.products).map((item) => ({ ...item }))
   const moves: StockMove[] = []
   for (const line of lines) {
@@ -429,7 +561,7 @@ export function recordPurchase(state: AppState, input: PurchaseInput): Op<Purcha
     stockMoves: [...moves, ...(state.stockMoves ?? [])],
   }
   if (input.terms === 'contado') {
-    const document = nextDocument(state.movements, 'egreso')
+    const document = nextDocument(state, 'egreso')
     purchase.method = input.method
     purchase.document = document
     patch.movements = [
@@ -450,7 +582,7 @@ export function recordPurchase(state: AppState, input: PurchaseInput): Op<Purcha
   } else {
     const payable: Payable = {
       id: newId(),
-      number: nextSerial(state.payables ?? [], 'CXP'),
+      number: nextSerial(state.payables ?? [], 'CXP', state.counters?.CXP),
       date: input.date,
       dueDate: input.dueDate || addDays(input.date, 30),
       supplierId: supplier.id,
@@ -476,7 +608,7 @@ export function payableBalance(payable: Payable) {
 
 export function savePayable(
   state: AppState,
-  input: { date: string; dueDate: string; supplierId?: string; supplierName: string; invoice: string; concept: string; category: string; amount: number },
+  input: { date: string; dueDate: string; supplierId?: string; supplierName: string; invoice: string; concept: string; category: string; amount: number; withTax?: boolean },
 ): Op<Payable> {
   const amount = round2(input.amount)
   const supplier = (state.suppliers ?? []).find((item) => item.id === input.supplierId)
@@ -487,7 +619,7 @@ export function savePayable(
   if (!input.dueDate) return fail('Indica la fecha de vencimiento.')
   const payable: Payable = {
     id: newId(),
-    number: nextSerial(state.payables ?? [], 'CXP'),
+    number: nextSerial(state.payables ?? [], 'CXP', state.counters?.CXP),
     date: input.date,
     dueDate: input.dueDate,
     supplierId: supplier?.id,
@@ -497,6 +629,7 @@ export function savePayable(
     category: input.category || 'Otros gastos',
     amount,
     payments: [],
+    ...(input.withTax ? { withTax: true } : {}),
   }
   return { ok: true, value: payable, patch: { payables: [payable, ...(state.payables ?? [])] } }
 }
@@ -511,7 +644,7 @@ export function payPayable(state: AppState, input: { payableId: string; amount: 
   if (amount > balance) return fail(`El saldo es ${money(balance)}.`)
   if (!input.method || input.method === 'Pedido') return fail('Elige cómo se pagó.')
   if (closedOn(state, input.date)) return fail('La caja de ese día ya se cerró.')
-  const document = nextDocument(state.movements, 'egreso')
+  const document = nextDocument(state, 'egreso')
   const movement: Movement = {
     id: newId(),
     type: 'egreso',
@@ -547,7 +680,7 @@ export function saveFixedCost(state: AppState, item: FixedCost): Op<FixedCost> {
   return { ok: true, value: next, patch: { fixedCosts: exists ? list.map((entry) => (entry.id === next.id ? next : entry)) : [...list, next] } }
 }
 
-export function payFixedCost(state: AppState, input: { fixedId: string; period: string; amount: number; method: string; date: string }): Op<Movement> {
+export function payFixedCost(state: AppState, input: { fixedId: string; period: string; amount: number; method: string; date: string; withTax?: boolean }): Op<Movement> {
   const fixed = (state.fixedCosts ?? []).find((item) => item.id === input.fixedId)
   if (!fixed) return fail('Gasto fijo no encontrado.')
   if (state.movements.some((item) => item.fixedId === fixed.id && item.period === input.period)) return fail(`${fixed.name} ya se pagó ese mes.`)
@@ -563,10 +696,11 @@ export function payFixedCost(state: AppState, input: { fixedId: string; period: 
     amount,
     method: input.method,
     notes: 'Gasto fijo del mes.',
-    document: nextDocument(state.movements, 'egreso'),
+    document: nextDocument(state, 'egreso'),
     category: fixed.category,
     fixedId: fixed.id,
     period: input.period,
+    ...(input.withTax ?? fixed.withTax ? { withTax: true } : {}),
   }
   return { ok: true, value: movement, patch: { movements: [movement, ...state.movements] } }
 }
@@ -586,6 +720,8 @@ export function payPayroll(state: AppState, input: { period: string; lines: Payr
   if ((state.payrolls ?? []).some((item) => item.period === input.period)) return fail('La planilla de ese mes ya se pagó.')
   const lines = input.lines.filter((line) => line.net > 0 || line.salary > 0)
   if (lines.length === 0) return fail('No hay trabajadores con salario para este mes.')
+  const negative = lines.find((line) => line.net < 0)
+  if (negative) return fail(`El líquido de ${negative.name} queda negativo. Revisa sus descuentos.`)
   if (!input.method || input.method === 'Pedido') return fail('Elige cómo se pagó.')
   if (closedOn(state, input.date)) return fail('La caja de ese día ya se cerró.')
   const net = round2(lines.reduce((sum, line) => sum + line.net, 0))
@@ -595,7 +731,7 @@ export function payPayroll(state: AppState, input: { period: string; lines: Payr
     period: input.period,
     paidAt: input.date,
     method: input.method,
-    document: nextDocument(state.movements, 'egreso'),
+    document: nextDocument(state, 'egreso'),
     lines,
   }
   const movement: Movement = {
@@ -616,7 +752,7 @@ export function payPayroll(state: AppState, input: { period: string; lines: Payr
     const due = isoDate(new Date(year, month, 20))
     const payable: Payable = {
       id: newId(),
-      number: nextSerial(state.payables ?? [], 'CXP'),
+      number: nextSerial(state.payables ?? [], 'CXP', state.counters?.CXP),
       date: input.date,
       dueDate: due,
       supplierName: 'IGSS',
@@ -704,8 +840,8 @@ export function cashSummary(movements: Movement[], date: string, opening: number
   let cashOut = 0
   let pending = 0
   for (const item of today) {
-    if (item.type === 'ingreso' && item.method === 'Pedido') {
-      pending += item.amount
+    if (item.method === 'Pedido') {
+      if (item.type === 'ingreso') pending += item.amount
       continue
     }
     const signed = item.type === 'ingreso' ? item.amount : -item.amount

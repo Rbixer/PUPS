@@ -10,7 +10,7 @@ export function BackupReminder() {
     <div className="backup-reminder" role="status">
       <p>
         <strong>{hasBackedUp() ? `Hace ${days} días que no descargas un respaldo.` : 'Todavía no has descargado un respaldo.'}</strong>{' '}
-        Los datos viven en este equipo; una copia fuera del local los protege.
+        El servidor guarda una copia diaria; otra fuera del local protege los datos si ese equipo falla.
       </p>
       <div>
         <button

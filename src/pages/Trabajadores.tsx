@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { defaultsFor } from '../access'
 import { Field } from '../components/ui'
-import { hashPassword, isoDate, money } from '../format'
+import { isoDate, money, parseAmount } from '../format'
 import { useStore } from '../store'
 import type { User } from '../types'
 
@@ -31,6 +31,7 @@ export function Trabajadores() {
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Draft>(emptyDraft)
+  const [busy, setBusy] = useState(false)
   const workers = state.users
     .filter((item) => item.employeeCode)
     .sort((a, b) => (a.employeeCode ?? '').localeCompare(b.employeeCode ?? ''))
@@ -119,16 +120,20 @@ export function Trabajadores() {
         className="panel team-form"
         onSubmit={async (event) => {
           event.preventDefault()
-          const salary = Number(form.salary)
+          if (busy) return
+          const salary = parseAmount(form.salary)
           if (!Number.isFinite(salary) || salary < 0) {
             setError('El sueldo debe ser un número válido.')
             return
           }
+          setBusy(true)
           if (editingId) {
             const worker = state.users.find((item) => item.id === editingId)
-            if (!worker) return
-            const password = form.password ? await hashPassword(form.password) : undefined
-            const message = updateUser(editingId, {
+            if (!worker) {
+              setBusy(false)
+              return
+            }
+            const message = await updateUser(editingId, {
               name: form.name,
               lastName: form.lastName,
               phone: form.phone,
@@ -137,8 +142,9 @@ export function Trabajadores() {
               username: form.username,
               role: worker.role,
               permissions: worker.permissions ?? defaultsFor(worker.role),
-              password,
+              password: form.password || undefined,
             })
+            setBusy(false)
             setError(message ?? '')
             if (!message) {
               setEditingId(null)
@@ -146,19 +152,19 @@ export function Trabajadores() {
             }
             return
           }
-          const password = await hashPassword(form.password)
-          const message = addUser({
+          const message = await addUser({
             name: form.name,
             lastName: form.lastName.trim(),
             phone: form.phone.trim(),
             email: form.email.trim(),
             salary,
             username: form.username,
-            password,
+            password: form.password,
             role: 'Recepción',
             permissions: defaultsFor('Recepción'),
             employeeCode: nextCode(state.users),
           })
+          setBusy(false)
           setError(message ?? '')
           if (!message) setForm(emptyDraft())
         }}
@@ -186,7 +192,8 @@ export function Trabajadores() {
               type="password"
               value={form.password}
               autoComplete="new-password"
-              placeholder={editingId ? 'Vacía si se queda la actual' : ''}
+              placeholder={editingId ? 'Vacía si se queda la actual' : 'Mínimo 8 caracteres'}
+              minLength={8}
               onChange={(event) => set('password', event.target.value)}
               required={!editingId}
             />
@@ -199,8 +206,8 @@ export function Trabajadores() {
           </Field>
         </div>
         <p className="hint">El código no cambia. Al guardar una cita con su usuario, esa cita suma en su cuenta.</p>
-        <button type="submit" className="btn btn-primary">
-          {editingId ? 'Guardar cambios' : 'Crear trabajador'}
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {busy ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Crear trabajador'}
         </button>
         {editingId ? (
           <button

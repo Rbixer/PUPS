@@ -12,6 +12,7 @@ export function Market() {
   const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
   const [sent, setSent] = useState('')
+  const [sending, setSending] = useState(false)
 
   const catalog = shelfOf(state.products)
   const visible = visibleCatalog(state.products).filter((item) => category === 'Todo' || item.category === category)
@@ -42,7 +43,7 @@ export function Market() {
         <p className="eyebrow">Tienda</p>
         <h2>Shampoo, accesorios y cuidado para llevar.</h2>
         <p className="lede">
-          Precios en quetzales. Al enviar el pedido se aparta la existencia y el cobro queda en caja, para cobrarlo al entregar.
+          Precios en quetzales. Al enviar el pedido te apartamos los productos y pagas al recogerlos o al recibirlos.
         </p>
       </div>
 
@@ -120,8 +121,9 @@ export function Market() {
           </p>
           <form
             className="cart-form"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault()
+              if (sending) return
               if (lines.length === 0) {
                 setError('Agrega al menos un producto.')
                 return
@@ -130,11 +132,13 @@ export function Market() {
                 setError('Nombre y teléfono son obligatorios.')
                 return
               }
-              const result = placeShopOrder({
+              setSending(true)
+              const result = await placeShopOrder({
                 name,
                 phone,
                 lines: lines.map((line) => ({ id: line.item.id, qty: line.qty })),
               })
+              setSending(false)
               if (!result.ok) {
                 setError(result.error)
                 setSent('')
@@ -144,7 +148,7 @@ export function Market() {
               setName('')
               setPhone('')
               setError('')
-              setSent(`Pedido enviado. El cobro ${result.document} quedó en caja, por cobrar al entregar.`)
+              setSent(`Pedido recibido con el número ${result.document}. Te escribimos para coordinar la entrega.`)
             }}
           >
             <Field label="Nombre">
@@ -155,8 +159,8 @@ export function Market() {
             </Field>
             {error ? <p className="form-error">{error}</p> : null}
             {sent ? <p className="banner">{sent}</p> : null}
-            <button type="submit" className="btn btn-primary" disabled={lines.length === 0}>
-              Enviar pedido
+            <button type="submit" className="btn btn-primary" disabled={lines.length === 0 || sending}>
+              {sending ? 'Enviando…' : 'Enviar pedido'}
             </button>
           </form>
         </aside>

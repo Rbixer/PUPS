@@ -2,13 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { clientProfiles } from '../clients'
 import { Metrics, StatusPill, Tag } from '../components/ui'
-import { formatName, longDate, money, show, whatsappUrl } from '../format'
+import { formatName, initials, longDate, money, show, whatsappUrl } from '../format'
 import { useStore } from '../store'
 
-function initials(name: string) {
-  const parts = formatName(name).split(' ').filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'C'
-}
 
 export function Clientes() {
   const { state, allows } = useStore()
@@ -78,7 +74,7 @@ export function Clientes() {
           <div className="biz-stack">
             <div className="ledger">
               <div className="client-head">
-                <span className="client-mark">{initials(current.name)}</span>
+                <span className="client-mark">{initials(current.name, 'C')}</span>
                 <div>
                   <h2>{formatName(current.name) || 'Sin nombre'}</h2>
                   <p>

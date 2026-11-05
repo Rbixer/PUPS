@@ -2,9 +2,9 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { allows as userAllows } from './access'
 import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
-import { digits, hashPassword, newId, normalizePhone } from './format'
+import { digits, newId, normalizePhone } from './format'
 import * as ops from './ops'
-import { nextDocument, type Op } from './ops'
+import type { ChargeNote, Op } from './ops'
 import type { ShopLine } from './shop'
 import type {
   Appointment,
@@ -31,75 +31,42 @@ import type {
   WaMessage,
 } from './types'
 
-export type ChargeNote = { document: string; amount: number; created: boolean; removed?: boolean }
+export type { ChargeNote } from './ops'
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
-const AUTO_CHARGE = 'Cobro al completar la cita.'
+type Mutation = (current: AppState) => AppState | null
+
+type PublicData = {
+  revision: number
+  products: CatalogItem[]
+  settings: Pick<Settings, 'whatsapp' | 'address' | 'hours'>
+  busy: { date: string; time: string; minutes: number }[]
+}
+
 const DENIED = 'No tienes permiso para esta acción.'
-
-function syncIncome(appointment: Appointment, movements: Movement[], method?: string) {
-  const auto = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio && item.notes === AUTO_CHARGE)
-  if (appointment.status !== 'completada' || appointment.cost <= 0) {
-    if (!auto) return { movements, note: null as ChargeNote | null }
-    return {
-      movements: movements.filter((item) => item.id !== auto.id),
-      note: { document: auto.document, amount: auto.amount, created: false, removed: true } satisfies ChargeNote,
-    }
-  }
-  const existing = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio)
-  if (!existing) {
-    const created: Movement = {
-      id: newId(),
-      type: 'ingreso',
-      date: appointment.date,
-      concept: `Servicio cita #${appointment.folio}`,
-      amount: appointment.cost,
-      method: method ?? 'Efectivo',
-      notes: AUTO_CHARGE,
-      document: nextDocument(movements, 'ingreso'),
-      folio: appointment.folio,
-    }
-    return { movements: [created, ...movements], note: { document: created.document, amount: created.amount, created: true } }
-  }
-  if (existing.amount === appointment.cost && (!method || existing.method === method)) {
-    return { movements, note: null as ChargeNote | null }
-  }
-  return {
-    movements: movements.map((item) =>
-      item.id === existing.id
-        ? { ...item, amount: appointment.cost, method: method && item.notes === AUTO_CHARGE ? method : item.method }
-        : item,
-    ),
-    note: { document: existing.document, amount: appointment.cost, created: false },
-  }
-}
-
+const OFFLINE = 'No hay conexión con el equipo del local. Revisa la red e inténtalo de nuevo.'
 const KEY = 'pups-monica-v1'
-const SESSION = 'pups-session'
+const SYNC = 'pups-sync'
+const TOKEN = 'pups-token'
+const PUBLIC = 'pups-public'
+const WEAK = 'pups-weak'
+const EXPIRED = 'pups-expired'
+const POLL_MS = 3000
+const PUBLIC_POLL_MS = 20_000
 
-function bump(current: AppState, patch: Partial<AppState>): AppState {
-  return { ...current, ...patch, revision: (current.revision ?? 0) + 1 }
-}
-
-function shared(state: AppState): AppState {
-  return { ...state, sessionUserId: null }
-}
-
-/** Copia ligera para localStorage: las fotos pesan y el cupo del navegador es corto. */
+/** Copia ligera para localStorage: las fotos que todavía no subieron pesan y el cupo del navegador es corto. */
 function lightweight(state: AppState): AppState {
+  const light = (value?: string) => (value?.startsWith('data:') ? '' : value)
   return {
     ...state,
     appointments: state.appointments.map((item) => ({
       ...item,
-      beforePhoto: undefined,
-      afterPhoto: undefined,
-      report: item.report ? { ...item.report, photos: item.report.photos?.map(() => '') } : item.report,
+      beforePhoto: light(item.beforePhoto),
+      afterPhoto: light(item.afterPhoto),
+      report: item.report ? { ...item.report, photos: item.report.photos?.map((photo) => light(photo) ?? '') } : item.report,
     })),
-    products: state.products?.map((item) => ({
-      ...item,
-      image: item.image.startsWith('data:') ? '' : item.image,
-    })),
+    products: state.products?.map((item) => ({ ...item, image: light(item.image) ?? '' })),
   }
 }
 
@@ -117,76 +84,152 @@ function absorb(remote: AppState, sessionUserId: string | null): AppState {
   }
 }
 
-function persist(payload: AppState) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(payload))
-  } catch {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(lightweight(payload)))
-    } catch {
-      /* Sin cupo: el equipo del local sigue siendo la copia principal. */
+/** Estado del sitio público: sin datos de clientes, solo catálogo, datos del negocio y horas ocupadas. */
+function anonymous(data?: PublicData | null): AppState {
+  const seed = createSeed()
+  const busy: Appointment[] = (data?.busy ?? []).map((item, index) => ({
+    id: `ocupado-${index}`,
+    folio: 0,
+    petName: '',
+    date: item.date,
+    time: item.time,
+    status: 'pendiente',
+    clientName: '',
+    phone: '',
+    sex: '',
+    breed: '',
+    service: item.minutes >= 90 ? 'Premium' : item.minutes <= 30 ? 'Consulta veterinaria' : 'Baño y corte',
+    size: '',
+    coat: '',
+    allergies: '',
+    cost: 0,
+  }))
+  return {
+    ...seed,
+    users: [],
+    appointments: busy,
+    movements: [],
+    leads: [],
+    conversations: [],
+    controlRows: [],
+    sales: [],
+    stockMoves: [],
+    suppliers: [],
+    purchases: [],
+    payables: [],
+    fixedCosts: [],
+    payrolls: [],
+    tasks: [],
+    cashCloses: [],
+    products: data?.products ?? seed.products,
+    settings: { ...seed.settings, ...(data?.settings ?? {}) },
+    sessionUserId: null,
+    revision: data?.revision ?? 0,
+  }
+}
+
+/** Une lo hecho sin conexión con lo que el servidor guardó mientras tanto: suma los registros nuevos de este equipo. */
+export function mergeOffline(remote: AppState, local: AppState): AppState {
+  const keys = ['appointments', 'movements', 'leads', 'conversations', 'sales', 'stockMoves', 'suppliers', 'purchases', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses'] as const
+  const merged: AppState = { ...remote }
+  for (const key of keys) {
+    const theirs = (remote[key] ?? []) as { id: string }[]
+    const mine = (local[key] ?? []) as { id: string }[]
+    const known = new Set(theirs.map((item) => item.id))
+    const added = mine.filter((item) => !known.has(item.id))
+    if (added.length) (merged as Record<string, unknown>)[key] = [...added, ...theirs]
+  }
+  const used = new Set(remote.movements.map((item) => item.document))
+  const renumbered: Movement[] = []
+  for (const item of merged.movements) {
+    if (remote.movements.some((theirs) => theirs.id === item.id) || !used.has(item.document)) {
+      used.add(item.document)
+      renumbered.push(item)
+      continue
     }
+    const document = ops.nextDocument({ ...merged, movements: [...renumbered, ...merged.movements] }, item.type)
+    used.add(document)
+    renumbered.push({ ...item, document })
   }
+  return { ...merged, movements: renumbered }
 }
 
-const REMEMBER = 'pups-remember'
-const LOCK = 'pups-login-lock'
-const MAX_TRIES = 5
-const LOCK_MS = 30_000
-
-function readLock() {
+function readJson<T>(storage: Storage, key: string): T | null {
   try {
-    const raw = JSON.parse(localStorage.getItem(LOCK) ?? 'null') as { tries: number; until: number } | null
-    return raw && typeof raw.tries === 'number' ? raw : { tries: 0, until: 0 }
+    return JSON.parse(storage.getItem(key) ?? 'null') as T | null
   } catch {
-    return { tries: 0, until: 0 }
+    return null
   }
 }
 
-export function lockSeconds() {
-  const { until } = readLock()
-  return Math.max(0, Math.ceil((until - Date.now()) / 1000))
+function readSession(): { token: string; userId: string } | null {
+  const found = readJson<{ token: string; userId: string }>(sessionStorage, TOKEN) ?? readJson<{ token: string; userId: string }>(localStorage, TOKEN)
+  return found && typeof found.token === 'string' && typeof found.userId === 'string' ? found : null
 }
 
-function failLogin() {
-  const current = readLock()
-  const tries = current.until && current.until < Date.now() ? 1 : current.tries + 1
-  const until = tries >= MAX_TRIES ? Date.now() + LOCK_MS : 0
-  localStorage.setItem(LOCK, JSON.stringify({ tries: tries >= MAX_TRIES ? 0 : tries, until }))
+function saveSession(session: { token: string; userId: string }, remember: boolean) {
+  sessionStorage.setItem(TOKEN, JSON.stringify(session))
+  if (remember) localStorage.setItem(TOKEN, JSON.stringify(session))
+  else localStorage.removeItem(TOKEN)
 }
 
-function load(): AppState {
+function clearSession() {
+  sessionStorage.removeItem(TOKEN)
+  sessionStorage.removeItem(WEAK)
+  localStorage.removeItem(TOKEN)
+}
+
+function readCache(): AppState | null {
+  const parsed = readJson<AppState>(localStorage, KEY)
+  if (!parsed || parsed.version !== DATA_VERSION || !Array.isArray(parsed.users) || !Array.isArray(parsed.appointments)) return null
+  return absorb(parsed, null)
+}
+
+function readSync() {
+  return readJson<{ base: number; dirty: boolean }>(localStorage, SYNC) ?? { base: 0, dirty: false }
+}
+
+function persist(payload: AppState, sync: { base: number; dirty: boolean }) {
   try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return createSeed()
-    const parsed = JSON.parse(raw) as AppState
-    if (parsed.version !== DATA_VERSION || !parsed.users || !parsed.appointments) return createSeed()
-    const seed = createSeed()
-    return {
-      ...parsed,
-      settings: { ...seed.settings, ...parsed.settings },
-      conversations: parsed.conversations?.length ? parsed.conversations : seed.conversations,
-      leads: parsed.leads ?? [],
-      controlRows: parsed.controlRows ?? [],
-      products: Array.isArray(parsed.products) ? parsed.products : seed.products,
-      revision: parsed.revision ?? 1,
-    }
+    localStorage.setItem(SYNC, JSON.stringify(sync))
+    localStorage.setItem(KEY, JSON.stringify(lightweight({ ...payload, sessionUserId: null })))
   } catch {
-    return createSeed()
+    /* Sin cupo en el navegador: el servidor del local sigue siendo la copia principal. */
   }
+}
+
+function clearCache() {
+  localStorage.removeItem(KEY)
+  localStorage.removeItem(SYNC)
+}
+
+function outgoing(state: AppState): AppState {
+  return { ...state, sessionUserId: null, users: state.users.map(({ password: _password, ...user }) => user as User) }
 }
 
 type Store = {
   state: AppState
   currentUser: User | null
   isAdmin: boolean
+  /** Hay sesión guardada y los datos del servidor todavía vienen en camino. */
+  booting: boolean
+  /** Hay cambios de este equipo que todavía no llegan al servidor. */
+  unsynced: boolean
+  /** Aviso cuando otro equipo cambió lo mismo y un cambio de aquí no se pudo aplicar. */
+  syncNotice: string
+  dismissSyncNotice: () => void
+  weakPassword: boolean
   allows: (permission: Permission) => boolean
-  login: (username: string, password: string, remember?: boolean) => Promise<boolean>
+  login: (username: string, password: string, remember?: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
   logout: () => void
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>) => Appointment
-  updateAppointment: (id: string, patch: Partial<Appointment>, method?: string) => ChargeNote | null
+  changeOwnPassword: (current: string, next: string) => Promise<string | null>
+  bookAppointment: (input: Omit<Appointment, 'id' | 'folio' | 'status' | 'cost'>) => Promise<{ ok: true; folio: number } | { ok: false; error: string }>
+  placeShopOrder: (input: { name: string; phone: string; lines: ShopLine[] }) => Promise<{ ok: true; document: string; total: number } | { ok: false; error: string }>
+  addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<string | null>
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>, method?: string) => Result<Appointment>
+  updateAppointment: (id: string, patch: Partial<Appointment>, method?: string) => Result<ChargeNote | null>
   setVisitPhoto: (id: string, slot: 'antes' | 'despues', data: string) => boolean
-  addUser: (user: Omit<User, 'id' | 'active'>) => string | null
+  addUser: (user: Omit<User, 'id' | 'active' | 'password'> & { password: string }) => Promise<string | null>
   updateUser: (
     id: string,
     patch: {
@@ -200,12 +243,10 @@ type Store = {
       permissions: Permission[]
       password?: string
     },
-  ) => string | null
+  ) => Promise<string | null>
   setControl: (year: number, month: number, field: ControlField, value: number) => void
   toggleUser: (id: string) => string | null
   addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Result<Movement>
-  addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => void
-  placeShopOrder: (input: { name: string; phone: string; lines: ShopLine[] }) => { ok: true; document: string; total: number } | { ok: false; error: string }
   saveProduct: (product: CatalogItem) => string | null
   recordSale: (input: Omit<ops.SaleInput, 'userId'>) => Result<Sale>
   settleOrder: (movementId: string, method: string) => Result<Movement>
@@ -216,7 +257,7 @@ type Store = {
   savePayable: (input: Parameters<typeof ops.savePayable>[1]) => Result<Payable>
   payPayable: (input: { payableId: string; amount: number; method: string; date: string }) => Result<Movement>
   saveFixedCost: (item: FixedCost) => Result<FixedCost>
-  payFixedCost: (input: { fixedId: string; period: string; amount: number; method: string; date: string }) => Result<Movement>
+  payFixedCost: (input: { fixedId: string; period: string; amount: number; method: string; date: string; withTax?: boolean }) => Result<Movement>
   updateWorker: (id: string, patch: Pick<User, 'commissionRate' | 'bonus' | 'hiredAt' | 'salary'>) => Result<User>
   payPayroll: (input: { period: string; lines: PayrollLine[]; method: string; date: string }) => Result<PayrollRun>
   voidPayroll: (id: string) => Result<null>
@@ -237,213 +278,379 @@ type Store = {
 const Ctx = createContext<Store | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const bootSession = useRef(readSession())
+  /** Copia de este equipo con cambios sin subir; se une una sola vez al llegar los datos del servidor. */
+  const restoreRef = useRef(bootSession.current ? readCache() : null)
   const [state, setState] = useState<AppState>(() => {
-    const initial = load()
-    const session = sessionStorage.getItem(SESSION) || localStorage.getItem(REMEMBER) || initial.sessionUserId
-    if (session) sessionStorage.setItem(SESSION, session)
-    return { ...initial, sessionUserId: session }
+    const session = bootSession.current
+    const cached = restoreRef.current
+    if (session) return { ...(cached ?? anonymous(null)), users: cached?.users ?? [], sessionUserId: session.userId }
+    return anonymous(readJson<PublicData>(localStorage, PUBLIC))
   })
+  const [unsynced, setUnsynced] = useState(false)
+  const [booting, setBooting] = useState(() => Boolean(bootSession.current && !restoreRef.current))
+  const [syncNotice, setSyncNotice] = useState('')
+  const [weakPassword, setWeakPassword] = useState(() => sessionStorage.getItem(WEAK) === '1')
   const latest = useRef(state)
-  latest.current = state
-  const booted = useRef(false)
-  const bootRevision = useRef<number | null>(null)
-  if (bootRevision.current === null) bootRevision.current = state.revision ?? 0
+  const server = useRef<AppState | null>(null)
+  const pending = useRef<Mutation[]>([])
+  const token = useRef<string | null>(bootSession.current?.token ?? null)
+  const pushing = useRef(false)
+  const pushTimer = useRef<number | null>(null)
+  const engine = useRef<{ push: () => void; loadPrivate: () => Promise<boolean>; loadPublic: () => Promise<void>; expire: () => void } | null>(null)
 
-  useEffect(() => {
-    let cancel = false
-    const started = bootRevision.current ?? 0
-    async function boot() {
+  function show(next: AppState) {
+    latest.current = next
+    setState(next)
+    setUnsynced(pending.current.length > 0)
+    if (token.current) {
+      const base = server.current?.revision ?? readSync().base
+      persist(next, { base, dirty: pending.current.length > 0 || (!server.current && readSync().dirty) })
+    }
+  }
+
+  function request(method: string, url: string, body?: unknown) {
+    const headers: Record<string, string> = {}
+    if (body !== undefined) headers['content-type'] = 'application/json'
+    if (token.current) headers.authorization = `Bearer ${token.current}`
+    return fetch(url, { method, cache: 'no-store', headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  }
+
+  /** Vuelve a aplicar los cambios pendientes sobre la copia del servidor. Los que ya no caben se descartan con aviso. */
+  function rebase() {
+    if (!server.current) return
+    let next = absorb(server.current, latest.current.sessionUserId)
+    const kept: Mutation[] = []
+    let dropped = 0
+    for (const mutation of pending.current) {
+      const applied = mutation(next)
+      if (applied) {
+        next = applied
+        kept.push(mutation)
+      } else dropped += 1
+    }
+    pending.current = kept
+    if (dropped) setSyncNotice('Otro equipo cambió los mismos datos al mismo tiempo. Un cambio de este equipo no se pudo aplicar; revisa el registro y vuelve a hacerlo si hace falta.')
+    show(next)
+  }
+
+  function schedulePush(delay = 150) {
+    if (pushTimer.current !== null) window.clearTimeout(pushTimer.current)
+    pushTimer.current = window.setTimeout(() => {
+      pushTimer.current = null
+      engine.current?.push()
+    }, delay)
+  }
+
+  function commit(mutation: Mutation) {
+    const next = mutation(latest.current)
+    if (!next) return false
+    pending.current.push(mutation)
+    show(next)
+    schedulePush()
+    return true
+  }
+
+  engine.current = {
+    async push() {
+      if (pushing.current || !token.current || pending.current.length === 0) return
+      if (!server.current) {
+        if (navigator.onLine) await engine.current?.loadPrivate()
+        return
+      }
+      if (!navigator.onLine) return
+      pushing.current = true
+      const sent = pending.current.length
+      const payload = outgoing(latest.current)
+      let retry = 0
       try {
-        const response = await fetch('/api/state')
+        const response = await request('PUT', '/api/state', { base: server.current.revision ?? 0, state: payload })
         if (response.status === 200) {
-          const remote = JSON.parse(await response.text()) as AppState
-          if (!remote.users || !remote.appointments) throw new Error('vacio')
-          if (!cancel) {
-            setState((current) => {
-              if ((current.revision ?? 0) !== started) return current
-              if ((remote.revision ?? 0) < (current.revision ?? 0)) return current
-              return absorb(remote, sessionStorage.getItem(SESSION))
-            })
-          }
-        } else if (response.status === 204) {
-          await fetch('/api/state', {
-            method: 'PUT',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(shared(load())),
-          })
+          const body = (await response.json()) as { revision: number; state?: AppState }
+          server.current = body.state ?? { ...payload, revision: body.revision }
+          pending.current = pending.current.slice(sent)
+          rebase()
+        } else if (response.status === 409) {
+          const body = (await response.json()) as { state: AppState }
+          server.current = body.state
+          rebase()
+          retry = 50
+        } else if (response.status === 401) {
+          engine.current?.expire()
+        } else {
+          const body = (await response.json().catch(() => ({}))) as { error?: string }
+          pending.current = []
+          setSyncNotice(body.error ?? 'El servidor no aceptó el último cambio.')
+          rebase()
         }
       } catch {
-        /* El panel sigue con la copia de este navegador si el equipo no responde. */
+        retry = 4000
       } finally {
-        booted.current = true
-        if (!cancel) setState((current) => ({ ...current }))
+        pushing.current = false
+        if (pending.current.length > 0 && retry) schedulePush(retry)
+        else if (pending.current.length > 0) schedulePush()
+      }
+    },
+    async loadPrivate() {
+      try {
+        const response = await request('GET', '/api/state')
+        if (response.status === 401) {
+          engine.current?.expire()
+          return false
+        }
+        if (!response.ok) return false
+        const remote = (await response.json()) as AppState
+        const sync = readSync()
+        server.current = remote
+        const cached = restoreRef.current
+        restoreRef.current = null
+        if (cached && sync.dirty) {
+          const same = (remote.revision ?? 0) === sync.base
+          pending.current = [same ? () => ({ ...cached, revision: remote.revision }) : (current) => mergeOffline(current, cached), ...pending.current]
+        }
+        rebase()
+        if (pending.current.length > 0) schedulePush()
+        return true
+      } catch {
+        return false
+      }
+    },
+    async loadPublic() {
+      try {
+        const response = await fetch('/api/public', { cache: 'no-store' })
+        if (!response.ok) return
+        const data = (await response.json()) as PublicData
+        localStorage.setItem(PUBLIC, JSON.stringify(data))
+        if (!token.current) show(anonymous(data))
+      } catch {
+        /* Sin conexión el sitio sigue con la última copia del catálogo. */
+      }
+    },
+    expire() {
+      const dirty = pending.current.length > 0
+      clearSession()
+      token.current = null
+      server.current = null
+      pending.current = []
+      if (!dirty) clearCache()
+      sessionStorage.setItem(EXPIRED, '1')
+      setWeakPassword(false)
+      show(anonymous(readJson<PublicData>(localStorage, PUBLIC)))
+      void engine.current?.loadPublic()
+    },
+  }
+
+  useEffect(() => {
+    if (token.current) void engine.current?.loadPrivate().finally(() => setBooting(false))
+    else void engine.current?.loadPublic()
+
+    const poll = async () => {
+      if (!token.current || pushing.current || pending.current.length > 0 || document.hidden || !navigator.onLine) return
+      if (!server.current) {
+        await engine.current?.loadPrivate()
+        return
+      }
+      try {
+        const response = await request('GET', `/api/state?since=${server.current.revision ?? 0}`)
+        if (response.status === 204) return
+        if (response.status === 401) {
+          engine.current?.expire()
+          return
+        }
+        if (!response.ok || pushing.current || pending.current.length > 0) return
+        server.current = (await response.json()) as AppState
+        rebase()
+      } catch {
+        /* Sin red: se reintenta en el siguiente ciclo. */
       }
     }
-    void boot()
-    const poll = () => {
-      if (!booted.current || document.hidden || !navigator.onLine) return
-      void fetch('/api/state')
-        .then(async (response) => {
-          if (!response.ok) return
-          const remote = (await response.json()) as AppState
-          setState((current) => {
-            if ((remote.revision ?? 0) <= (current.revision ?? 0)) return current
-            return absorb(remote, current.sessionUserId)
-          })
-        })
-        .catch(() => undefined)
-    }
-    const timer = window.setInterval(poll, 2500)
+    const timer = window.setInterval(() => void poll(), POLL_MS)
+    const publicTimer = window.setInterval(() => {
+      if (!token.current && !document.hidden) void engine.current?.loadPublic()
+    }, PUBLIC_POLL_MS)
     const wake = () => {
-      if (!document.hidden) poll()
+      if (document.hidden) return
+      if (token.current) void poll()
+      else void engine.current?.loadPublic()
     }
-    const resync = () => {
+    const online = () => {
+      engine.current?.push()
       wake()
-      setState((current) => ({ ...current }))
     }
     document.addEventListener('visibilitychange', wake)
-    window.addEventListener('online', resync)
+    window.addEventListener('online', online)
     return () => {
-      cancel = true
       window.clearInterval(timer)
+      window.clearInterval(publicTimer)
       document.removeEventListener('visibilitychange', wake)
-      window.removeEventListener('online', resync)
+      window.removeEventListener('online', online)
     }
   }, [])
 
-  useEffect(() => {
-    if (!booted.current) return
-    const payload = shared(state)
-    persist(payload)
-    if (!navigator.onLine) return
-    const handle = window.setTimeout(() => {
-      void fetch('/api/state', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-        .then(async (response) => {
-          if (response.status !== 409) return
-          const remote = (await response.json()) as AppState
-          setState((current) => absorb(remote, current.sessionUserId))
-        })
-        .catch(() => undefined)
-    }, 200)
-    return () => window.clearTimeout(handle)
-  }, [state])
-
   const api = useMemo<Store>(() => {
     const currentUser = state.users.find((user) => user.id === state.sessionUserId && user.active) ?? null
+    const can = (permission: Permission) => userAllows(currentUser, permission)
 
-    /** Aplica una operación y devuelve su resultado al instante; si el estado cambió antes del render, la repite sobre el vigente. */
+    /** Aplica una operación al instante y la deja en cola; si otro equipo guardó antes, se repite sobre su versión. */
     function run<T>(permission: Permission | null, op: (current: AppState) => Op<T>): Result<T> {
-      if (permission && !userAllows(currentUser, permission)) return { ok: false, error: DENIED }
-      const base = latest.current
-      const result = op(base)
+      if (permission && !can(permission)) return { ok: false, error: DENIED }
+      if (!currentUser) return { ok: false, error: 'Vuelve a entrar al panel.' }
+      const result = op(latest.current)
       if (!result.ok) return result
-      const next = bump(base, result.patch)
-      latest.current = next
-      setState((live) => {
-        if (live === base) return next
-        const again = op(live)
-        return again.ok ? bump(live, again.patch) : live
+      commit((current) => {
+        const again = current === latest.current ? result : op(current)
+        return again.ok ? ops.withCounters({ ...current, ...again.patch }) : null
       })
       return { ok: true, value: result.value }
+    }
+
+    async function setPassword(userId: string, password: string, current?: string) {
+      try {
+        const response = await request('POST', '/api/password', { userId, password, current })
+        if (response.ok) return null
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        return body.error ?? 'No se pudo guardar la clave.'
+      } catch {
+        return OFFLINE
+      }
+    }
+
+    async function postPublic<T>(url: string, body: unknown): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+      try {
+        const response = await fetch(url, { method: 'POST', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+        const data = (await response.json().catch(() => ({}))) as T & { error?: string }
+        if (!response.ok) return { ok: false, error: data.error ?? 'No se pudo enviar. Inténtalo de nuevo.' }
+        void engine.current?.loadPublic()
+        return { ok: true, value: data }
+      } catch {
+        return { ok: false, error: 'No se pudo enviar. Revisa la conexión e inténtalo de nuevo.' }
+      }
+    }
+
+    function teamCheck(users: User[]) {
+      return users.some((item) => item.active && item.role === 'Administrador' && userAllows(item, 'equipo'))
     }
 
     return {
       state,
       currentUser,
       isAdmin: currentUser?.role === 'Administrador',
-      allows: (permission) => userAllows(currentUser, permission),
+      booting,
+      unsynced,
+      syncNotice,
+      dismissSyncNotice: () => setSyncNotice(''),
+      weakPassword,
+      allows: can,
       login: async (username, password, remember = false) => {
-        if (lockSeconds() > 0) return false
-        const hashed = await hashPassword(password)
-        const user = state.users.find(
-          (item) =>
-            item.username.toLowerCase() === username.trim().toLowerCase() &&
-            (item.password === hashed || item.password === password) &&
-            item.active,
-        )
-        if (!user) {
-          failLogin()
-          return false
+        let response: Response
+        try {
+          response = await fetch('/api/login', {
+            method: 'POST',
+            cache: 'no-store',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ username, password, remember }),
+          })
+        } catch {
+          return { ok: false, error: OFFLINE }
         }
-        localStorage.removeItem(LOCK)
-        sessionStorage.setItem(SESSION, user.id)
-        if (remember) localStorage.setItem(REMEMBER, user.id)
-        else localStorage.removeItem(REMEMBER)
-        setState((current) => ({
-          ...current,
-          sessionUserId: user.id,
-          users:
-            user.password === password
-              ? current.users.map((item) => (item.id === user.id ? { ...item, password: hashed } : item))
-              : current.users,
-          revision: user.password === password ? (current.revision ?? 0) + 1 : current.revision,
-        }))
-        return true
+        const body = (await response.json().catch(() => ({}))) as { token?: string; userId?: string; weak?: boolean; error?: string }
+        if (!response.ok || !body.token || !body.userId) return { ok: false, error: body.error ?? 'Usuario o clave incorrectos.' }
+        saveSession({ token: body.token, userId: body.userId }, remember)
+        sessionStorage.removeItem(EXPIRED)
+        if (body.weak) sessionStorage.setItem(WEAK, '1')
+        else sessionStorage.removeItem(WEAK)
+        setWeakPassword(Boolean(body.weak))
+        token.current = body.token
+        server.current = null
+        latest.current = { ...latest.current, sessionUserId: body.userId }
+        restoreRef.current = readSync().dirty ? readCache() : null
+        const loaded = await engine.current?.loadPrivate()
+        if (!loaded) {
+          clearSession()
+          token.current = null
+          return { ok: false, error: OFFLINE }
+        }
+        return { ok: true }
       },
       logout: () => {
-        sessionStorage.removeItem(SESSION)
-        localStorage.removeItem(REMEMBER)
-        setState((current) => ({ ...current, sessionUserId: null }))
+        const old = token.current
+        const dirty = pending.current.length > 0
+        if (old) void fetch('/api/logout', { method: 'POST', headers: { authorization: `Bearer ${old}` }, keepalive: true }).catch(() => undefined)
+        clearSession()
+        token.current = null
+        server.current = null
+        pending.current = []
+        if (!dirty) clearCache()
+        setWeakPassword(false)
+        show(anonymous(readJson<PublicData>(localStorage, PUBLIC)))
+        void engine.current?.loadPublic()
       },
-      addAppointment: (appointment) => {
-        const folio = state.appointments.reduce((max, item) => Math.max(max, item.folio), 900) + 1
-        const employeeCode = (appointment.employeeCode || currentUser?.employeeCode || '').trim()
-        const employeeId = employeeCode ? state.users.find((item) => item.employeeCode === employeeCode)?.id : undefined
-        const next: Appointment = {
-          ...appointment,
-          id: newId(),
-          folio,
-          phone: normalizePhone(appointment.phone),
-          employeeCode: employeeCode || undefined,
-          employeeId,
+      changeOwnPassword: async (current, next) => {
+        if (!currentUser) return 'Vuelve a entrar al panel.'
+        const problem = await setPassword(currentUser.id, next, current)
+        if (!problem) {
+          sessionStorage.removeItem(WEAK)
+          setWeakPassword(false)
         }
-        setState((current) => {
-          const charged = syncIncome(next, current.movements)
-          return bump(current, { movements: charged.movements, appointments: [next, ...current.appointments] })
-        })
-        return next
+        return problem
       },
-      updateAppointment: (id, patch, method) => {
-        if (!userAllows(currentUser, 'citas')) return null
-        let note: ChargeNote | null = null
-        setState((current) => {
-          const previous = current.appointments.find((item) => item.id === id)
-          if (!previous) return current
-          const nextPatch = { ...patch }
-          if (nextPatch.cost !== undefined && nextPatch.cost !== previous.cost && !userAllows(currentUser, 'costos')) {
-            nextPatch.cost = previous.cost
+      bookAppointment: async (input) => {
+        const result = await postPublic<{ folio: number }>('/api/public/booking', input)
+        return result.ok ? { ok: true, folio: result.value.folio } : result
+      },
+      placeShopOrder: async (input) => {
+        const result = await postPublic<{ document: string; total: number }>('/api/public/order', input)
+        return result.ok ? { ok: true, document: result.value.document, total: result.value.total } : result
+      },
+      addLead: async (lead) => {
+        const result = await postPublic('/api/public/lead', lead)
+        return result.ok ? null : result.error
+      },
+      addAppointment: (appointment, method) =>
+        run('citas', (current) => {
+          const employeeCode = (appointment.employeeCode || currentUser?.employeeCode || '').trim()
+          const next: Appointment = {
+            ...appointment,
+            id: newId(),
+            folio: ops.nextFolio(current),
+            phone: normalizePhone(appointment.phone),
+            employeeCode: employeeCode || undefined,
+            employeeId: employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined,
           }
+          const charged = ops.chargeAppointment({ ...current, appointments: [next, ...current.appointments] }, next, method, can('caja'))
+          if (!charged.ok) return charged
+          return { ok: true, value: next, patch: { ...charged.patch, appointments: [next, ...current.appointments] } }
+        }),
+      updateAppointment: (id, patch, method) =>
+        run('citas', (current) => {
+          const previous = current.appointments.find((item) => item.id === id)
+          if (!previous) return { ok: false, error: 'Esa cita ya no existe.' }
+          const nextPatch = { ...patch }
+          if (nextPatch.cost !== undefined && nextPatch.cost !== previous.cost && !can('costos')) nextPatch.cost = previous.cost
           if (nextPatch.employeeCode !== undefined) {
             const employeeCode = nextPatch.employeeCode.trim()
             nextPatch.employeeCode = employeeCode || undefined
             nextPatch.employeeId = employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined
           }
-          const next = {
+          const next: Appointment = {
             ...previous,
             ...nextPatch,
             id: previous.id,
             folio: previous.folio,
             phone: nextPatch.phone !== undefined ? normalizePhone(nextPatch.phone) : previous.phone,
           }
-          const charged = syncIncome(next, current.movements, method)
-          note = charged.note
-          return bump(current, {
-            movements: charged.movements,
-            appointments: current.appointments.map((item) => (item.id === id ? next : item)),
-          })
-        })
-        return note
-      },
-      setVisitPhoto: (id, slot, data) => {
-        if (!userAllows(currentUser, 'fichas')) return false
-        if (!state.appointments.some((item) => item.id === id)) return false
-        setState((current) => {
+          const charged = ops.chargeAppointment(current, next, method, can('caja'))
+          if (!charged.ok) return charged
+          return {
+            ok: true,
+            value: charged.value,
+            patch: { ...charged.patch, appointments: current.appointments.map((item) => (item.id === id ? next : item)) },
+          }
+        }),
+      setVisitPhoto: (id, slot, data) =>
+        run('fichas', (current) => {
           const previous = current.appointments.find((item) => item.id === id)
-          if (!previous) return current
+          if (!previous) return { ok: false, error: 'Esa cita ya no existe.' }
           const index = slot === 'antes' ? 0 : 2
           let report = previous.report
           if (report) {
@@ -454,96 +661,87 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             photos[index] = data
             report = { ...report, photos }
           }
-          const next: Appointment = {
-            ...previous,
-            ...(slot === 'antes' ? { beforePhoto: data } : { afterPhoto: data }),
-            ...(report ? { report } : {}),
-          }
-          return bump(current, {
-            appointments: current.appointments.map((item) => (item.id === id ? next : item)),
-          })
+          const next: Appointment = { ...previous, ...(slot === 'antes' ? { beforePhoto: data } : { afterPhoto: data }), ...(report ? { report } : {}) }
+          return { ok: true, value: null, patch: { appointments: current.appointments.map((item) => (item.id === id ? next : item)) } }
+        }).ok,
+      addUser: async (user) => {
+        if (!can('equipo')) return 'No tienes permiso para gestionar el equipo.'
+        const { password, ...rest } = user
+        const username = rest.username.trim()
+        const name = rest.name.trim()
+        if (!name || !username || !password.trim()) return 'Completa nombre, usuario y clave.'
+        if (password.trim().length < 8) return 'La clave debe tener al menos 8 caracteres.'
+        const id = newId()
+        const result = run('equipo', (current) => {
+          if (current.users.some((item) => item.username.toLowerCase() === username.toLowerCase())) return { ok: false, error: 'Ese usuario ya existe.' }
+          const next: User = { ...rest, id, name, username, active: true }
+          return { ok: true, value: next, patch: { users: [...current.users, next] } }
         })
-        return true
+        if (!result.ok) return result.error
+        return setPassword(id, password)
       },
-      addUser: (user) => {
-        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para gestionar el equipo.'
-        const username = user.username.trim()
-        const name = user.name.trim()
-        if (!name || !username || !user.password.trim()) return 'Completa nombre, usuario y clave.'
-        const exists = state.users.some((item) => item.username.toLowerCase() === username.toLowerCase())
-        if (exists) return 'Ese usuario ya existe.'
-        const next: User = { ...user, id: newId(), name, username, active: true }
-        setState((current) => bump(current, { users: [...current.users, next] }))
-        return null
-      },
-      updateUser: (id, patch) => {
-        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para gestionar el equipo.'
-        const target = state.users.find((item) => item.id === id)
-        if (!target) return 'Usuario no encontrado.'
+      updateUser: async (id, patch) => {
+        if (!can('equipo')) return 'No tienes permiso para gestionar el equipo.'
         const name = patch.name.trim()
         const username = patch.username.trim()
         if (!name || !username) return 'Completa nombre y usuario.'
-        const exists = state.users.some((item) => item.id !== id && item.username.toLowerCase() === username.toLowerCase())
-        if (exists) return 'Ese usuario ya existe.'
-        const next: User = {
-          ...target,
-          name,
-          lastName: patch.lastName !== undefined ? patch.lastName.trim() : target.lastName,
-          phone: patch.phone !== undefined ? patch.phone.trim() : target.phone,
-          email: patch.email !== undefined ? patch.email.trim() : target.email,
-          salary: patch.salary !== undefined ? patch.salary : target.salary,
-          username,
-          role: patch.role,
-          permissions: patch.permissions,
-          password: patch.password?.trim() ? patch.password : target.password,
-        }
-        const users = state.users.map((item) => (item.id === id ? next : item))
-        if (!users.some((item) => item.active && item.role === 'Administrador' && userAllows(item, 'equipo'))) {
-          return 'Debe quedar un administrador activo con acceso a Equipo.'
-        }
-        setState((current) => bump(current, { users }))
-        return null
+        if (patch.password?.trim() && patch.password.trim().length < 8) return 'La clave debe tener al menos 8 caracteres.'
+        const result = run('equipo', (current) => {
+          const target = current.users.find((item) => item.id === id)
+          if (!target) return { ok: false, error: 'Usuario no encontrado.' }
+          if (current.users.some((item) => item.id !== id && item.username.toLowerCase() === username.toLowerCase())) return { ok: false, error: 'Ese usuario ya existe.' }
+          const next: User = {
+            ...target,
+            name,
+            lastName: patch.lastName !== undefined ? patch.lastName.trim() : target.lastName,
+            phone: patch.phone !== undefined ? patch.phone.trim() : target.phone,
+            email: patch.email !== undefined ? patch.email.trim() : target.email,
+            salary: patch.salary !== undefined ? patch.salary : target.salary,
+            username,
+            role: patch.role,
+            permissions: patch.permissions,
+          }
+          const users = current.users.map((item) => (item.id === id ? next : item))
+          if (!teamCheck(users)) return { ok: false, error: 'Debe quedar un administrador activo con acceso a Equipo.' }
+          return { ok: true, value: next, patch: { users } }
+        })
+        if (!result.ok) return result.error
+        return patch.password?.trim() ? setPassword(id, patch.password) : null
       },
       setControl: (year, month, field, value) => {
-        if (!userAllows(currentUser, 'equipo')) return
-        const amount = Number.isFinite(value) ? value : 0
-        setState((current) => {
+        run('equipo', (current) => {
+          const amount = Number.isFinite(value) ? value : 0
           const rows = current.controlRows ?? []
           const index = rows.findIndex((item) => item.year === year && item.month === month)
           const previous = index >= 0 ? rows[index] : { year, month, values: {} }
           const nextRow = { ...previous, values: { ...previous.values, [field]: amount } }
           const controlRows = index >= 0 ? rows.map((item, itemIndex) => (itemIndex === index ? nextRow : item)) : [...rows, nextRow]
-          return bump(current, { controlRows })
+          return { ok: true, value: null, patch: { controlRows } }
         })
       },
       toggleUser: (id) => {
-        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para gestionar el equipo.'
         if (id === state.sessionUserId) return 'No puedes desactivar la sesión actual.'
-        const target = state.users.find((item) => item.id === id)
-        if (!target) return 'Usuario no encontrado.'
-        const users = state.users.map((item) => (item.id === id ? { ...item, active: !item.active } : item))
-        if (!users.some((item) => item.active && item.role === 'Administrador' && userAllows(item, 'equipo'))) {
-          return 'Debe quedar un administrador activo con acceso a Equipo.'
-        }
-        setState((current) => bump(current, { users }))
-        return null
+        const result = run('equipo', (current) => {
+          if (!current.users.some((item) => item.id === id)) return { ok: false, error: 'Usuario no encontrado.' }
+          const users = current.users.map((item) => (item.id === id ? { ...item, active: !item.active } : item))
+          if (!teamCheck(users)) return { ok: false, error: 'Debe quedar un administrador activo con acceso a Equipo.' }
+          return { ok: true, value: null, patch: { users } }
+        })
+        return result.ok ? null : result.error
       },
       addMovement: (movement) =>
         run('caja', (current) => {
           const concept = movement.concept.trim()
           if (!concept || !Number.isFinite(movement.amount) || movement.amount <= 0) return { ok: false, error: 'Concepto y un monto mayor a cero son obligatorios.' }
-          if ((current.cashCloses ?? []).some((item) => item.date === movement.date)) return { ok: false, error: 'La caja de ese día ya se cerró.' }
-          const document = movement.document?.trim() || nextDocument(current.movements, movement.type)
+          if (!movement.method || movement.method === 'Pedido') return { ok: false, error: 'Elige el medio de pago.' }
+          if (ops.closedOn(current, movement.date)) return { ok: false, error: 'La caja de ese día ya se cerró.' }
+          const document = movement.document?.trim() || ops.nextDocument(current, movement.type)
           const next: Movement = { ...movement, id: newId(), document, concept, notes: movement.notes.trim(), amount: ops.round2(movement.amount) }
           return { ok: true, value: next, patch: { movements: [next, ...current.movements] } }
         }),
-      placeShopOrder: (input) => {
-        const result = run(null, (current) => ops.placeOrder(current, input))
-        return result.ok ? { ok: true, ...result.value } : result
-      },
       saveProduct: (product) => {
-        if (!userAllows(currentUser, 'caja') && !userAllows(currentUser, 'compras')) return DENIED
-        const result = run(null, (current) => ops.saveProduct(current, product))
+        if (!can('caja') && !can('compras')) return DENIED
+        const result = run(null, (current) => ops.saveProduct(current, product, can('compras')))
         return result.ok ? null : result.error
       },
       recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
@@ -564,92 +762,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeTask: (id) =>
         run('tareas', (current) => {
           const task = (current.tasks ?? []).find((item) => item.id === id)
-          if (task && task.createdBy !== currentUser?.id && !userAllows(currentUser, 'equipo')) {
+          if (task && task.createdBy !== currentUser?.id && !can('equipo')) {
             return { ok: false, error: 'Solo quien creó la tarea o un administrador puede borrarla.' }
           }
           return ops.removeTask(current, id)
         }),
       closeCash: (input) => run('caja', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
       setTaxRegime: (regime) => {
-        run('contabilidad', (current) => ({ ok: true, value: null, patch: { settings: { ...current.settings, taxRegime: regime } } }))
-      },
-      addLead: (lead) => {
-        const next: Lead = {
-          ...lead,
-          id: newId(),
-          createdAt: new Date().toISOString(),
-          name: lead.name.trim(),
-          phone: lead.phone.trim(),
-          message: lead.message.trim(),
-        }
-        setState((current) => bump(current, { leads: [next, ...current.leads] }))
+        run('contabilidad', (current) => ({ ok: true, value: null, patch: { settings: ops.changeRegime(current.settings, regime) } }))
       },
       updateSettings: (patch) => {
         const onlyLine = Object.keys(patch).every((key) => key === 'whatsapp')
-        if (!userAllows(currentUser, 'equipo') && !(onlyLine && userAllows(currentUser, 'whatsapp'))) return
-        setState((current) => bump(current, { settings: { ...current.settings, ...patch } }))
+        if (!can('equipo') && !(onlyLine && can('whatsapp'))) return
+        run(null, (current) => ({ ok: true, value: null, patch: { settings: { ...current.settings, ...patch } } }))
       },
       ensureThread: (phone, name, petName) => {
-        if (!userAllows(currentUser, 'whatsapp')) return null
+        if (!can('whatsapp')) return null
         const key = digits(phone)
         const found = state.conversations.find((item) => digits(item.phone) === key)
         if (found) return found.id
-        const next: Conversation = {
-          id: newId(),
-          phone: phone.trim(),
-          name: name.trim() || 'Cliente',
-          petName: petName.trim(),
-          unread: 0,
-          messages: [],
-        }
-        setState((current) => bump(current, { conversations: [next, ...current.conversations] }))
-        return next.id
+        const next: Conversation = { id: newId(), phone: phone.trim(), name: name.trim() || 'Cliente', petName: petName.trim(), unread: 0, messages: [] }
+        const result = run('whatsapp', (current) => ({ ok: true, value: next.id, patch: { conversations: [next, ...current.conversations] } }))
+        return result.ok ? result.value : null
       },
       sendMessage: (conversationId, body) => {
-        if (!userAllows(currentUser, 'whatsapp')) return
         const text = body.trim()
         if (!text) return
-        const message: WaMessage = {
-          id: newId(),
-          direction: 'out',
-          body: text,
-          at: new Date().toISOString(),
-          status: 'enviado',
-        }
-        setState((current) =>
-          bump(current, {
-            conversations: current.conversations.map((item) =>
-              item.id === conversationId ? { ...item, unread: 0, messages: [...item.messages, message] } : item,
-            ),
-          }),
-        )
+        const message: WaMessage = { id: newId(), direction: 'out', body: text, at: new Date().toISOString(), status: 'enviado' }
+        run('whatsapp', (current) => ({
+          ok: true,
+          value: null,
+          patch: {
+            conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0, messages: [...item.messages, message] } : item)),
+          },
+        }))
       },
       markRead: (conversationId) => {
-        if (!userAllows(currentUser, 'whatsapp')) return
-        setState((current) =>
-          bump(current, {
-            conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)),
-          }),
-        )
+        if (!state.conversations.some((item) => item.id === conversationId && item.unread > 0)) return
+        run('whatsapp', (current) => ({
+          ok: true,
+          value: null,
+          patch: { conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)) },
+        }))
       },
       exportBackup: () => {
-        if (!userAllows(currentUser, 'equipo')) return null
-        return JSON.stringify({ ...shared(state), exportedAt: new Date().toISOString() })
+        if (!can('equipo')) return null
+        return JSON.stringify({ ...outgoing(state), exportedAt: new Date().toISOString() })
       },
       importBackup: (raw) => {
-        if (!userAllows(currentUser, 'equipo')) return 'No tienes permiso para restaurar datos.'
-        const result = parseBackup(raw, state)
-        if ('error' in result) return result.error
-        setState(result.state)
-        return null
+        if (!can('equipo')) return 'No tienes permiso para restaurar datos.'
+        const parsed = parseBackup(raw, state)
+        if ('error' in parsed) return parsed.error
+        const result = run('equipo', () => ({ ok: true, value: null, patch: { ...parsed.state, sessionUserId: state.sessionUserId, revision: undefined } }))
+        return result.ok ? null : result.error
       },
       resetDemo: () => {
         if (currentUser?.role !== 'Administrador') return
-        const next = { ...createSeed(), sessionUserId: state.sessionUserId, revision: (state.revision ?? 0) + 1 }
-        setState(next)
+        run('equipo', () => ({ ok: true, value: null, patch: { ...createSeed(), sessionUserId: state.sessionUserId, revision: undefined } }))
       },
     }
-  }, [state])
+  }, [state, booting, unsynced, syncNotice, weakPassword])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }

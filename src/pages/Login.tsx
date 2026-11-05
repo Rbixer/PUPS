@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
 import { DEMO_MODE } from '../env'
-import { lockSeconds, useStore } from '../store'
+import { useStore } from '../store'
+import { usePanelTheme } from '../theme'
 
 export function Login() {
   const { login, currentUser } = useStore()
+  usePanelTheme(true)
   const navigate = useNavigate()
   const location = useLocation()
   const [username, setUsername] = useState('')
@@ -13,15 +15,17 @@ export function Login() {
   const [error, setError] = useState('')
   const [remember, setRemember] = useState(false)
   const [reveal, setReveal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [expired] = useState(() => sessionStorage.getItem('pups-expired') === '1')
 
   useEffect(() => {
     document.title = "Entrar · PUP'S"
   }, [])
 
-  if (currentUser) return <Navigate to="/admin" replace />
-
   const requested = (location.state as { from?: string } | null)?.from
   const destination = requested && requested.startsWith('/admin') ? requested : '/admin'
+
+  if (currentUser) return <Navigate to={destination} replace />
 
   return (
     <main className="login">
@@ -38,24 +42,15 @@ export function Login() {
           className="login-panel form-grid"
           onSubmit={async (event) => {
             event.preventDefault()
+            if (busy) return
             const data = new FormData(event.currentTarget)
             const userName = String(data.get('username') ?? username)
             const pass = String(data.get('password') ?? password)
-            const wait = lockSeconds()
-            if (wait > 0) {
-              setError(`Demasiados intentos. Espera ${wait} s e inténtalo de nuevo.`)
-              return
-            }
-            let ok = false
-            try {
-              ok = await login(userName, pass, remember)
-            } catch {
-              setError('No se pudo comprobar la clave en este celular. Recarga e inténtalo de nuevo.')
-              return
-            }
-            if (!ok) {
-              const locked = lockSeconds()
-              setError(locked > 0 ? `Demasiados intentos. Espera ${locked} s e inténtalo de nuevo.` : 'Usuario o clave incorrectos.')
+            setBusy(true)
+            const result = await login(userName, pass, remember)
+            setBusy(false)
+            if (!result.ok) {
+              setError(result.error)
               return
             }
             navigate(destination, { replace: true })
@@ -97,13 +92,18 @@ export function Login() {
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
             Mantener la sesión en este dispositivo
           </label>
+          {expired && !error ? (
+            <p className="banner" role="status">
+              La sesión venció. Vuelve a entrar.
+            </p>
+          ) : null}
           {error ? (
             <p className="form-error" role="alert">
               {error}
             </p>
           ) : null}
-          <button type="submit" className="btn btn-primary">
-            Entrar
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? 'Entrando…' : 'Entrar'}
           </button>
           {DEMO_MODE ? (
             <div className="demo-access">
@@ -134,7 +134,7 @@ export function Login() {
               </div>
             </div>
           ) : null}
-          <p className="hint">La agenda se comparte en este equipo mientras el panel está abierto.</p>
+          <p className="hint">Los datos se guardan en el equipo del local y se comparten con cada dispositivo que entre al panel.</p>
         </form>
       </section>
     </main>

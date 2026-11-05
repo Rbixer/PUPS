@@ -51,17 +51,44 @@ const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = 
 ]
 
 
+function Loading() {
+  return (
+    <div className="route-loading" aria-busy="true" aria-label="Cargando">
+      <span />
+      <span />
+      <span />
+    </div>
+  )
+}
+
+function ToLogin() {
+  const location = useLocation()
+  return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />
+}
+
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { currentUser } = useStore()
-  if (!currentUser) return <Navigate to="/login" replace />
+  const { currentUser, booting } = useStore()
+  if (!currentUser) return booting ? <Loading /> : <ToLogin />
   return children
 }
 
 function Guard({ permission, children }: { permission: Permission; children: ReactNode }) {
-  const { currentUser } = useStore()
-  if (!currentUser) return <Navigate to="/login" replace />
+  const { currentUser, booting } = useStore()
+  if (!currentUser) return booting ? <Loading /> : <ToLogin />
   if (!allows(currentUser, permission)) return <Navigate to={homeFor(currentUser)} replace />
   return children
+}
+
+/** El aviso de instalar y el de sin conexión son para el personal, no para los clientes del sitio. */
+function StaffChrome() {
+  const location = useLocation()
+  if (!location.pathname.startsWith('/admin') && location.pathname !== '/login') return null
+  return (
+    <>
+      <OfflineChip />
+      <InstallBanner />
+    </>
+  )
 }
 
 function SinAcceso() {
@@ -88,8 +115,7 @@ function PublicTo({ path }: { path: string }) {
 export function App() {
   return (
     <>
-    <OfflineChip />
-    <InstallBanner />
+    <StaffChrome />
     <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<Home />} />

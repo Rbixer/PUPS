@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
 import { saveBackupFile } from '../backup'
 import { Field } from '../components/ui'
-import { hashPassword } from '../format'
+import { initials } from '../format'
 import { useStore } from '../store'
 import type { Permission, Role, User } from '../types'
 
@@ -21,11 +21,6 @@ const emptyDraft = (): Draft => ({
   role: 'Recepción',
   permissions: defaultsFor('Recepción'),
 })
-
-function mark(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toLocaleUpperCase('es') || '·'
-}
 
 function draftFrom(user: User): Draft {
   return {
@@ -46,6 +41,18 @@ export function Usuarios() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Draft>(emptyDraft)
   const [settings, setSettings] = useState(state.settings)
+  const [settingsTouched, setSettingsTouched] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!settingsTouched) setSettings(state.settings)
+  }, [state.settings, settingsTouched])
+
+  function editSettings(patch: Partial<typeof settings>) {
+    setSettingsTouched(true)
+    setSaved(false)
+    setSettings((current) => ({ ...current, ...patch }))
+  }
 
   function setRole(role: Role) {
     setForm((current) => ({ ...current, role, permissions: defaultsFor(role) }))
@@ -78,7 +85,7 @@ export function Usuarios() {
           return (
             <article key={user.id} className={editingId === user.id ? 'person is-editing' : user.active ? 'person' : 'person is-off'}>
               <span className="person-mark" aria-hidden="true">
-                {mark(user.name)}
+                {initials(user.name)}
               </span>
               <div className="person-id">
                 <strong>{user.name}</strong>
@@ -123,32 +130,28 @@ export function Usuarios() {
         className="panel team-form"
         onSubmit={async (event) => {
           event.preventDefault()
-          if (editingId) {
-            const password = form.password ? await hashPassword(form.password) : undefined
-            const message = updateUser(editingId, {
-              name: form.name,
-              username: form.username,
-              role: form.role,
-              permissions: form.permissions,
-              password,
-            })
-            setError(message ?? '')
-            if (!message) {
-              setEditingId(null)
-              setForm(emptyDraft())
-            }
-            return
-          }
-          const password = await hashPassword(form.password)
-          const message = addUser({
-            name: form.name,
-            username: form.username,
-            password,
-            role: form.role,
-            permissions: form.permissions,
-          })
+          if (busy) return
+          setBusy(true)
+          const message = editingId
+            ? await updateUser(editingId, {
+                name: form.name,
+                username: form.username,
+                role: form.role,
+                permissions: form.permissions,
+                password: form.password || undefined,
+              })
+            : await addUser({
+                name: form.name,
+                username: form.username,
+                password: form.password,
+                role: form.role,
+                permissions: form.permissions,
+              })
+          setBusy(false)
           setError(message ?? '')
-          if (!message) setForm(emptyDraft())
+          if (message) return
+          setEditingId(null)
+          setForm(emptyDraft())
         }}
       >
         <h2>{editingId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
@@ -164,7 +167,8 @@ export function Usuarios() {
               type="password"
               value={form.password}
               autoComplete="new-password"
-              placeholder={editingId ? 'Vacía si se queda la actual' : ''}
+              placeholder={editingId ? 'Vacía si se queda la actual' : 'Mínimo 8 caracteres'}
+              minLength={8}
               onChange={(event) => setForm({ ...form, password: event.target.value })}
               required={!editingId}
             />
@@ -206,8 +210,8 @@ export function Usuarios() {
               Cancelar
             </button>
           ) : null}
-          <button type="submit" className="btn btn-primary">
-            {editingId ? 'Guardar usuario' : 'Crear usuario'}
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? 'Guardando…' : editingId ? 'Guardar usuario' : 'Crear usuario'}
           </button>
         </div>
       </form>
@@ -221,6 +225,7 @@ export function Usuarios() {
             address: settings.address.trim(),
             hours: settings.hours.trim(),
           })
+          setSettingsTouched(false)
           setSaved(true)
         }}
       >
@@ -229,15 +234,15 @@ export function Usuarios() {
         <Field label="WhatsApp del negocio">
           <input
             value={settings.whatsapp}
-            onChange={(event) => setSettings({ ...settings, whatsapp: event.target.value })}
+            onChange={(event) => editSettings({ whatsapp: event.target.value })}
             placeholder="+502"
           />
         </Field>
         <Field label="Dirección">
-          <input value={settings.address} onChange={(event) => setSettings({ ...settings, address: event.target.value })} />
+          <input value={settings.address} onChange={(event) => editSettings({ address: event.target.value })} />
         </Field>
         <Field label="Horario">
-          <input value={settings.hours} onChange={(event) => setSettings({ ...settings, hours: event.target.value })} />
+          <input value={settings.hours} onChange={(event) => editSettings({ hours: event.target.value })} />
         </Field>
         {saved ? <p className="banner">Datos publicados en el sitio.</p> : null}
         <div className="team-actions">
@@ -252,7 +257,8 @@ export function Usuarios() {
         <div>
           <h2 id="backup-title">Respaldo de datos</h2>
           <p className="hint">
-            Todo vive en este equipo. Descarga una copia con citas, fichas, caja y equipo, y guárdala fuera del local.
+            El servidor guarda una copia diaria de los últimos 30 días. Además puedes descargar una copia con citas, fichas, caja y equipo para guardarla fuera del local. Las
+            claves no viajan en el archivo.
           </p>
         </div>
         <div className="team-actions">
@@ -280,7 +286,7 @@ export function Usuarios() {
               const file = event.target.files?.[0]
               event.target.value = ''
               if (!file) return
-              if (!window.confirm('Restaurar reemplaza los datos de este equipo con los del archivo. ¿Continuar?')) return
+              if (!window.confirm('Restaurar reemplaza los datos del sistema, en todos los equipos, con los del archivo. ¿Continuar?')) return
               const problem = importBackup(await file.text())
               setBackupNote(problem ? { tone: 'error', text: problem } : { tone: 'ok', text: 'Datos restaurados.' })
             }}

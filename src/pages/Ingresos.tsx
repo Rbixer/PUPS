@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { METHODS } from '../catalog'
 import { Field } from '../components/ui'
-import { isoDate, longDate, money } from '../format'
+import { isoDate, longDate, money, parseAmount } from '../format'
+import { INCOME_CATEGORIES } from '../ops'
 import { useStore } from '../store'
 
 export function Ingresos() {
@@ -16,6 +17,7 @@ export function Ingresos() {
     method: 'Efectivo',
     notes: '',
     folio: '',
+    category: 'Servicio',
   })
 
   return (
@@ -31,15 +33,16 @@ export function Ingresos() {
         className="panel form-grid"
         onSubmit={(event) => {
           event.preventDefault()
-          const amount = Number(form.amount)
+          const amount = parseAmount(form.amount)
           if (!form.concept.trim() || !Number.isFinite(amount) || amount <= 0) {
             setError('Concepto y un monto mayor a cero son obligatorios.')
             setNotice('')
             return
           }
           const folio = form.folio.trim() ? Number(form.folio) : undefined
-          if (form.folio.trim() && !Number.isFinite(folio)) {
-            setError('El folio debe ser numérico.')
+          if (form.folio.trim() && (!Number.isInteger(folio) || !state.appointments.some((item) => item.folio === folio))) {
+            setError('No hay una cita con ese folio.')
+            setNotice('')
             return
           }
           const created = addMovement({
@@ -50,6 +53,7 @@ export function Ingresos() {
             method: form.method,
             notes: form.notes,
             folio,
+            category: form.category === 'Servicio' ? undefined : form.category,
           })
           if (!created.ok) {
             setError(created.error)
@@ -58,7 +62,7 @@ export function Ingresos() {
           }
           setError('')
           setNotice(`Ingreso ${created.value.document} registrado.`)
-          setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '', folio: '' })
+          setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '', folio: '', category: 'Servicio' })
         }}
       >
         <Field label="Fecha">
@@ -77,12 +81,22 @@ export function Ingresos() {
             ))}
           </select>
         </Field>
+        <Field label="Tipo">
+          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+            {INCOME_CATEGORIES.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="Folio de cita">
           <input className="num" value={form.folio} onChange={(event) => setForm({ ...form, folio: event.target.value })} placeholder="Opcional" />
         </Field>
         <Field label="Nota">
           <input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
         </Field>
+        <p className="hint">
+          Servicio paga impuesto. Aporte de capital y préstamo recibido no son venta: entran a caja sin impuesto y van a patrimonio o a deuda.
+        </p>
         {error ? <p className="form-error">{error}</p> : null}
         {notice ? <p className="banner">{notice}</p> : null}
         <button type="submit" className="btn btn-primary">
@@ -103,6 +117,7 @@ export function Ingresos() {
                 <span>
                   {item.document} · {longDate(item.date)} · {item.method}
                   {item.folio ? ` · cita #${item.folio}` : ''}
+                  {item.category ? ` · ${item.category}` : ''}
                 </span>
               </div>
               <b className="num ok-text">{money(item.amount)}</b>

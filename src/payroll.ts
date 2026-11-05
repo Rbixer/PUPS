@@ -8,7 +8,8 @@ export const PAYROLL_RATES = {
   igssPatronal: 0.1267,
   aguinaldo: 1 / 12,
   bono14: 1 / 12,
-  indemnizacion: 1 / 12,
+  /** Un mes por año sobre el salario más la sexta parte de aguinaldo y bono 14 (1/12 × 7/6). */
+  indemnizacion: 7 / 72,
   vacaciones: 15 / 360,
 }
 
@@ -29,17 +30,25 @@ function servicesFor(user: User, appointments: Appointment[], period: string) {
   )
 }
 
+/** Parte del mes trabajada por quien entró a mitad de ese mes, en base de 30 días. */
+export function workedShare(hiredAt: string | undefined, period: string) {
+  if (!hiredAt || !hiredAt.startsWith(period)) return hiredAt && hiredAt.slice(0, 7) > period ? 0 : 1
+  const day = Math.min(30, Number(hiredAt.slice(8, 10)) || 1)
+  return (30 - day + 1) / 30
+}
+
 export function payrollLine(user: User, appointments: Appointment[], period: string, adjust: PayrollAdjust = { extra: 0, deductions: 0 }): PayrollLine {
-  const salary = round2(user.salary ?? 0)
+  const share = workedShare(user.hiredAt, period)
+  const salary = round2((user.salary ?? 0) * share)
   const done = servicesFor(user, appointments, period)
   const servicesBase = round2(done.reduce((sum, item) => sum + item.cost, 0))
   const commissionRate = user.commissionRate ?? 0
   const commission = round2((servicesBase * commissionRate) / 100)
-  const bonus = round2(salary > 0 ? user.bonus ?? LEGAL_BONUS : 0)
+  const bonus = round2(salary > 0 || commission > 0 ? (user.bonus ?? LEGAL_BONUS) * share : 0)
   const extra = round2(Math.max(0, adjust.extra || 0))
-  const deductions = round2(Math.max(0, adjust.deductions || 0))
   const insurable = salary + commission + extra
   const igss = round2(insurable * PAYROLL_RATES.igssLaboral)
+  const deductions = round2(Math.min(Math.max(0, adjust.deductions || 0), Math.max(0, insurable + bonus - igss)))
   const ordinary = salary + commission
   return {
     userId: user.id,
@@ -108,9 +117,9 @@ export type Liability = {
   total: number
 }
 
-/** Pasivo laboral acumulado a la fecha, con el salario vigente. */
-export function laborLiability(user: User, today = isoDate()): Liability {
-  const salary = user.salary ?? 0
+/** Pasivo laboral acumulado a la fecha, con el salario vigente más la comisión promedio del mes. */
+export function laborLiability(user: User, today = isoDate(), commission = 0): Liability {
+  const salary = round2((user.salary ?? 0) + Math.max(0, commission))
   const base = {
     userId: user.id,
     name: [user.name, user.lastName].filter(Boolean).join(' '),
@@ -126,7 +135,7 @@ export function laborLiability(user: User, today = isoDate()): Liability {
   const bono14 = round2((salary * since(cycleStart(today, 7))) / 365)
   const vacaciones = round2(((salary / 30) * 15 * since(anniversary(user.hiredAt, today))) / 365)
   const worked = since(user.hiredAt)
-  const indemnizacion = round2((salary * worked) / 365)
+  const indemnizacion = round2((salary * (7 / 6) * worked) / 365)
   return {
     ...base,
     years: round2(worked / 365),
@@ -136,4 +145,14 @@ export function laborLiability(user: User, today = isoDate()): Liability {
     indemnizacion,
     total: round2(aguinaldo + bono14 + vacaciones + indemnizacion),
   }
+}
+
+/** Comisión promedio de las últimas seis planillas pagadas, para que el pasivo use la misma base que las provisiones. */
+export function averageCommission(userId: string, payrolls: { period: string; lines: PayrollLine[] }[]) {
+  const recent = [...payrolls]
+    .sort((a, b) => b.period.localeCompare(a.period))
+    .slice(0, 6)
+    .flatMap((run) => run.lines.filter((line) => line.userId === userId))
+  if (recent.length === 0) return 0
+  return round2(recent.reduce((sum, line) => sum + line.commission, 0) / recent.length)
 }

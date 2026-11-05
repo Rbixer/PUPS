@@ -123,7 +123,7 @@ export function Inventario() {
 function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) {
   const { state, adjustStock, saveProduct } = useStore()
   const moves = (state.stockMoves ?? []).filter((move) => move.productId === item.id)
-  const [form, setForm] = useState({ kind: 'consumo' as 'ajuste' | 'consumo', qty: '', note: '' })
+  const [form, setForm] = useState({ kind: 'consumo' as 'consumo' | 'sube' | 'baja', qty: '', note: '' })
   const [limits, setLimits] = useState({ minStock: String(item.minStock ?? ''), cost: item.cost !== undefined ? String(item.cost) : '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -140,7 +140,13 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
             className="biz-form"
             onSubmit={(event) => {
               event.preventDefault()
-              const result = adjustStock({ productId: item.id, qty: amountOf(form.qty) || 0, kind: form.kind, note: form.note })
+              const qty = amountOf(form.qty)
+              if (!Number.isInteger(qty) || qty <= 0) {
+                setError('Escribe una cantidad entera mayor a cero.')
+                setNotice('')
+                return
+              }
+              const result = adjustStock({ productId: item.id, qty: form.kind === 'baja' ? -qty : qty, kind: form.kind === 'consumo' ? 'consumo' : 'ajuste', note: form.note })
               if (!result.ok) {
                 setError(result.error)
                 setNotice('')
@@ -153,12 +159,13 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
           >
             <div className="form-trio">
               <Field label="Movimiento">
-                <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as 'ajuste' | 'consumo' })}>
+                <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as 'consumo' | 'sube' | 'baja' })}>
                   <option value="consumo">Consumo de grooming</option>
-                  <option value="ajuste">Ajuste por conteo</option>
+                  <option value="sube">Ajuste por conteo · sobran</option>
+                  <option value="baja">Ajuste por conteo · faltan</option>
                 </select>
               </Field>
-              <Field label={form.kind === 'consumo' ? 'Cantidad usada' : 'Diferencia (+/−)'}>
+              <Field label={form.kind === 'consumo' ? 'Cantidad usada' : form.kind === 'sube' ? 'Cuántas sobran' : 'Cuántas faltan'}>
                 <input className="num" inputMode="numeric" value={form.qty} onChange={(event) => setForm({ ...form, qty: event.target.value })} required />
               </Field>
               <Field label="Motivo">

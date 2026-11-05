@@ -29,13 +29,14 @@ export const SERVICES = [
   },
   {
     name: 'Pet shop',
-    detail: 'Alimento, accesorios y cuidado para llevar. El cobro entra a caja como ingreso.',
+    detail: 'Alimento, accesorios y cuidado para llevar a casa.',
   },
 ] as const
 
 export const SIZES = ['Pequeño', 'Mediano', 'Grande'] as const
 export const SEXES = ['Macho', 'Hembra'] as const
 export const COATS = ['Corto', 'Largo', 'Rizado', 'Duro'] as const
-export const METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Pedido', 'Otro'] as const
+/** Medios con los que de verdad entra o sale dinero. "Pedido" lo usan solo los pedidos de la tienda por cobrar. */
+export const METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Otro'] as const
 
 export const SERVICE_NAMES: string[] = SERVICES.map((service) => service.name)

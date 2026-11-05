@@ -101,14 +101,16 @@ export async function downloadLedgerExcel(input: { label: string; filename: stri
   }
 
   const tax = workbook.addWorksheet('Impuestos')
-  head(tax, `Impuestos · ${input.label}`, ['Mes', 'Ingresos', 'IVA débito', 'IVA crédito', 'A pagar'], [16, 16, 16, 16, 16])
+  head(tax, `Impuestos · ${input.label}`, ['Mes', 'Régimen', 'Ingresos', 'IVA débito', 'IVA crédito', 'Crédito anterior', 'A pagar'], [16, 20, 16, 16, 16, 16, 16])
   input.taxes.forEach((month, index) => {
     const row = tax.getRow(5 + index)
     row.getCell(1).value = month.label
-    moneyCell(row.getCell(2), month.base)
-    moneyCell(row.getCell(3), month.debitTax)
-    moneyCell(row.getCell(4), month.creditTax)
-    moneyCell(row.getCell(5), month.payable)
+    row.getCell(2).value = month.regime === 'general' ? 'General' : month.regime === 'pequeno' ? 'Pequeño contribuyente' : 'Sin elegir'
+    moneyCell(row.getCell(3), month.base)
+    moneyCell(row.getCell(4), month.debitTax)
+    moneyCell(row.getCell(5), month.creditTax)
+    moneyCell(row.getCell(6), month.carried)
+    moneyCell(row.getCell(7), month.payable)
   })
 
   const raw = await workbook.xlsx.writeBuffer()

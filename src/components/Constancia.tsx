@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Field } from './ui'
+import { Dialog, Field } from './ui'
 import { SEXES } from '../catalog'
 import { formatName, longDate, money } from '../format'
 import { EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_LABELS, readReport } from '../grooming'
@@ -51,10 +51,13 @@ export function Constancia({
   intent?: 'form' | 'print'
   embedded?: boolean
   onClose: () => void
-  onSave: (patch: Partial<Appointment>) => void
+  /** Devuelve el motivo si no se pudo guardar. */
+  onSave: (patch: Partial<Appointment>) => string | null
 }) {
   const [draft, setDraft] = useState<Draft>(() => fromAppointment(appointment))
   const [saved, setSaved] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [printError, setPrintError] = useState('')
   const report = draft.report
   const suggested = priceFor(report.plan, appointment.size)
@@ -82,13 +85,23 @@ export function Constancia({
     return [...byName.values()]
   }, [appointment.id, history])
 
-  function patchReport(patch: Partial<GroomingReport>) {
+  function touch() {
     setSaved(false)
+    setDirty(true)
+  }
+
+  function close() {
+    if (dirty && !window.confirm('La constancia tiene cambios sin guardar. ¿Cerrar de todos modos?')) return
+    onClose()
+  }
+
+  function patchReport(patch: Partial<GroomingReport>) {
+    touch()
     setDraft((current) => ({ ...current, report: { ...current.report, ...patch } }))
   }
 
   function setCheck(group: 'ingreso' | 'egreso', key: string, patch: Partial<CheckItem>) {
-    setSaved(false)
+    touch()
     setDraft((current) => ({
       ...current,
       report: {
@@ -102,7 +115,7 @@ export function Constancia({
   }
 
   function setIngreso(key: string, patch: Partial<CheckItem>) {
-    setSaved(false)
+    touch()
     setDraft((current) => {
       const next = { ...current.report.ingreso, [key]: { ...current.report.ingreso[key], ...patch } }
       if (patch.value === 'si') {
@@ -118,7 +131,7 @@ export function Constancia({
   }
 
   function save() {
-    onSave({
+    const problem = onSave({
       clientName: draft.clientName.trim(),
       phone: draft.phone.trim(),
       petName: draft.petName.trim(),
@@ -136,7 +149,10 @@ export function Constancia({
       beforePhoto: report.photos[0] ?? '',
       afterPhoto: report.photos[2] ?? '',
     })
-    setSaved(true)
+    setSaveError(problem ?? '')
+    setSaved(!problem)
+    if (!problem) setDirty(false)
+    return !problem
   }
 
   function printSheet() {
@@ -146,7 +162,7 @@ export function Constancia({
       return
     }
     setPrintError('')
-    save()
+    if (!save()) return
     window.setTimeout(() => window.print(), 60)
   }
 
@@ -189,7 +205,7 @@ export function Constancia({
                   onChange={(event) => {
                     const packageId = event.target.value as GroomingPackage
                     const plan: PlanId = packageId === 'premium' ? 'premium' : 'grooming'
-                    setSaved(false)
+                    touch()
                     setPrintError('')
                     setDraft((current) => ({
                       ...current,
@@ -208,7 +224,7 @@ export function Constancia({
                 Imprimir
               </button>
               {embedded ? null : (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={close}>
                   Cerrar
                 </button>
               )}
@@ -223,7 +239,7 @@ export function Constancia({
               : 'Elige el tamaño en la cita para ver la tarifa.'}
           </p>
           {suggested != null && suggested !== appointment.cost ? (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onSave({ cost: suggested })}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSaveError(onSave({ cost: suggested }) ?? '')}>
               Aplicar tarifa {money(suggested)}
             </button>
           ) : null}
@@ -245,10 +261,15 @@ export function Constancia({
                         const file = event.target.files?.[0]
                         event.target.value = ''
                         if (!file) return
-                        const data = await shrinkImage(file)
-                        const photos = [...report.photos]
-                        photos[index] = data
-                        patchReport({ photos })
+                        try {
+                          const data = await shrinkImage(file)
+                          const photos = [...report.photos]
+                          photos[index] = data
+                          patchReport({ photos })
+                          setSaveError('')
+                        } catch {
+                          setSaveError('No se pudo leer esa foto. Prueba con otra o toma la foto desde la cámara en formato JPG.')
+                        }
                       }}
                     />
                   </label>
@@ -278,7 +299,7 @@ export function Constancia({
                   list={`tutores-${appointment.id}`}
                   value={draft.clientName}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, clientName: event.target.value }))
                   }}
                   onBlur={() => {
@@ -302,7 +323,7 @@ export function Constancia({
                 <input
                   value={draft.phone}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, phone: event.target.value }))
                   }}
                 />
@@ -320,7 +341,7 @@ export function Constancia({
                 <input
                   value={draft.petName}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, petName: event.target.value }))
                   }}
                 />
@@ -329,7 +350,7 @@ export function Constancia({
                 <input
                   value={draft.breed}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, breed: event.target.value }))
                   }}
                 />
@@ -344,7 +365,7 @@ export function Constancia({
                 <select
                   value={draft.sex}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, sex: event.target.value }))
                   }}
                 >
@@ -364,7 +385,7 @@ export function Constancia({
                 <input
                   value={draft.allergies}
                   onChange={(event) => {
-                    setSaved(false)
+                    touch()
                     setDraft((current) => ({ ...current, allergies: event.target.value }))
                   }}
                 />
@@ -420,6 +441,11 @@ export function Constancia({
           </section>
 
           {saved ? <p className="banner">Constancia guardada. Ya se puede ver en Constancias.</p> : null}
+          {saveError ? (
+            <p className="form-error" role="alert">
+              {saveError}
+            </p>
+          ) : null}
           {printError ? <p className="banner warn">{printError}</p> : null}
           {missingPremium.length ? <p className="hint">Para imprimir Premium falta: {missingPremium.join(', ')}.</p> : null}
           <div className="overlay-actions">
@@ -509,9 +535,9 @@ export function Constancia({
 
   if (embedded) return sheet
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="constancia-title">
+    <Dialog labelledBy="constancia-title" onClose={close}>
       {sheet}
-    </div>
+    </Dialog>
   )
 }
 

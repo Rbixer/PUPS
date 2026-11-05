@@ -28,7 +28,11 @@ export function Contabilidad() {
   const label = scope === 'mes' ? monthTitle(`${month}-01`) : `Año ${year}`
   const statement = incomeStatement(entries, from, to)
   const sheet = balanceSheet(entries, to)
-  const taxes = taxMonths(entries, regime, year)
+  const taxes = taxMonths(entries, state.settings, year)
+  const anyRegime = taxes.some((item) => item.regime)
+  const anyGeneral = taxes.some((item) => item.regime === 'general')
+  const mixed = new Set(taxes.map((item) => item.regime ?? '')).size > 1
+  const since = state.settings.taxHistory?.length ? [...state.settings.taxHistory].sort((a, b) => b.from.localeCompare(a.from))[0].from : ''
   const inRange = entries.filter((entry) => entry.date >= from && entry.date <= to)
   const monthly = Array.from({ length: 12 }, (_, index) => {
     const key = `${year}-${String(index + 1).padStart(2, '0')}`
@@ -69,6 +73,7 @@ export function Contabilidad() {
               <option value="general">General · IVA 12 %</option>
               <option value="pequeno">Pequeño contribuyente · 5 %</option>
             </select>
+            {since && since > '0000-01-01' ? <small>Vigente desde {longDate(since)}. Los meses anteriores conservan su régimen.</small> : null}
           </label>
           {allows('reportes') ? (
             <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void onExcel()}>
@@ -199,7 +204,7 @@ export function Contabilidad() {
               <span />
             </div>
             <div className="indent">
-              <span>Capital aportado (inventario inicial)</span>
+              <span>Capital aportado (inventario inicial y aportes)</span>
               <span>{money(sheet.capital)}</span>
             </div>
             <div className="indent">
@@ -274,10 +279,10 @@ export function Contabilidad() {
       {tab === 'impuestos' ? (
         <div className="ledger">
           <header className="module-bar">
-            <h2>{regime === 'pequeno' ? 'Impuesto de pequeño contribuyente (5 %)' : regime === 'general' ? 'IVA del año' : 'Impuestos'}</h2>
+            <h2>{mixed ? 'Impuestos del año' : regime === 'pequeno' ? 'Impuesto de pequeño contribuyente (5 %)' : regime === 'general' ? 'IVA del año' : 'Impuestos'}</h2>
             <span>{year}</span>
           </header>
-          {!regime ? (
+          {!anyRegime ? (
             <p className="empty" style={{ margin: 14 }}>Elige el régimen fiscal arriba para calcular impuestos.</p>
           ) : (
             <div className="table-wrap">
@@ -285,9 +290,11 @@ export function Contabilidad() {
                 <thead>
                   <tr>
                     <th>Mes</th>
+                    {mixed ? <th>Régimen</th> : null}
                     <th className="num">Ingresos</th>
-                    {regime === 'general' ? <th className="num">IVA débito</th> : null}
-                    {regime === 'general' ? <th className="num">IVA crédito</th> : null}
+                    {anyGeneral ? <th className="num">IVA débito</th> : null}
+                    {anyGeneral ? <th className="num">IVA crédito</th> : null}
+                    {anyGeneral ? <th className="num">Crédito anterior</th> : null}
                     <th className="num">A pagar</th>
                   </tr>
                 </thead>
@@ -295,9 +302,11 @@ export function Contabilidad() {
                   {taxes.map((item) => (
                     <tr key={item.month}>
                       <td style={{ textTransform: 'capitalize' }}>{item.label}</td>
+                      {mixed ? <td>{item.regime === 'general' ? 'General' : item.regime === 'pequeno' ? 'Pequeño' : 'Sin elegir'}</td> : null}
                       <td className="num">{money(item.base)}</td>
-                      {regime === 'general' ? <td className="num">{money(item.debitTax)}</td> : null}
-                      {regime === 'general' ? <td className="num">{money(item.creditTax)}</td> : null}
+                      {anyGeneral ? <td className="num">{item.regime === 'general' ? money(item.debitTax) : '—'}</td> : null}
+                      {anyGeneral ? <td className="num">{money(item.creditTax)}</td> : null}
+                      {anyGeneral ? <td className="num">{item.regime === 'general' ? money(item.carried) : '—'}</td> : null}
                       <td className="num">
                         <strong>{money(item.payable)}</strong>
                       </td>
@@ -307,16 +316,21 @@ export function Contabilidad() {
                 <tfoot>
                   <tr>
                     <td>Total</td>
+                    {mixed ? <td /> : null}
                     <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.base, 0)))}</td>
-                    {regime === 'general' ? <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.debitTax, 0)))}</td> : null}
-                    {regime === 'general' ? <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.creditTax, 0)))}</td> : null}
+                    {anyGeneral ? <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.debitTax, 0)))}</td> : null}
+                    {anyGeneral ? <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.creditTax, 0)))}</td> : null}
+                    {anyGeneral ? <td /> : null}
                     <td className="num">{money(round2(taxes.reduce((sum, item) => sum + item.payable, 0)))}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
-          <p className="section-note">El pago a la SAT se registra en Gastos con la categoría “Pago de impuestos SAT” y baja el saldo de impuestos por pagar.</p>
+          <p className="section-note">
+            El pago a la SAT se registra en Gastos con la categoría “Pago de impuestos SAT” y baja el saldo de impuestos por pagar. En régimen general, el IVA crédito que sobra un mes se
+            arrastra al siguiente. Para que una factura de proveedor cuente como crédito, marca “Factura con IVA” al registrar el gasto.
+          </p>
         </div>
       ) : null}
     </section>

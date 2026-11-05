@@ -45,7 +45,8 @@ export type User = {
   id: string
   name: string
   username: string
-  password: string
+  /** Solo existe en datos viejos y respaldos: el servidor guarda las claves aparte y nunca las envía. */
+  password?: string
   role: Role
   active: boolean
   /** Si falta, el rol aporta los permisos de siempre. */
@@ -138,6 +139,10 @@ export type Movement = {
   fixedId?: string
   /** Mes (AAAA-MM) que cubre un gasto fijo. */
   period?: string
+  /** Movimiento que esta devolución revierte. La contabilidad lo refleja con la fecha de la devolución. */
+  reverses?: string
+  /** Gasto con factura: en el régimen general separa el crédito fiscal. */
+  withTax?: boolean
 }
 
 export type ShopCategoryName = 'Shampoo' | 'Accesorios' | 'Cuidado' | 'Snacks' | 'Insumos'
@@ -244,6 +249,8 @@ export type Payable = {
   payments: PayablePayment[]
   purchaseId?: string
   payrollId?: string
+  /** Factura con IVA: en el régimen general separa el crédito fiscal. */
+  withTax?: boolean
 }
 
 export type FixedCost = {
@@ -254,6 +261,8 @@ export type FixedCost = {
   /** Día del mes en que vence. */
   day: number
   active: boolean
+  /** Llega con factura que separa IVA crédito. */
+  withTax?: boolean
 }
 
 export type PayrollLine = {
@@ -332,6 +341,8 @@ export type Settings = {
   hours: string
   /** Sin régimen elegido, la contabilidad no separa impuestos. */
   taxRegime?: 'general' | 'pequeno'
+  /** Cambios de régimen con su fecha, para que el historial no se recalcule con el régimen nuevo. */
+  taxHistory?: { from: string; regime?: 'general' | 'pequeno' }[]
   cashFloat?: number
 }
 
@@ -376,4 +387,6 @@ export type AppState = {
   payrolls?: PayrollRun[]
   tasks?: Task[]
   cashCloses?: CashClose[]
+  /** Último número usado por serie (ING, EG, VEN, COM, CXP, FOLIO). Evita repetir documentos borrados. */
+  counters?: Record<string, number>
 }

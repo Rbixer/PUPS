@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { parseAmount } from '../format'
 import type { AppointmentStatus } from '../types'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -71,6 +72,53 @@ export function Flash({ error, notice }: { error?: string; notice?: string }) {
   return null
 }
 
-export function amountOf(value: string) {
-  return Number(value.replace(/[Q\s,]/g, ''))
+export const amountOf = parseAmount
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Ventana modal: lleva el foco adentro, lo mantiene ahí con Tab, cierra con Escape
+ * y al cerrar devuelve el foco al botón que la abrió.
+ */
+export function Dialog({ labelledBy, onClose, children, className = 'overlay', escape = true }: { labelledBy: string; onClose: () => void; children: ReactNode; className?: string; escape?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    const root = ref.current
+    const first = root?.querySelector<HTMLElement>('[autofocus], ' + FOCUSABLE)
+    first?.focus()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && escape) {
+        event.stopPropagation()
+        close.current()
+        return
+      }
+      if (event.key !== 'Tab' || !root) return
+      const items = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((item) => item.offsetParent !== null)
+      if (items.length === 0) return
+      const head = items[0]
+      const tail = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === head) {
+        event.preventDefault()
+        tail.focus()
+      } else if (!event.shiftKey && document.activeElement === tail) {
+        event.preventDefault()
+        head.focus()
+      }
+    }
+    root?.addEventListener('keydown', onKey)
+    return () => {
+      root?.removeEventListener('keydown', onKey)
+      if (opener && document.contains(opener)) opener.focus()
+    }
+  }, [escape])
+
+  return (
+    <div ref={ref} className={className} role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+      {children}
+    </div>
+  )
 }

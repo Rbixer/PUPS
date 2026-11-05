@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Brand } from '../components/ui'
 import { useStore } from '../store'
+import { usePanelTheme } from '../theme'
 
 const LINKS = [
   { to: '/', label: 'Inicio' },
@@ -15,10 +16,30 @@ export function PublicLayout() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
   const { state } = useStore()
+  usePanelTheme(false)
 
   useEffect(() => {
     setOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (!location.hash) {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      return
+    }
+    const id = decodeURIComponent(location.hash.slice(1))
+    const frame = window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [location.pathname, location.hash, location.key])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   useEffect(() => {
     const titles: Record<string, string> = {

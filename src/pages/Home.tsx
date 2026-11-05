@@ -13,8 +13,8 @@ export function Home() {
             <em>Trato de casa.</em>
           </h1>
           <p className="lede">
-            PUP'S cuida el pelaje, la salud y la tienda en la misma visita. Reservas el horario y la cita
-            aparece en el panel del equipo, con la ficha de la mascota lista.
+            PUP'S cuida el pelaje, la salud y las compras de tu mascota en la misma visita. Reservas el horario
+            en línea y te recibimos con su ficha lista.
           </p>
           <div className="hero-actions">
             <Link to="/reservar" className="btn btn-primary">
@@ -26,16 +26,16 @@ export function Home() {
           </div>
           <dl className="hero-metrics">
             <div>
-              <dt>Agenda</dt>
-              <dd>El día, hora por hora</dd>
+              <dt>Horario</dt>
+              <dd>Eliges la hora que te queda</dd>
             </div>
             <div>
               <dt>Ficha</dt>
-              <dd>Raza, tamaño y alergias</dd>
+              <dd>Raza, tamaño y alergias anotadas</dd>
             </div>
             <div>
-              <dt>Caja</dt>
-              <dd>Ingreso, egreso y constancia</dd>
+              <dt>Constancia</dt>
+              <dd>Fotos y recomendaciones de la visita</dd>
             </div>
           </dl>
         </div>
@@ -63,7 +63,7 @@ export function Home() {
                 <em>Pendiente</em>
               </li>
             </ul>
-            <p className="float-note">La reserva del sitio entra a esta lista.</p>
+            <p className="float-note">Tu reserva en línea entra directo a la agenda del día.</p>
           </article>
           </article>
         </div>
@@ -90,15 +90,15 @@ export function Home() {
           <article className="pillar">
             <span className="num">03</span>
             <h3>Pet shop</h3>
-            <p>Alimento y accesorios. Lo que se cobra queda como ingreso, separado del documento de egreso.</p>
+            <p>Shampoo, accesorios y cuidado. Pide en línea y lo recoges en tu próxima visita.</p>
           </article>
         </div>
       </section>
 
       <section className="section preview-wrap">
         <div className="section-head">
-          <p className="eyebrow">Panel</p>
-          <h2>La operación del día, en una sola superficie.</h2>
+          <p className="eyebrow">Organización</p>
+          <h2>Cada mascota con su horario, sin esperas largas.</h2>
         </div>
         <div className="preview">
           <div className="preview-top">
@@ -152,13 +152,13 @@ export function Home() {
           </li>
           <li>
             <span className="num">02</span>
-            <h3>Entra como pendiente</h3>
-            <p>Recepción la ve en las citas de hoy, con búsqueda por teléfono, cliente o mascota.</p>
+            <h3>Te esperamos</h3>
+            <p>Tu cita queda con número de folio y la recibimos a la hora que elegiste.</p>
           </li>
           <li>
             <span className="num">03</span>
-            <h3>Se cobra y se imprime</h3>
-            <p>Al completar, el costo queda en la ficha. La constancia sale lista para firmar.</p>
+            <h3>Te llevas la constancia</h3>
+            <p>Al terminar te entregamos la constancia de la visita con fotos y recomendaciones.</p>
           </li>
         </ol>
         <Link to="/reservar" className="btn btn-primary">

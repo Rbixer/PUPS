@@ -2,25 +2,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { COATS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
 import { Field } from '../components/ui'
-import { isoDate, longDate, whatsappUrl } from '../format'
+import { addDays, isoDate, longDate, whatsappUrl } from '../format'
 import { useStore } from '../store'
-import { slotTaken } from '../visit'
-
-const SLOTS = Array.from({ length: ((18 - 8) * 60) / 30 + 1 }, (_, index) => {
-  const total = 8 * 60 + index * 30
-  const hour = Math.floor(total / 60)
-  const minute = total % 60
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-})
+import { BOOKING_SLOTS as SLOTS, slotPassed, slotTaken } from '../visit'
 
 export function Reservar() {
   const [params] = useSearchParams()
   const requested = params.get('servicio') ?? ''
   const initialService = SERVICE_NAMES.includes(requested) ? requested : 'Baño y corte'
-  const { state, addAppointment } = useStore()
+  const { state, bookAppointment } = useStore()
   const [folio, setFolio] = useState<number | null>(null)
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
+  const [sending, setSending] = useState(false)
+  const today = isoDate()
   const [form, setForm] = useState({
     clientName: params.get('tutor') ?? '',
     phone: params.get('tel') ?? '',
@@ -30,7 +25,7 @@ export function Reservar() {
     size: 'Pequeño',
     coat: '',
     service: initialService,
-    date: isoDate(),
+    date: slotPassed(isoDate(), SLOTS[SLOTS.length - 1]) ? addDays(isoDate(), 1) : isoDate(),
     time: '09:00',
     allergies: '',
   })
@@ -42,7 +37,7 @@ export function Reservar() {
   }
 
   const free = useMemo(
-    () => SLOTS.filter((time) => !slotTaken(state.appointments, form.date, time, form.service)),
+    () => SLOTS.filter((time) => !slotPassed(form.date, time) && !slotTaken(state.appointments, form.date, time, form.service)),
     [state.appointments, form.date, form.service],
   )
 
@@ -59,15 +54,15 @@ export function Reservar() {
           <p className="eyebrow">Reservar</p>
           <h2>Agenda la visita.</h2>
           <p className="lede">
-            Tutor, mascota y un horario libre. La cita entra al panel como pendiente, con folio.
+            Tus datos, los de tu mascota y un horario libre. Te confirmamos la cita con su número de folio.
           </p>
         </div>
         {folio ? (
           <p className="banner" role="status">
-            Cita #{folio} quedó en la agenda.{' '}
+            Tu cita #{folio} quedó agendada. Guarda el número de folio.{' '}
             {confirm ? (
               <a href={confirm} target="_blank" rel="noreferrer">
-                Avisar por WhatsApp
+                Escribirnos por WhatsApp
               </a>
             ) : null}
           </p>
@@ -75,33 +70,45 @@ export function Reservar() {
       </header>
       <form
         className="book-layout"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
+          if (sending) return
           if (!form.clientName.trim() || !form.phone.trim() || !form.petName.trim() || !form.date || !form.time) {
-            setError('Cliente, teléfono, mascota, fecha y hora son obligatorios.')
+            setError('Tu nombre, teléfono, el nombre de la mascota, la fecha y la hora son obligatorios.')
+            return
+          }
+          if (slotPassed(form.date, form.time)) {
+            setError('Ese horario ya pasó. Elige otro.')
             return
           }
           if (slotTaken(state.appointments, form.date, form.time, form.service)) {
             setError('Esa hora ya está ocupada. Elige otro horario libre.')
             return
           }
-          const created = addAppointment({
+          setSending(true)
+          const created = await bookAppointment({
             ...form,
             clientName: form.clientName.trim(),
             phone: form.phone.trim(),
             petName: form.petName.trim(),
             breed: form.breed.trim(),
             allergies: form.allergies.trim(),
-            status: 'pendiente',
-            cost: 0,
           })
+          setSending(false)
+          if (!created.ok) {
+            setError(created.error)
+            return
+          }
           setError('')
           setFolio(created.folio)
+          const shop = state.settings.whatsapp.trim()
           setConfirm(
-            whatsappUrl(
-              form.phone,
-              `Hola ${form.clientName.trim()}, tu cita en PUP'S quedó para ${longDate(form.date)} a las ${form.time}. Folio #${created.folio}.`,
-            ),
+            shop
+              ? whatsappUrl(
+                  shop,
+                  `Hola, soy ${form.clientName.trim()}. Agendé a ${form.petName.trim()} para ${longDate(form.date)} a las ${form.time}. Folio #${created.folio}.`,
+                )
+              : '',
           )
           setForm((current) => ({ ...current, clientName: '', phone: '', petName: '', breed: '', allergies: '' }))
         }}
@@ -173,7 +180,7 @@ export function Reservar() {
                 </select>
               </Field>
               <Field label="Fecha">
-                <input type="date" value={form.date} onChange={(event) => set('date', event.target.value)} required />
+                <input type="date" value={form.date} min={today} onChange={(event) => set('date', event.target.value < today ? today : event.target.value)} required />
               </Field>
             </div>
             <fieldset className="slot-field">
@@ -181,6 +188,7 @@ export function Reservar() {
               <div className="slot-picks">
                 {SLOTS.map((time) => {
                   const taken = !free.includes(time)
+                  if (slotPassed(form.date, time)) return null
                   return (
                     <button
                       key={time}
@@ -225,10 +233,11 @@ export function Reservar() {
           </dl>
           {chosenTaken ? <p className="form-error">Esa hora ya está ocupada.</p> : null}
           {error ? <p className="form-error">{error}</p> : null}
-          <button type="submit" className="btn btn-primary" disabled={chosenTaken}>
-            Confirmar cita
+          {free.length === 0 ? <p className="form-error">Ya no quedan horarios libres ese día. Elige otra fecha.</p> : null}
+          <button type="submit" className="btn btn-primary" disabled={chosenTaken || sending || free.length === 0}>
+            {sending ? 'Agendando…' : 'Confirmar cita'}
           </button>
-          <p className="hint">Recepción la ve en la agenda de este equipo y confirma el costo al terminar.</p>
+          <p className="hint">El costo final depende del tamaño y del estado del pelaje; te lo confirmamos al recibir a tu mascota.</p>
         </aside>
       </form>
     </section>

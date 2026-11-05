@@ -3,11 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { COATS, METHODS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
 import { Constancia } from '../components/Constancia'
 import { DayBoard } from '../components/DayBoard'
-import { Field, StatusPill } from '../components/ui'
-import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, shiftMonth, show } from '../format'
-import { useStore, type ChargeNote } from '../store'
+import { Dialog, Field, StatusPill } from '../components/ui'
+import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, parseAmount, shiftMonth, show } from '../format'
+import { useStore, type ChargeNote, type Result } from '../store'
 import type { Appointment, AppointmentStatus } from '../types'
-import { overlaps, petKey, visitMinutes } from '../visit'
+import { overlaps, petFiles, petKey, visitMinutes } from '../visit'
 
 type Draft = {
   petName: string
@@ -83,15 +83,34 @@ export function Citas() {
   const [costValue, setCostValue] = useState('')
   const [costError, setCostError] = useState('')
   const [cashNote, setCashNote] = useState<ChargeNote | null>(null)
+  const [cashError, setCashError] = useState('')
+  const [completeError, setCompleteError] = useState('')
   const [params, setParams] = useSearchParams()
 
   useEffect(() => {
     const id = params.get('constancia')
-    if (!id) return
-    const found = state.appointments.find((item) => item.id === id)
-    if (found) setSheet(found)
+    const pet = params.get('nueva')
+    if (!id && !pet) return
+    if (id) {
+      const found = state.appointments.find((item) => item.id === id)
+      if (found) setSheet(found)
+    }
+    if (pet) {
+      const file = petFiles(state.appointments).find((item) => item.key === pet)
+      setEditing('new')
+      setPayMethod('Efectivo')
+      setFormError('')
+      setDraft({
+        ...blankDraft(),
+        date: today,
+        employeeCode: currentUser?.employeeCode ?? '',
+        ...(file
+          ? { petName: file.petName, clientName: file.clientName, phone: file.phone, breed: file.breed, sex: file.sex || 'Macho', size: file.size || 'Pequeño', coat: file.coat, allergies: file.allergies }
+          : {}),
+      })
+    }
     setParams({}, { replace: true })
-  }, [params, setParams, state.appointments])
+  }, [params, setParams, state.appointments, today, currentUser?.employeeCode])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 800px)')
@@ -99,18 +118,6 @@ export function Citas() {
     apply()
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
-  }, [])
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return
-      setSheet(null)
-      setEditing(null)
-      setCostTarget(null)
-      setCompleteTarget(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const needle = query.trim().toLowerCase()
@@ -158,27 +165,40 @@ export function Citas() {
   function openEdit(item: Appointment) {
     setEditing(item)
     setDraft(fromAppointment(item))
+    setPayMethod('Efectivo')
     setFormError('')
   }
 
   function openNew(date = selected, time = '09:00') {
     setEditing('new')
+    setPayMethod('Efectivo')
     setDraft({ ...blankDraft(), date, time, employeeCode: currentUser?.employeeCode ?? '' })
     setSelected(date)
     setMonth(monthStart(date))
     setFormError('')
   }
 
+  /** Muestra lo que pasó en caja al guardar una cita, o por qué no se pudo. */
+  function charged(result: Result<ChargeNote | null>) {
+    if (!result.ok) {
+      setCashError(result.error)
+      setCashNote(null)
+      return false
+    }
+    setCashError('')
+    setCashNote(result.value)
+    return true
+  }
+
   function moveAppointment(id: string, patch: { date?: string; time?: string }) {
-    const note = updateAppointment(id, patch)
-    setCashNote(note)
+    charged(updateAppointment(id, patch))
   }
 
   function patch<K extends keyof Draft>(key: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
   }
 
-  function Actions({ item }: { item: Appointment }) {
+  function actions(item: Appointment) {
     return (
       <div className="record-actions">
         {item.status === 'pendiente' ? (
@@ -187,6 +207,7 @@ export function Citas() {
             className="btn btn-primary btn-sm"
             onClick={() => {
               setCompleteTarget(item)
+              setCompleteError('')
               setPayMethod('Efectivo')
             }}
           >
@@ -229,12 +250,16 @@ export function Citas() {
             Editar costo
           </button>
         ) : null}
-        <Link className="btn btn-ghost btn-sm" to={`/admin/fichas/${encodeURIComponent(petKey(item))}`}>
-          Ficha
-        </Link>
-        <Link className="btn btn-wa btn-sm" to={`/admin/whatsapp?tel=${digits(item.phone)}`}>
-          WhatsApp
-        </Link>
+        {allows('fichas') ? (
+          <Link className="btn btn-ghost btn-sm" to={`/admin/fichas/${encodeURIComponent(petKey(item))}`}>
+            Ficha
+          </Link>
+        ) : null}
+        {allows('whatsapp') ? (
+          <Link className="btn btn-wa btn-sm" to={`/admin/whatsapp?tel=${digits(item.phone)}`}>
+            WhatsApp
+          </Link>
+        ) : null}
       </div>
     )
   }
@@ -251,6 +276,11 @@ export function Citas() {
         </button>
       </header>
 
+      {cashError ? (
+        <p className="form-error" role="alert">
+          {cashError}
+        </p>
+      ) : null}
       {cashNote ? (
         <p className="banner">
           {cashNote.removed
@@ -410,7 +440,7 @@ export function Citas() {
                 </div>
                 <StatusPill status={item.status} />
                 <b className="num">{money(item.cost)}</b>
-                <Actions item={item} />
+                {actions(item)}
               </article>
             ))}
           </div>
@@ -443,14 +473,16 @@ export function Citas() {
           intent={sheetIntent}
           onClose={() => setSheet(null)}
           onSave={(patch) => {
-            updateAppointment(sheet.id, patch)
+            const result = updateAppointment(sheet.id, patch)
+            if (!result.ok) return result.error
             setSheet((current) => (current ? { ...current, ...patch } : current))
+            return null
           }}
         />
       ) : null}
 
       {editing ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+        <Dialog labelledBy="edit-title" onClose={() => setEditing(null)}>
           <form
             className="drawer"
             onSubmit={(event) => {
@@ -459,7 +491,7 @@ export function Citas() {
                 setFormError('Cliente, teléfono, mascota, fecha y hora son obligatorios.')
                 return
               }
-              const cost = Number(draft.cost || 0)
+              const cost = parseAmount(draft.cost)
               if (!Number.isFinite(cost) || cost < 0) {
                 setFormError('El costo debe ser un número válido.')
                 return
@@ -480,10 +512,17 @@ export function Citas() {
                 cost: allows('costos') || editing === 'new' ? cost : editing.cost,
                 employeeCode: draft.employeeCode,
               }
+              const charging = payload.status === 'completada' && (editing === 'new' || editing.status !== 'completada')
+              const method = charging ? payMethod : undefined
+              const result = editing === 'new' ? addAppointment(payload, method) : updateAppointment(editing.id, payload, method)
+              if (!result.ok) {
+                setFormError(result.error)
+                return
+              }
               if (editing === 'new') {
-                addAppointment(payload)
                 setCashNote(null)
-              } else setCashNote(updateAppointment(editing.id, payload))
+                setCashError('')
+              } else charged(result as Result<ChargeNote | null>)
               setEditing(null)
             }}
           >
@@ -526,6 +565,15 @@ export function Citas() {
                   <option value="cancelada">Cancelada</option>
                 </select>
               </Field>
+              {draft.status === 'completada' && (editing === 'new' || editing.status !== 'completada') ? (
+                <Field label="Medio de pago">
+                  <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
+                    {METHODS.map((method) => (
+                      <option key={method}>{method}</option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
               <Field label="Sexo">
                 <select value={draft.sex} onChange={(event) => patch('sex', event.target.value)}>
                   {SEXES.map((sex) => (
@@ -578,16 +626,21 @@ export function Citas() {
               Guardar
             </button>
           </form>
-        </div>
+        </Dialog>
       ) : null}
 
       {completeTarget ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="done-title">
+        <Dialog labelledBy="done-title" onClose={() => setCompleteTarget(null)}>
           <form
             className="dialog"
             onSubmit={(event) => {
               event.preventDefault()
-              setCashNote(updateAppointment(completeTarget.id, { status: 'completada' }, payMethod))
+              const result = updateAppointment(completeTarget.id, { status: 'completada' }, payMethod)
+              if (!result.ok) {
+                setCompleteError(result.error)
+                return
+              }
+              charged(result)
               setCompleteTarget(null)
             }}
           >
@@ -602,6 +655,7 @@ export function Citas() {
                 ))}
               </select>
             </Field>
+            {completeError ? <p className="form-error">{completeError}</p> : null}
             <div className="overlay-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setCompleteTarget(null)}>
                 Volver
@@ -611,21 +665,26 @@ export function Citas() {
               </button>
             </div>
           </form>
-        </div>
+        </Dialog>
       ) : null}
 
       {costTarget ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="cost-title">
+        <Dialog labelledBy="cost-title" onClose={() => setCostTarget(null)}>
           <form
             className="dialog"
             onSubmit={(event) => {
               event.preventDefault()
-              const value = Number(costValue)
+              const value = parseAmount(costValue)
               if (!Number.isFinite(value) || value < 0) {
                 setCostError('Escribe un monto válido.')
                 return
               }
-              setCashNote(updateAppointment(costTarget.id, { cost: value }))
+              const result = updateAppointment(costTarget.id, { cost: value })
+              if (!result.ok) {
+                setCostError(result.error)
+                return
+              }
+              charged(result)
               setCostTarget(null)
             }}
           >
@@ -643,7 +702,7 @@ export function Citas() {
               </button>
             </div>
           </form>
-        </div>
+        </Dialog>
       ) : null}
     </section>
   )

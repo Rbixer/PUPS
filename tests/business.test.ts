@@ -61,13 +61,26 @@ describe('ventas de mostrador', () => {
     expect(ops.recordSale(insumo, { clientName: '', phone: '', lines: [{ productId: 'gel', name: 'Gel', qty: 1, price: 10 }], discount: 0, method: 'Efectivo' }).ok).toBe(false)
   })
 
-  it('anular devuelve la existencia y quita el ingreso', () => {
+  it('anular devuelve la existencia y deja una devolución sin tocar el ingreso original', () => {
     const seed = createSeed()
     const sold = apply(seed, ops.recordSale(seed, { clientName: '', phone: '', lines: [{ productId: 'peine', name: 'Peine', qty: 3, price: 38 }], discount: 0, method: 'Tarjeta' }))
+    const original = sold.state.movements.find((item) => item.saleId === sold.value.id)!
     const voided = apply(sold.state, ops.voidSale(sold.state, sold.value.id, 'Cliente devolvió'))
     expect(stockOf(voided.state, 'peine')).toBe(20)
-    expect(voided.state.movements.some((item) => item.saleId === sold.value.id)).toBe(false)
+    expect(voided.state.movements).toContainEqual(original)
+    expect(voided.state.movements[0]).toMatchObject({ type: 'egreso', amount: 114, reverses: original.id, category: 'Devolución de venta', date: isoDate() })
     expect(voided.value.status).toBe('anulada')
+    const statement = incomeStatement(balancedJournal(voided.state), '0000-01-01', '9999-12-31')
+    expect(statement.revenue.find((row) => row.code === '4101')?.balance ?? 0).toBe(incomeStatement(buildJournal(seed), '0000-01-01', '9999-12-31').revenue.find((row) => row.code === '4101')?.balance ?? 0)
+  })
+
+  it('cancelar un pedido sin cobrar solo lo quita', () => {
+    const seed = createSeed()
+    const placed = apply(seed, ops.placeOrder(seed, { name: 'Luis', phone: '55553333', lines: [{ id: 'snack', qty: 2 }] }))
+    const saleId = placed.state.sales![0].id
+    const voided = apply(placed.state, ops.voidSale(placed.state, saleId, 'No llegó'))
+    expect(voided.state.movements.some((item) => item.saleId === saleId)).toBe(false)
+    expect(stockOf(voided.state, 'snack')).toBe(stockOf(seed, 'snack'))
   })
 
   it('un pedido de la tienda queda por cobrar y se cobra después', () => {

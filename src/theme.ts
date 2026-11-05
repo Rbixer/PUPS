@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 export type ThemeChoice = 'light' | 'dark' | 'system'
 
 const KEY = 'pups-theme'
@@ -22,6 +24,13 @@ export function applyTheme(choice: ThemeChoice) {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute('content', mode === 'dark' ? '#14110f' : '#1c1917')
+}
+
+/** El sitio público siempre va en claro; el tema elegido aplica solo al panel y al acceso. */
+export function usePanelTheme(panel: boolean) {
+  useEffect(() => {
+    applyTheme(panel ? readTheme() : 'light')
+  }, [panel])
 }
 
 export function saveTheme(choice: ThemeChoice) {

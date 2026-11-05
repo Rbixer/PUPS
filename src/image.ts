@@ -13,7 +13,7 @@ export async function shrinkImage(file: File) {
     canvas.width = Math.round(image.width * scale)
     canvas.height = Math.round(image.height * scale)
     const context = canvas.getContext('2d')
-    if (!context) return ''
+    if (!context) throw new Error('No se pudo preparar la foto')
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
     return canvas.toDataURL('image/jpeg', 0.72)
   } finally {

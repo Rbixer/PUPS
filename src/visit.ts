@@ -50,6 +50,18 @@ export function overlaps(left: Appointment, right: Appointment) {
   return leftStart < rightEnd && rightStart < leftEnd
 }
 
+/** Horarios que ofrece el sitio público: de 8:00 a 18:00 cada media hora. */
+export const BOOKING_SLOTS = Array.from({ length: ((18 - 8) * 60) / 30 + 1 }, (_, index) => {
+  const total = 8 * 60 + index * 30
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+})
+
+export function slotPassed(date: string, time: string, now = new Date()) {
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  if (date !== today) return date < today
+  return startMinute(time) <= now.getHours() * 60 + now.getMinutes()
+}
+
 export function slotTaken(appointments: Appointment[], date: string, time: string, service: string, ignoreId = 'probe') {
   const probe: Appointment = {
     id: ignoreId,

@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { METHODS } from '../catalog'
+import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, daysBetween, isoDate, longDate, money } from '../format'
 import { EXPENSE_CATEGORIES, payableBalance, round2 } from '../ops'
 import { useStore } from '../store'
 import type { Payable } from '../types'
 
-const PAY_METHODS = METHODS.filter((item) => item !== 'Pedido')
 
 function dueTag(payable: Payable, today: string) {
   const balance = payableBalance(payable)
@@ -24,7 +23,7 @@ export function CuentasPorPagar() {
   const [view, setView] = useState<'pendientes' | 'pagadas'>('pendientes')
   const [paying, setPaying] = useState<string | null>(null)
   const [payment, setPayment] = useState({ amount: '', method: 'Transferencia' })
-  const [form, setForm] = useState({ date: today, dueDate: addDays(today, 30), supplierId: '', supplierName: '', invoice: '', concept: '', category: 'Luz', amount: '' })
+  const [form, setForm] = useState({ date: today, dueDate: addDays(today, 30), supplierId: '', supplierName: '', invoice: '', concept: '', category: 'Luz', amount: '', withTax: false })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const open = payables.filter((item) => payableBalance(item) > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
@@ -123,6 +122,12 @@ export function CuentasPorPagar() {
               { id: 'pagadas', label: 'Pagadas' },
             ]}
           />
+          {state.settings.taxRegime === 'general' ? (
+            <label className="check-line">
+              <input type="checkbox" checked={form.withTax} onChange={(event) => setForm({ ...form, withTax: event.target.checked })} />
+              Factura con IVA (separa el 12 % como crédito fiscal)
+            </label>
+          ) : null}
           <Flash error={error} notice={notice} />
           <div className="ledger">
             {rows.length === 0 ? (

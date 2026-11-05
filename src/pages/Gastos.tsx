@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { METHODS } from '../catalog'
+import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { EXPENSE_CATEGORIES, round2 } from '../ops'
 import { useStore } from '../store'
 import type { FixedCost, Movement } from '../types'
 
-const PAY_METHODS = METHODS.filter((item) => item !== 'Pedido')
 
 const blankFixed = (): FixedCost => ({ id: '', name: '', category: 'Alquiler', amount: 0, day: 1, active: true })
 
@@ -71,8 +70,9 @@ export function Gastos() {
 }
 
 function MonthExpenses({ cursor, egresos }: { cursor: string; egresos: Movement[] }) {
-  const { addMovement } = useStore()
-  const [form, setForm] = useState({ date: isoDate(), category: 'Insumos de grooming', concept: '', amount: '', method: 'Efectivo', notes: '' })
+  const { state, addMovement } = useStore()
+  const general = state.settings.taxRegime === 'general'
+  const [form, setForm] = useState({ date: isoDate(), category: 'Insumos de grooming', concept: '', amount: '', method: 'Efectivo', notes: '', withTax: false })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const groups = new Map<string, number>()
@@ -95,6 +95,7 @@ function MonthExpenses({ cursor, egresos }: { cursor: string; egresos: Movement[
               method: form.method,
               notes: form.notes,
               category: form.category,
+              ...(form.withTax ? { withTax: true } : {}),
             })
             if (!result.ok) {
               setError(result.error)
@@ -137,6 +138,12 @@ function MonthExpenses({ cursor, egresos }: { cursor: string; egresos: Movement[
           <Field label="Detalle">
             <input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="No. de factura, proveedor…" />
           </Field>
+          {general ? (
+            <label className="check-line">
+              <input type="checkbox" checked={form.withTax} onChange={(event) => setForm({ ...form, withTax: event.target.checked })} />
+              Factura con IVA (separa el 12 % como crédito fiscal)
+            </label>
+          ) : null}
           <Flash error={error} notice={notice} />
           <button type="submit" className="btn btn-primary">
             Registrar gasto
@@ -256,6 +263,12 @@ function FixedCosts({ cursor }: { cursor: string }) {
           <input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} />
           Activo cada mes
         </label>
+        {state.settings.taxRegime === 'general' ? (
+          <label className="check-line">
+            <input type="checkbox" checked={form.withTax === true} onChange={(event) => setForm({ ...form, withTax: event.target.checked || undefined })} />
+            Llega con factura con IVA
+          </label>
+        ) : null}
         <Flash error={error} notice={notice} />
         <div className="overlay-actions">
           {editing ? (

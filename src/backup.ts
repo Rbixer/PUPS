@@ -1,3 +1,4 @@
+import { isoDate } from './format'
 import { createSeed, DATA_VERSION } from './seed'
 import type { AppState } from './types'
 
@@ -22,6 +23,18 @@ export function parseBackup(raw: string, current: Current): BackupResult {
     Array.isArray(parsed.appointments) &&
     Array.isArray(parsed.movements)
   if (!valid) return { error: NOT_BACKUP }
+  const lists = ['conversations', 'leads', 'controlRows', 'products', 'sales', 'purchases', 'suppliers', 'stockMoves', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses'] as const
+  if (lists.some((key) => parsed[key] !== undefined && !Array.isArray(parsed[key]))) return { error: NOT_BACKUP }
+  const text = (value: unknown) => typeof value === 'string'
+  if (!parsed.users.every((user) => user && text(user.id) && text(user.username) && text(user.name))) {
+    return { error: 'El respaldo tiene usuarios incompletos.' }
+  }
+  if (!parsed.appointments.every((item) => item && text(item.id) && Number.isFinite(item.folio) && text(item.date) && text(item.time))) {
+    return { error: 'El respaldo tiene citas incompletas.' }
+  }
+  if (!parsed.movements.every((item) => item && text(item.id) && (item.type === 'ingreso' || item.type === 'egreso') && Number.isFinite(item.amount) && text(item.date))) {
+    return { error: 'El respaldo tiene movimientos de caja incompletos.' }
+  }
   if (!parsed.users.some((user) => user.active && user.role === 'Administrador')) {
     return { error: 'El respaldo no tiene un administrador activo.' }
   }
@@ -66,9 +79,11 @@ export function saveBackupFile(data: string) {
   const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `pups-respaldo-${new Date().toISOString().slice(0, 10)}.json`
+  link.download = `pups-respaldo-${isoDate()}.json`
+  document.body.append(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   write(BACKUP_AT, new Date().toISOString())
 }
 

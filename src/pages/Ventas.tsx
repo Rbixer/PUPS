@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import { METHODS } from '../catalog'
-import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
+import { METHODS as PAY_METHODS } from '../catalog'
+import { amountOf, Dialog, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { round2 } from '../ops'
 import { SHOP_CATEGORY_NAMES, shelfOf } from '../shop'
@@ -9,7 +9,6 @@ import type { Sale } from '../types'
 
 type CartLine = { key: string; productId?: string; name: string; qty: number; price: number; max?: number }
 
-const PAY_METHODS = METHODS.filter((item) => item !== 'Pedido')
 
 export function Ventas() {
   const { state } = useStore()
@@ -96,6 +95,13 @@ function Register() {
   }
 
   function charge() {
+    if (method === 'Efectivo' && received.trim()) {
+      const paid = amountOf(received)
+      if (!Number.isFinite(paid) || paid < total) {
+        setError(`El efectivo recibido no cubre el total de ${money(total)}.`)
+        return
+      }
+    }
     const result = recordSale({
       clientName: client.name,
       phone: client.phone,
@@ -271,7 +277,7 @@ function Ticket({ sale, onClose }: { sale: Sale; onClose: () => void }) {
     window.print()
   }
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="ticket-title">
+    <Dialog labelledBy="ticket-title" onClose={onClose}>
       <div className="overlay-card">
         <article className="ticket">
           <header>
@@ -324,7 +330,7 @@ function Ticket({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -494,9 +500,11 @@ function History() {
 }
 
 function Pending() {
-  const { state, settleOrder } = useStore()
+  const { state, settleOrder, voidSale } = useStore()
   const orders = state.movements.filter((item) => item.type === 'ingreso' && item.method === 'Pedido')
   const [methods, setMethods] = useState<Record<string, string>>({})
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const total = round2(orders.reduce((sum, item) => sum + item.amount, 0))
@@ -506,7 +514,10 @@ function Pending() {
         <h2>Pedidos de la tienda en línea por cobrar</h2>
         <span>{money(total)}</span>
       </header>
-      <p className="section-note">La existencia ya está apartada. Al entregar, elige cómo pagó el cliente y el cobro pasa a la caja de hoy.</p>
+      <p className="section-note">
+        La existencia ya está apartada. Al entregar, elige cómo pagó el cliente y el cobro pasa a la caja de hoy. Si el cliente no llega, cancela el pedido y la existencia vuelve al
+        inventario.
+      </p>
       <Flash error={error} notice={notice} />
       {orders.length === 0 ? (
         <p className="empty" style={{ margin: 14 }}>No hay pedidos pendientes de cobro.</p>
@@ -564,7 +575,44 @@ function Pending() {
                         >
                           Marcar cobrado
                         </button>
+                        {order.saleId && cancelling !== order.id ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              setCancelling(order.id)
+                              setReason('')
+                            }}
+                          >
+                            Cancelar pedido
+                          </button>
+                        ) : null}
                       </div>
+                      {order.saleId && cancelling === order.id ? (
+                        <div className="row-actions">
+                          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo" aria-label={`Motivo para cancelar ${order.document}`} autoFocus />
+                          <button
+                            type="button"
+                            className="btn btn-amber btn-sm"
+                            onClick={() => {
+                              const result = voidSale(order.saleId ?? '', reason)
+                              if (!result.ok) {
+                                setError(result.error)
+                                setNotice('')
+                                return
+                              }
+                              setCancelling(null)
+                              setError('')
+                              setNotice(`${order.document} cancelado. La existencia volvió al inventario.`)
+                            }}
+                          >
+                            Confirmar
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCancelling(null)}>
+                            Volver
+                          </button>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 )

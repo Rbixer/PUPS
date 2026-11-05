@@ -52,7 +52,8 @@ export function Constancias() {
               history={state.appointments}
               onClose={() => setOpenId(null)}
               onSave={(patch) => {
-                updateAppointment(open.id, patch)
+                const result = updateAppointment(open.id, patch)
+                return result.ok ? null : result.error
               }}
             />
           ) : (

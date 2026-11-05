@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import { METHODS } from '../catalog'
+import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { round2 } from '../ops'
-import { LEGAL_BONUS, PAYROLL_RATES, laborLiability, payrollLine, payrollTotals, workersOf, type PayrollAdjust } from '../payroll'
+import { LEGAL_BONUS, PAYROLL_RATES, averageCommission, laborLiability, payrollLine, payrollTotals, workersOf, type PayrollAdjust } from '../payroll'
 import { useStore } from '../store'
 import type { User } from '../types'
 
-const PAY_METHODS = METHODS.filter((item) => item !== 'Pedido')
 
 const pct = (value: number) => `${round2(value * 100)} %`
 
@@ -59,11 +58,27 @@ function Run() {
     <div className="biz-stack">
       <div className="biz-row" style={{ justifyContent: 'space-between' }}>
         <div className="month-switch">
-          <button type="button" className="cal-arrow" aria-label="Mes anterior" onClick={() => setPeriod((value) => shiftMonth(`${value}-01`, -1).slice(0, 7))}>
+          <button
+            type="button"
+            className="cal-arrow"
+            aria-label="Mes anterior"
+            onClick={() => {
+              setAdjust({})
+              setPeriod((value) => shiftMonth(`${value}-01`, -1).slice(0, 7))
+            }}
+          >
             ‹
           </button>
           <strong>{monthTitle(`${period}-01`)}</strong>
-          <button type="button" className="cal-arrow" aria-label="Mes siguiente" onClick={() => setPeriod((value) => shiftMonth(`${value}-01`, 1).slice(0, 7))}>
+          <button
+            type="button"
+            className="cal-arrow"
+            aria-label="Mes siguiente"
+            onClick={() => {
+              setAdjust({})
+              setPeriod((value) => shiftMonth(`${value}-01`, 1).slice(0, 7))
+            }}
+          >
             ›
           </button>
         </div>
@@ -271,7 +286,7 @@ function WorkerCard({ user, onSave }: { user: User; onSave: (patch: Pick<User, '
 
 function Liabilities() {
   const { state } = useStore()
-  const rows = workersOf(state.users).map((user) => laborLiability(user))
+  const rows = workersOf(state.users).map((user) => laborLiability(user, isoDate(), averageCommission(user.id, state.payrolls ?? [])))
   const total = (pick: (row: (typeof rows)[number]) => number) => money(round2(rows.reduce((sum, row) => sum + pick(row), 0)))
   return (
     <div className="biz-stack">
@@ -302,7 +317,7 @@ function Liabilities() {
                 <tr key={row.userId}>
                   <td>
                     <strong>{row.name}</strong>
-                    <small>{row.hiredAt ? `Ingresó el ${longDate(row.hiredAt)} · salario ${money(row.salary)}` : 'Falta fecha de ingreso o salario'}</small>
+                    <small>{row.hiredAt ? `Ingresó el ${longDate(row.hiredAt)} · base ${money(row.salary)}` : 'Falta fecha de ingreso o salario'}</small>
                   </td>
                   <td className="num">{row.hiredAt ? count(row.years, 'año', 'años') : '—'}</td>
                   <td className="num">{money(row.aguinaldo)}</td>
@@ -318,7 +333,11 @@ function Liabilities() {
           </table>
         </div>
         {rows.length === 0 ? <p className="empty" style={{ margin: 14 }}>Sin trabajadores activos.</p> : null}
-        <p className="section-note">Cálculo con el salario vigente. El aguinaldo corre del 1 de diciembre y el bono 14 del 1 de julio; las vacaciones desde el último aniversario.</p>
+        <p className="section-note">
+          La base es el salario vigente más el promedio de comisiones de las últimas seis planillas. El aguinaldo corre del 1 de diciembre y el bono 14 del 1 de julio; las vacaciones
+          desde el último aniversario. La indemnización suma la sexta parte por aguinaldo y bono 14. Cuando pagues aguinaldo, bono 14, vacaciones o una indemnización, regístralo en
+          Gastos con la categoría “Prestaciones laborales”.
+        </p>
       </div>
     </div>
   )

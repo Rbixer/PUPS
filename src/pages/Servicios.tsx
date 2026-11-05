@@ -10,7 +10,7 @@ export function Servicios() {
         <p className="eyebrow">Servicios</p>
         <h2>Lo que se agenda, se ficha y se cobra.</h2>
         <p className="lede">
-          El precio se confirma según tamaño, pelaje y el trabajo del día. Aquí está el catálogo que usa el panel.
+          El precio se confirma según el tamaño, el pelaje y el trabajo que necesite tu mascota.
         </p>
       </div>
       <div className="service-list">

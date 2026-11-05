@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { METHODS } from '../catalog'
 import { Constancia } from '../components/Constancia'
-import { Field } from '../components/ui'
-import { formatName, isoDate, longDate, money } from '../format'
+import { Dialog, Field } from '../components/ui'
+import { formatName, isoDate, longDate, money, parseAmount } from '../format'
 import { useStore } from '../store'
 import type { Movement } from '../types'
 
@@ -24,7 +24,7 @@ export function Egresos() {
   })
 
   return (
-    <section className="stack">
+    <section className={doc ? 'stack printing-doc' : 'stack'}>
       <header className="page-head">
         <div>
           <p className="eyebrow">Ventas y caja</p>
@@ -60,7 +60,8 @@ export function Egresos() {
               history={state.appointments}
               onClose={() => setVisitId(visits[0]?.id ?? null)}
               onSave={(patch) => {
-                updateAppointment(visit.id, patch)
+                const result = updateAppointment(visit.id, patch)
+                return result.ok ? null : result.error
               }}
             />
           ) : null}
@@ -76,7 +77,7 @@ export function Egresos() {
         className="panel form-grid"
         onSubmit={(event) => {
           event.preventDefault()
-          const amount = Number(form.amount)
+          const amount = parseAmount(form.amount)
           if (!form.concept.trim() || !Number.isFinite(amount) || amount <= 0) {
             setError('Concepto y un monto mayor a cero son obligatorios.')
             setNotice('')
@@ -155,7 +156,7 @@ export function Egresos() {
       </div>
 
       {doc ? (
-        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="egreso-title">
+        <Dialog labelledBy="egreso-title" onClose={() => setDoc(null)}>
           <div className="overlay-card">
             <article className="sheet">
               <header className="sheet-head">
@@ -202,7 +203,7 @@ export function Egresos() {
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       ) : null}
     </section>
   )

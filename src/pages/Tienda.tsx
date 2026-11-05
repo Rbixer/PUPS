@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Field } from '../components/ui'
-import { money, newId } from '../format'
+import { money, newId, parseAmount } from '../format'
 import { shrinkImage } from '../image'
 import { SHOP_CATEGORY_NAMES, shelfOf } from '../shop'
 import { useStore } from '../store'
@@ -18,18 +18,35 @@ const EMPTY: CatalogItem = {
   active: true,
 }
 
+type Amounts = { price: string; stock: string; cost: string; minStock: string }
+
+const amountsOf = (item: CatalogItem): Amounts => ({
+  price: item.id ? String(item.price) : '',
+  stock: item.id ? String(item.stock) : '',
+  cost: item.cost === undefined ? '' : String(item.cost),
+  minStock: item.minStock === undefined ? '' : String(item.minStock),
+})
+
 export function Tienda() {
-  const { state, saveProduct } = useStore()
+  const { state, saveProduct, allows } = useStore()
   const products = shelfOf(state.products).filter((item) => item.kind !== 'insumo')
   const [form, setForm] = useState<CatalogItem>(EMPTY)
+  const [amounts, setAmounts] = useState<Amounts>(() => amountsOf(EMPTY))
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const editing = products.some((item) => item.id === form.id)
+  const canCost = allows('compras')
 
   function edit(item: CatalogItem) {
     setForm(item)
+    setAmounts(amountsOf(item))
     setError('')
     setNotice('')
+  }
+
+  function reset() {
+    setForm(EMPTY)
+    setAmounts(amountsOf(EMPTY))
   }
 
   return (
@@ -46,7 +63,26 @@ export function Tienda() {
           className="panel form-grid"
           onSubmit={(event) => {
             event.preventDefault()
-            const saved = saveProduct({ ...form, id: form.id || newId() })
+            const price = parseAmount(amounts.price)
+            const stock = parseAmount(amounts.stock)
+            const cost = amounts.cost.trim() ? parseAmount(amounts.cost) : undefined
+            const minStock = amounts.minStock.trim() ? parseAmount(amounts.minStock) : undefined
+            if (!Number.isFinite(price) || price <= 0) {
+              setError('Escribe un precio mayor a cero.')
+              setNotice('')
+              return
+            }
+            if (!editing && (!Number.isInteger(stock) || stock < 0)) {
+              setError('La existencia inicial debe ser un número entero, cero o más.')
+              setNotice('')
+              return
+            }
+            if ((cost !== undefined && (!Number.isFinite(cost) || cost < 0)) || (minStock !== undefined && (!Number.isFinite(minStock) || minStock < 0))) {
+              setError('El costo y la existencia mínima deben ser números válidos.')
+              setNotice('')
+              return
+            }
+            const saved = saveProduct({ ...form, id: form.id || newId(), price, stock: editing ? form.stock : stock, cost, minStock })
             if (saved) {
               setError(saved)
               setNotice('')
@@ -54,7 +90,7 @@ export function Tienda() {
             }
             setError('')
             setNotice(editing ? 'Producto actualizado.' : 'Producto agregado a la tienda.')
-            setForm(EMPTY)
+            reset()
           }}
         >
           <h2>{editing ? 'Editar producto' : 'Nuevo producto'}</h2>
@@ -78,51 +114,59 @@ export function Tienda() {
             <input
               className="num"
               inputMode="decimal"
-              value={String(form.price)}
-              onChange={(event) => setForm({ ...form, price: Number(event.target.value) })}
+              value={amounts.price}
+              onChange={(event) => setAmounts({ ...amounts, price: event.target.value })}
               required
             />
           </Field>
-          <Field label="Existencia">
-            <input
-              className="num"
-              inputMode="numeric"
-              value={String(form.stock)}
-              onChange={(event) => setForm({ ...form, stock: Number(event.target.value) })}
-              required
-            />
-          </Field>
-          <Field label="Costo unitario (Q)">
-            <input
-              className="num"
-              inputMode="decimal"
-              value={form.cost === undefined ? '' : String(form.cost)}
-              onChange={(event) => setForm({ ...form, cost: event.target.value.trim() ? Number(event.target.value) : undefined })}
-              placeholder="Para calcular utilidad"
-            />
-          </Field>
+          {editing ? (
+            <Field label="Existencia">
+              <input className="num" value={`${form.stock} ${form.unit}`} readOnly aria-describedby="stock-hint" />
+            </Field>
+          ) : (
+            <Field label="Existencia inicial">
+              <input className="num" inputMode="numeric" value={amounts.stock} onChange={(event) => setAmounts({ ...amounts, stock: event.target.value })} placeholder="0" />
+            </Field>
+          )}
+          {canCost || !editing ? (
+            <Field label="Costo unitario (Q)">
+              <input
+                className="num"
+                inputMode="decimal"
+                value={amounts.cost}
+                onChange={(event) => setAmounts({ ...amounts, cost: event.target.value })}
+                placeholder="Para calcular utilidad"
+              />
+            </Field>
+          ) : null}
           <Field label="Existencia mínima">
             <input
               className="num"
               inputMode="numeric"
-              value={form.minStock === undefined ? '' : String(form.minStock)}
-              onChange={(event) => setForm({ ...form, minStock: event.target.value.trim() ? Number(event.target.value) : undefined })}
+              value={amounts.minStock}
+              onChange={(event) => setAmounts({ ...amounts, minStock: event.target.value })}
               placeholder="Aviso para reponer"
             />
           </Field>
+          {editing ? (
+            <p className="hint" id="stock-hint">
+              La existencia cambia con ventas, compras y ajustes de Inventario, así el kárdex cuadra.
+            </p>
+          ) : null}
           <Field label="Foto">
             <input
               type="file"
               accept="image/*"
               onChange={async (event) => {
                 const file = event.target.files?.[0]
+                event.target.value = ''
                 if (!file) return
-                const image = await shrinkImage(file)
-                if (!image) {
-                  setError('No se pudo leer la foto.')
-                  return
+                try {
+                  const image = await shrinkImage(file)
+                  setForm((current) => ({ ...current, image }))
+                } catch {
+                  setError('No se pudo leer esa foto. Prueba con otra en formato JPG o PNG.')
                 }
-                setForm((current) => ({ ...current, image }))
               }}
             />
           </Field>
@@ -135,7 +179,7 @@ export function Tienda() {
           {notice ? <p className="banner">{notice}</p> : null}
           <div className="overlay-actions">
             {editing ? (
-              <button type="button" className="btn btn-ghost" onClick={() => setForm(EMPTY)}>
+              <button type="button" className="btn btn-ghost" onClick={reset}>
                 Cancelar
               </button>
             ) : null}

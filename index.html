@@ -12,14 +12,15 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta
       name="description"
-      content="PUP'S Pet Shop y Grooming. Panel de citas, fichas, caja y equipo de PUP'S en Guatemala."
+      content="PUP'S Pet Shop y Grooming en Guatemala. Grooming, veterinaria y tienda para tu mascota. Reserva tu cita en línea."
     />
     <title>PUP'S · Pet Shop y Grooming</title>
     <link rel="icon" href="/logo.png" />
     <script>
       try {
         var t = localStorage.getItem('pups-theme')
-        var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        var panel = /^\/(admin|login)/.test(location.pathname)
+        var dark = panel && (t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches))
         document.documentElement.dataset.theme = dark ? 'dark' : 'light'
       } catch (e) {}
     </script>

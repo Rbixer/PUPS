@@ -45,13 +45,10 @@
   html[data-theme="dark"] .admin .ledger,
   html[data-theme="dark"] .admin .person,
   html[data-theme="dark"] .admin .file-card,
-  html[data-theme="dark"] .admin .file-hero,
-  html[data-theme="dark"] .admin .file-panel,
   html[data-theme="dark"] .admin .stats-hero,
   html[data-theme="dark"] .admin .stats-lead,
   html[data-theme="dark"] .admin .metric-rail article,
   html[data-theme="dark"] .admin .service-row,
-  html[data-theme="dark"] .admin .user-row,
   html[data-theme="dark"] .admin .book-card,
   html[data-theme="dark"] .admin .pillar,
   html[data-theme="dark"] .admin .step,
@@ -70,7 +67,6 @@
   }
   html[data-theme="dark"] .admin .record:hover,
   html[data-theme="dark"] .admin .kpi:hover { background: rgba(196, 120, 74, 0.08); }
-  html[data-theme="dark"] .admin .file-line article,
   html[data-theme="dark"] .admin .wa-thread,
   html[data-theme="dark"] .admin .wa-row.active,
   html[data-theme="dark"] .admin .bubble.in,
@@ -99,7 +95,6 @@
   /* Botones */
   html[data-theme="dark"] .admin .btn-ghost,
   html[data-theme="dark"] .admin .btn-wa,
-  html[data-theme="dark"] .admin .btn-cyan,
   html[data-theme="dark"] .admin .btn-amber {
     background: transparent;
     color: var(--ink);
@@ -124,8 +119,6 @@
   html[data-theme="dark"] .admin .pill-cancelada { color: #f0a0ab; background: #3a1f25; border-color: #54303a; }
   html[data-theme="dark"] .admin .person-tags li,
   html[data-theme="dark"] .admin .file-tags span,
-  html[data-theme="dark"] .admin .file-fact span,
-  html[data-theme="dark"] .admin .chips li,
   html[data-theme="dark"] .admin .plan-badge { background: var(--cream); color: #cdbfb0; }
   html[data-theme="dark"] .admin .plan-badge.premium { background: var(--accent); color: #fff; }
   html[data-theme="dark"] .admin .person-mark,
@@ -134,8 +127,7 @@
   html[data-theme="dark"] .admin .banner.warn { background: #34191f; border-color: #5a2a33; color: #f0a0ab; }
 
   /* Estadísticas y tablas */
-  html[data-theme="dark"] .admin .pulse-bar,
-  html[data-theme="dark"] .admin .bar { background: #4a4037; }
+  html[data-theme="dark"] .admin .pulse-bar { background: #4a4037; }
   html[data-theme="dark"] .admin .pulse-col.is-peak .pulse-bar,
   html[data-theme="dark"] .admin .meter-fill { background: var(--accent); }
   html[data-theme="dark"] .admin .meter-track { background: #2f2822; }
@@ -147,11 +139,9 @@
   html[data-theme="dark"] .admin .cyan { color: #e3a67e; }
 
   /* Pantallas del sitio dentro del panel */
-  html[data-theme="dark"] .admin .site-module h1 em { color: #e3a67e; }
   html[data-theme="dark"] .admin .float-card em.done { color: var(--ink); }
 
   html[data-theme="dark"] .admin .module-bar,
-  html[data-theme="dark"] .admin .ledger-head,
   html[data-theme="dark"] .admin .file-grid,
   html[data-theme="dark"] .admin .cash-desk .panel { background: var(--card); color: var(--ink); border-color: var(--line); }
   html[data-theme="dark"] .admin .module-bar h2,
@@ -159,8 +149,7 @@
 
   /* El papel (informes, constancias, hojas) siempre se ve claro */
   html[data-theme="dark"] .admin .report-sheet,
-  html[data-theme="dark"] .admin .sheet,
-  html[data-theme="dark"] .admin .constancia-preview {
+  html[data-theme="dark"] .admin .sheet {
     --bg: #f6f3ee;
     --card: #ffffff;
     --surface: #ffffff;

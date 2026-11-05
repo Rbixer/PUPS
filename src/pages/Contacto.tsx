@@ -6,6 +6,7 @@ export function Contacto() {
   const { state, addLead } = useStore()
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [sending, setSending] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', message: '' })
   const whatsapp = state.settings.whatsapp.trim()
 
@@ -13,26 +14,33 @@ export function Contacto() {
     <section className="section page split">
       <div>
         <p className="eyebrow">Contacto</p>
-        <h2>Escríbenos y queda en el panel.</h2>
+        <h2>Escríbenos y te respondemos.</h2>
         <p className="lede">
           {state.settings.address.trim() || 'Guatemala'}. {state.settings.hours.trim() || 'Horario por confirmar.'}
         </p>
         {whatsapp ? <p className="num contact-phone">{whatsapp}</p> : null}
         {sent ? (
           <p className="banner" role="status">
-            Mensaje guardado en el panel de este navegador.
+            Recibimos tu mensaje. Te contactamos pronto.
           </p>
         ) : null}
       </div>
       <form
         className="form-grid"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
+          if (sending) return
           if (!form.name.trim() || !form.message.trim()) {
             setError('Nombre y mensaje son obligatorios.')
             return
           }
-          addLead(form)
+          setSending(true)
+          const problem = await addLead(form)
+          setSending(false)
+          if (problem) {
+            setError(problem)
+            return
+          }
           setError('')
           setSent(true)
           setForm({ name: '', phone: '', message: '' })
@@ -53,8 +61,8 @@ export function Contacto() {
           />
         </Field>
         {error ? <p className="form-error">{error}</p> : null}
-        <button type="submit" className="btn btn-primary">
-          Enviar mensaje
+        <button type="submit" className="btn btn-primary" disabled={sending}>
+          {sending ? 'Enviando…' : 'Enviar mensaje'}
         </button>
       </form>
     </section>

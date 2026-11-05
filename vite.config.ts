@@ -1,80 +1,26 @@
-import fs from 'node:fs'
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { createApi } from './server/api'
 
-function pupsState(): Plugin {
-  const file = path.resolve('data/pups.json')
-  const handle = (request: IncomingMessage, response: ServerResponse, next: () => void) => {
-    const url = request.url?.split('?')[0]
-    if (url !== '/api/state') {
-      next()
-      return
-    }
-    if (request.method === 'GET') {
-      if (!fs.existsSync(file)) {
-        response.statusCode = 204
-        response.end()
-        return
-      }
-      response.setHeader('Content-Type', 'application/json')
-      response.end(fs.readFileSync(file, 'utf8'))
-      return
-    }
-    if (request.method === 'PUT') {
-      const chunks: Buffer[] = []
-      request.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
-      request.on('end', () => {
-        let nextState: { revision?: number }
-        try {
-          nextState = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { revision?: number }
-        } catch {
-          response.statusCode = 400
-          response.end()
-          return
-        }
-        let current: { revision?: number } | null = null
-        if (fs.existsSync(file)) {
-          try {
-            current = JSON.parse(fs.readFileSync(file, 'utf8')) as { revision?: number }
-          } catch {
-            current = null
-          }
-        }
-        if (current && (nextState.revision ?? 0) < (current.revision ?? 0)) {
-          response.statusCode = 409
-          response.setHeader('Content-Type', 'application/json')
-          response.end(JSON.stringify(current))
-          return
-        }
-        fs.mkdirSync(path.dirname(file), { recursive: true })
-        fs.writeFileSync(file, JSON.stringify(nextState))
-        response.statusCode = 204
-        response.end()
-      })
-      return
-    }
-    response.statusCode = 405
-    response.end()
-  }
+function pupsApi(): Plugin {
+  const handle = createApi()
   return {
-    name: 'pups-state',
+    name: 'pups-api',
     configureServer(server) {
-      server.middlewares.use(handle)
+      server.middlewares.use((request, response, next) => void handle(request, response, next))
     },
     configurePreviewServer(server) {
-      server.middlewares.use(handle)
+      server.middlewares.use((request, response, next) => void handle(request, response, next))
     },
   }
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), 
-    pupsState(),
+  plugins: [tailwindcss(),
+    pupsApi(),
     react(),
     VitePWA({
       injectRegister: null,
@@ -87,6 +33,15 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
+          {
+            urlPattern: /\/api\/media\/[0-9a-f]{32}\.(?:png|jpg|webp|gif)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pups-media',
+              expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
             handler: 'CacheFirst',

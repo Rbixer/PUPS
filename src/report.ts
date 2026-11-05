@@ -98,11 +98,11 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
   const done = appointments.filter((item) => item.status === 'completada')
   const prevDone = previous.filter((item) => item.status === 'completada')
   const movements = state.movements
-    .filter((item) => inMonth(item.date, key))
+    .filter((item) => inMonth(item.date, key) && item.method !== 'Pedido')
     .sort((a, b) => a.date.localeCompare(b.date) || a.document.localeCompare(b.document))
   const ingresos = movements.filter((item) => item.type === 'ingreso')
   const egresos = movements.filter((item) => item.type === 'egreso')
-  const prevMoves = state.movements.filter((item) => inMonth(item.date, prior))
+  const prevMoves = state.movements.filter((item) => inMonth(item.date, prior) && item.method !== 'Pedido')
   const sales = sum(done, 'cost')
   const income = sum(ingresos, 'amount')
   const expense = sum(egresos, 'amount')
@@ -153,7 +153,7 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
   }))
 
   const messages = state.conversations.reduce(
-    (total, thread) => total + thread.messages.filter((message) => message.at.startsWith(key)).length,
+    (total, thread) => total + thread.messages.filter((message) => isoDate(new Date(message.at)).startsWith(key)).length,
     0,
   )
 
@@ -175,7 +175,7 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
     cancelled: appointments.filter((item) => item.status === 'cancelada').length,
     messages,
     unread: state.conversations.reduce((total, thread) => total + thread.unread, 0),
-    leads: state.leads.filter((lead) => lead.createdAt.startsWith(key)).length,
+    leads: state.leads.filter((lead) => isoDate(new Date(lead.createdAt)).startsWith(key)).length,
     appointments,
     done,
     movements,

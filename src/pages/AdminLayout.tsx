@@ -4,10 +4,10 @@ import { allows } from '../access'
 import { saveBackupFile } from '../backup'
 import { BackupReminder } from '../components/BackupReminder'
 import { CommandPalette, type Command } from '../components/CommandPalette'
-import { Brand } from '../components/ui'
-import { todayLabel } from '../format'
+import { Brand, Field } from '../components/ui'
+import { initials, todayLabel } from '../format'
 import { DEMO_MODE } from '../env'
-import { applyTheme, readTheme, resolveTheme, saveTheme } from '../theme'
+import { applyTheme, readTheme, resolveTheme, saveTheme, usePanelTheme } from '../theme'
 import { useStore } from '../store'
 import type { Permission } from '../types'
 
@@ -61,11 +61,6 @@ const GROUPS: { label: string; links: { to: string; label: string; end: boolean;
 ]
 
 const LINKS = GROUPS.flatMap((group) => group.links)
-
-function initials(name?: string) {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toLocaleUpperCase('es') || 'P'
-}
 
 function Icon({ name }: { name: 'search' | 'sun' | 'moon' | 'logout' | 'x' }) {
   const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -272,8 +267,64 @@ function NavIcon({ to }: { to: string }) {
   )
 }
 
+function PasswordNotice() {
+  const { changeOwnPassword } = useStore()
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  return (
+    <div className="backup-reminder" role="status">
+      <p>
+        <strong>Tu clave es la de demostración o es muy corta.</strong> Cámbiala por una propia de al menos 8 caracteres antes de usar el sistema con datos reales.
+      </p>
+      {open ? (
+        <form
+          className="form-grid"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            if (next !== repeat) {
+              setError('Las claves nuevas no coinciden.')
+              return
+            }
+            setBusy(true)
+            const problem = await changeOwnPassword(current, next)
+            setBusy(false)
+            setError(problem ?? '')
+          }}
+        >
+          <Field label="Clave actual">
+            <input type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required />
+          </Field>
+          <Field label="Clave nueva">
+            <input type="password" autoComplete="new-password" minLength={8} value={next} onChange={(event) => setNext(event.target.value)} required />
+          </Field>
+          <Field label="Repite la clave nueva">
+            <input type="password" autoComplete="new-password" minLength={8} value={repeat} onChange={(event) => setRepeat(event.target.value)} required />
+          </Field>
+          {error ? <p className="form-error">{error}</p> : null}
+          <div>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+              {busy ? 'Guardando…' : 'Guardar clave'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>
+            Cambiar clave
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AdminLayout() {
-  const { state, currentUser, logout, isAdmin, resetDemo, exportBackup } = useStore()
+  const { state, currentUser, logout, isAdmin, resetDemo, exportBackup, weakPassword, syncNotice, dismissSyncNotice, unsynced } = useStore()
   const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
   const myTasks = (state.tasks ?? []).filter((item) => item.assigneeId === currentUser?.id && item.status !== 'hecha').length
   const badges: Record<string, number> = { '/admin/whatsapp': unread, '/admin/tareas': myTasks }
@@ -284,7 +335,9 @@ export function AdminLayout() {
   const firstRender = useRef(true)
   const [armReset, setArmReset] = useState(false)
   const [dark, setDark] = useState(() => resolveTheme(readTheme()) === 'dark')
+  usePanelTheme(true)
   const [palette, setPalette] = useState(false)
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 980px)').matches)
   const groups = GROUPS.map((group) => ({
     ...group,
     links: group.links.filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false)),
@@ -294,6 +347,28 @@ export function AdminLayout() {
   useEffect(() => {
     setOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 980px)')
+    const apply = () => setNarrow(media.matches)
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  function leave() {
+    if (unsynced && !window.confirm('Hay cambios que todavía no llegan al servidor. Si sales ahora se guardan en este equipo y se envían al volver a entrar. ¿Salir?')) return
+    logout()
+    navigate('/login')
+  }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -313,7 +388,7 @@ export function AdminLayout() {
     setDark(!dark)
   }
   const commands: Command[] = [
-    ...links.map((link) => ({ id: `go-${link.label}`, label: link.label, group: 'Ir a', run: () => navigate(link.to) })),
+    ...links.map((link) => ({ id: `go-${link.to}`, label: link.label, group: 'Ir a', run: () => navigate(link.to) })),
     { id: 'theme', label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', group: 'Acción', keywords: 'tema apariencia', run: toggleTheme },
     ...(currentUser && allows(currentUser, 'equipo')
       ? [
@@ -334,10 +409,7 @@ export function AdminLayout() {
       label: 'Cerrar sesión',
       group: 'Acción',
       keywords: 'salir',
-      run: () => {
-        logout()
-        navigate('/login')
-      },
+      run: leave,
     },
   ]
 
@@ -358,7 +430,7 @@ export function AdminLayout() {
         Saltar al contenido
       </a>
       <div className="mobile-bar">
-        <button type="button" className="nav-toggle" aria-label="Abrir menú" onClick={() => setOpen(true)}>
+        <button type="button" className="nav-toggle" aria-label="Abrir menú" aria-expanded={open} aria-controls="menu-panel" onClick={() => setOpen(true)}>
           <span />
           <span />
         </button>
@@ -366,6 +438,8 @@ export function AdminLayout() {
       </div>
       {open ? <button type="button" className="scrim" aria-label="Cerrar menú" onClick={() => setOpen(false)} /> : null}
       <aside
+        id="menu-panel"
+        inert={narrow && !open ? true : undefined}
         className={`side ${open ? 'open' : ''} flex h-dvh flex-col border-r border-stone-200/80 bg-white/95 p-0 text-stone-900 shadow-[12px_0_40px_-30px_rgba(28,25,23,0.35)] backdrop-blur-xl side:shadow-none dark:border-stone-800 dark:bg-stone-950/95 dark:text-stone-100`}
       >
         <div className="flex items-center gap-3 px-5 pt-5 pb-4">
@@ -440,13 +514,14 @@ export function AdminLayout() {
         <div className="border-t border-stone-200/80 p-3 dark:border-stone-800">
           <div className="flex items-center gap-3 px-2 py-1.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-caramel to-caramel-deep text-sm font-semibold text-white shadow-sm">
-              {initials(currentUser?.name)}
+              {initials(currentUser?.name, 'P')}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
               <p className="truncate text-sm font-semibold">{currentUser?.name}</p>
               <p className="truncate text-xs text-stone-500 dark:text-stone-400">
                 {currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}
               </p>
+              {unsynced ? <p className="truncate text-[11px] font-semibold text-caramel-deep dark:text-caramel">Cambios por enviar…</p> : null}
             </div>
           </div>
           <div className="mt-1 flex items-center gap-1 px-1">
@@ -465,10 +540,7 @@ export function AdminLayout() {
               className="grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-stone-500 transition hover:bg-rose-50 hover:text-rose-600 dark:text-stone-400 dark:hover:bg-rose-950/50 dark:hover:text-rose-300"
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
-              onClick={() => {
-                logout()
-                navigate('/login')
-              }}
+              onClick={leave}
             >
               <Icon name="logout" />
             </button>
@@ -495,6 +567,17 @@ export function AdminLayout() {
         </div>
       </aside>
       <main id="contenido" className="admin-main" ref={mainRef} tabIndex={-1}>
+        {weakPassword ? <PasswordNotice /> : null}
+        {syncNotice ? (
+          <div className="backup-reminder" role="alert">
+            <p>{syncNotice}</p>
+            <div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={dismissSyncNotice}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        ) : null}
         {currentUser && allows(currentUser, 'equipo') ? <BackupReminder /> : null}
         <Suspense
           fallback={

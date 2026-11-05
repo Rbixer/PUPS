@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Field, StatusPill } from '../components/ui'
-import { digits, formatName, longDate, money, show } from '../format'
+import { daysBetween, digits, formatName, isoDate, longDate, money, show } from '../format'
 import { shrinkImage } from '../image'
 import { useStore } from '../store'
 import type { Appointment } from '../types'
@@ -206,15 +206,10 @@ const SUBCARD = 'rounded-xl border border-stone-200/80 bg-white p-4 dark:border-
 const LABEL = 'text-[11px] font-semibold tracking-[0.1em] text-stone-500 uppercase dark:text-stone-400'
 const ORANGE_LINK = 'mt-2 inline-flex items-center gap-1 text-xs font-semibold text-caramel-bold hover:underline dark:text-caramel'
 
-function daysBetween(iso: string, today = new Date()) {
-  const [y, m, d] = iso.split('-').map(Number)
-  const target = new Date(y, (m || 1) - 1, d || 1)
-  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  return Math.round((target.getTime() - base.getTime()) / 86_400_000)
-}
+const fromToday = (iso: string) => daysBetween(isoDate(), iso)
 
 function relative(iso: string) {
-  const diff = daysBetween(iso)
+  const diff = fromToday(iso)
   if (diff === 0) return 'Hoy'
   if (diff === 1) return 'Mañana'
   if (diff === -1) return 'Ayer'
@@ -306,6 +301,8 @@ function SectionHead({
 }
 
 function Dossier({ file }: { file: PetFile }) {
+  const { allows } = useStore()
+  const agenda = allows('citas')
   const last = file.visits[0]
   const arrival = ingresoLabels(file.visits.find((item) => item.report))
   const photo = portrait(file.visits)
@@ -318,8 +315,8 @@ function Dossier({ file }: { file: PetFile }) {
   const photos = file.visits.reduce((sum, item) => sum + (visitPhoto(item, 'antes') ? 1 : 0) + (visitPhoto(item, 'despues') ? 1 : 0), 0)
   const total = spent(file.visits)
   const thisYear = file.visits.filter((item) => item.date.startsWith(String(new Date().getFullYear()))).length
-  const nextVisit = [...pending].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)).find((item) => daysBetween(item.date) >= 0)
-  const bookUrl = `/reservar?mascota=${encodeURIComponent(file.petName)}&tutor=${encodeURIComponent(file.clientName)}&tel=${phone}`
+  const nextVisit = [...pending].sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)).find((item) => fromToday(item.date) >= 0)
+  const bookUrl = `/admin?nueva=${encodeURIComponent(file.key)}`
 
   const status =
     last.status === 'pendiente'
@@ -356,16 +353,18 @@ function Dossier({ file }: { file: PetFile }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {phone.length >= 8 ? (
+          {phone.length >= 8 && allows('whatsapp') ? (
             <Link className="btn btn-ghost" to={`/admin/whatsapp?tel=${phone}`}>
               <Glyph name="chat" className="size-4" />
               WhatsApp
             </Link>
           ) : null}
-          <Link className="btn btn-primary" to={bookUrl}>
-            <Glyph name="plus" className="size-4" />
-            Nueva cita
-          </Link>
+          {agenda ? (
+            <Link className="btn btn-primary" to={bookUrl}>
+              <Glyph name="plus" className="size-4" />
+              Nueva cita
+            </Link>
+          ) : null}
         </div>
       </header>
 
@@ -389,9 +388,11 @@ function Dossier({ file }: { file: PetFile }) {
           <article className={SUBCARD}>
             <p className="text-xs text-stone-500 dark:text-stone-400">Citas pendientes</p>
             <p className="num mt-1 text-2xl font-bold text-stone-900 dark:text-stone-100">{pending.length}</p>
-            <Link className={ORANGE_LINK} to="/admin">
-              Ver agenda
-            </Link>
+            {agenda ? (
+              <Link className={ORANGE_LINK} to="/admin">
+                Ver agenda
+              </Link>
+            ) : null}
           </article>
           <article className={SUBCARD}>
             <p className="text-xs text-stone-500 dark:text-stone-400">Visitas completadas</p>
@@ -400,7 +401,7 @@ function Dossier({ file }: { file: PetFile }) {
           <article className={SUBCARD}>
             <p className="text-xs text-stone-500 dark:text-stone-400">Constancias</p>
             <p className="num mt-1 text-2xl font-bold text-stone-900 dark:text-stone-100">{reports.length}</p>
-            {reports[0] ? (
+            {reports[0] && agenda ? (
               <Link className={ORANGE_LINK} to={`/admin?constancia=${reports[0].id}`}>
                 Abrir la última
               </Link>
@@ -425,7 +426,7 @@ function Dossier({ file }: { file: PetFile }) {
             <Row label="Tamaño" value={show(file.size)} />
             <Row label="Pelaje" value={show(file.coat)} />
             <Row label="Edad" value={show(file.age)} />
-            <Row label="Peso" value={file.weight ? `${file.weight} kg` : 'Sin anotar'} />
+            <Row label="Peso" value={file.weight ? (/kg/i.test(file.weight) ? file.weight : `${file.weight} kg`) : 'Sin anotar'} />
           </dl>
           {allergy ? (
             <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
@@ -458,7 +459,7 @@ function Dossier({ file }: { file: PetFile }) {
 
         <section className={`${CARD} p-5`}>
           <SectionHead tone="orange" icon="file" title={`Última cita · #${last.folio}`} text={`${longDate(last.date)} · ${last.time} · ${show(last.service)}`}>
-            {last.report ? (
+            {last.report && agenda ? (
               <Link className="btn btn-primary btn-sm" to={`/admin?constancia=${last.id}`}>
                 <Glyph name="file" className="size-4" />
                 Constancia PDF
@@ -538,7 +539,7 @@ function Dossier({ file }: { file: PetFile }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill status={item.status} />
                     <b className="num text-sm font-bold text-stone-900 dark:text-stone-100">{money(item.cost)}</b>
-                    {item.report ? (
+                    {item.report && agenda ? (
                       <Link className="btn btn-ghost btn-sm" to={`/admin?constancia=${item.id}`}>
                         Constancia
                       </Link>
@@ -570,9 +571,11 @@ function VisitPhotos({ appointment }: { appointment: Appointment }) {
       setError('Elige una imagen.')
       return
     }
-    const data = await shrinkImage(file)
-    if (!data) {
-      setError('No se pudo leer la foto.')
+    let data = ''
+    try {
+      data = await shrinkImage(file)
+    } catch {
+      setError('No se pudo leer esa foto. Prueba con otra o tómala desde la cámara en formato JPG.')
       return
     }
     setError(setVisitPhoto(appointment.id, slot, data) ? '' : 'No se pudo guardar la foto.')

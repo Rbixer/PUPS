@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { METHODS } from '../catalog'
+import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, isoDate, longDate, money } from '../format'
 import { payableBalance, round2 } from '../ops'
@@ -7,7 +7,6 @@ import { shelfOf } from '../shop'
 import { useStore } from '../store'
 import type { Supplier } from '../types'
 
-const PAY_METHODS = METHODS.filter((item) => item !== 'Pedido')
 
 type Draft = { free: boolean; productId: string; description: string; qty: string; cost: string }
 

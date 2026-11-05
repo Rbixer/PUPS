@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Metrics } from '../components/ui'
 import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, controlGroups, controlSheet } from '../control'
 import { downloadControlExcel, downloadControlPdf } from '../controlExport'
-import { count, isoDate, money } from '../format'
+import { count, isoDate, money, parseAmount } from '../format'
 import { buildJournal, incomeStatement } from '../ledger'
 import { payableBalance, round2 } from '../ops'
 import { useStore } from '../store'
@@ -120,7 +120,7 @@ export function ControlGeneral() {
                   <th className="month">{line.label}</th>
                   {CONTROL_MONEY.map((column) => (
                     <td key={column.field}>
-                      <Cell year={year} month={line.month} field={column.field} value={line.values[column.field]} money onSave={setControl} />
+                      <Cell year={year} month={line.month} field={column.field} label={`${column.label} · ${line.label}`} value={line.values[column.field]} money onSave={setControl} />
                     </td>
                   ))}
                   <td className="control-calc num">{money(line.gastos)}</td>
@@ -128,7 +128,7 @@ export function ControlGeneral() {
                   <td className="control-calc num">{money(line.servicio)}</td>
                   {CONTROL_COUNTS.map((column) => (
                     <td key={column.field}>
-                      <Cell year={year} month={line.month} field={column.field} value={line.values[column.field]} onSave={setControl} />
+                      <Cell year={year} month={line.month} field={column.field} label={`${column.label} · ${line.label}`} value={line.values[column.field]} onSave={setControl} />
                     </td>
                   ))}
                   <td className="control-calc num">{line.paquetes || ''}</td>
@@ -164,6 +164,7 @@ function Cell({
   year,
   month,
   field,
+  label,
   value,
   money: asMoney,
   onSave,
@@ -171,6 +172,7 @@ function Cell({
   year: number
   month: number
   field: ControlField
+  label: string
   value: number
   money?: boolean
   onSave: (year: number, month: number, field: ControlField, value: number) => void
@@ -181,10 +183,13 @@ function Cell({
       inputMode="decimal"
       defaultValue={value ? String(value) : ''}
       key={`${year}-${month}-${field}-${value}`}
-      aria-label={`${field} ${month}`}
+      aria-label={label}
       onBlur={(event) => {
-        const next = Number(event.target.value.replace(',', '.'))
-        const amount = Number.isFinite(next) ? next : 0
+        const amount = parseAmount(event.target.value)
+        if (!Number.isFinite(amount) || amount < 0) {
+          event.target.value = value ? String(value) : ''
+          return
+        }
         if (amount !== value) onSave(year, month, field, asMoney ? amount : Math.round(amount))
       }}
     />

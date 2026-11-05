@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
-import { addDays, daysBetween, hashPassword, money, normalizePhone } from '../src/format'
+import { hashSecret, verifySecret, weakSecret } from '../server/api'
+import { addDays, daysBetween, money, normalizePhone, parseAmount } from '../src/format'
 import { buildMonthReport } from '../src/report'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, demoCatalog } from '../src/shop'
@@ -25,11 +26,26 @@ describe('formato', () => {
     expect(money(1234.5)).toContain('1,234.50')
   })
 
-  it('la clave se cifra igual cada vez y distingue mayúsculas', async () => {
-    const first = await hashPassword('pups2026')
-    expect(first).toMatch(/^[0-9a-f]{64}$/)
-    expect(await hashPassword(' pups2026 ')).toBe(first)
-    expect(await hashPassword('Pups2026')).not.toBe(first)
+  it('la clave se guarda con scrypt, con sal distinta cada vez, y distingue mayúsculas', () => {
+    const first = hashSecret('pups2026')
+    expect(first).toMatch(/^scrypt\$/)
+    expect(hashSecret('pups2026')).not.toBe(first)
+    expect(verifySecret(first, 'pups2026')).toBe(true)
+    expect(verifySecret(first, 'Pups2026')).toBe(false)
+    expect(verifySecret('ba20fa37d86c34de9718be9356f63c618008fe45a876f9561aca1d23a8733bfb', 'pups2026')).toBe(true)
+    expect(verifySecret('pups2026', 'pups2026')).toBe(false)
+    expect(weakSecret('pups2026')).toBe(true)
+    expect(weakSecret('corta')).toBe(true)
+    expect(weakSecret('una clave larga')).toBe(false)
+  })
+
+  it('lee montos escritos con coma o punto', () => {
+    expect(parseAmount('Q 1,500.50')).toBe(1500.5)
+    expect(parseAmount('1.500,50')).toBe(1500.5)
+    expect(parseAmount('12,50')).toBe(12.5)
+    expect(parseAmount('1,500')).toBe(1500)
+    expect(parseAmount('')).toBe(0)
+    expect(parseAmount('doce')).toBeNaN()
   })
 })
 

@@ -20,6 +20,11 @@ export function WhatsApp() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [savedLine, setSavedLine] = useState(false)
+  const [lineTouched, setLineTouched] = useState(false)
+
+  useEffect(() => {
+    if (!lineTouched) setLine(state.settings.whatsapp)
+  }, [state.settings.whatsapp, lineTouched])
 
   const threads = useMemo(
     () =>
@@ -71,6 +76,7 @@ export function WhatsApp() {
           event.preventDefault()
           const next = line.trim()
           updateSettings({ whatsapp: next })
+          setLineTouched(false)
           setSavedLine(digits(next).length >= 8)
         }}
       >
@@ -79,6 +85,7 @@ export function WhatsApp() {
             value={line}
             onChange={(event) => {
               setSavedLine(false)
+              setLineTouched(true)
               setLine(event.target.value)
             }}
             placeholder="+502"
@@ -90,8 +97,8 @@ export function WhatsApp() {
         </button>
         <p className="hint">
           {savedLine
-            ? 'La línea quedó guardada. Los hilos de los clientes se leen y se responden en esta bandeja.'
-            : 'Con este número la bandeja identifica la línea del negocio. Cada cliente abre su propio hilo.'}
+            ? 'La línea quedó guardada y el sitio ya manda a los clientes a este número.'
+            : 'Este número aparece en el sitio para que los clientes escriban. Cada respuesta se abre en WhatsApp para enviarla y queda anotada en el hilo del cliente.'}
         </p>
       </form>
 
@@ -141,7 +148,7 @@ export function WhatsApp() {
                 <article key={message.id} className={message.direction === 'out' ? 'bubble out' : 'bubble in'}>
                   <p>{message.body}</p>
                   <time className="num">
-                    {clock(message.at)} · {message.direction === 'out' ? 'Enviado' : 'Recibido'}
+                    {clock(message.at)} · {message.direction === 'out' ? 'Abierto en WhatsApp' : 'Recibido'}
                   </time>
                 </article>
               ))}
@@ -150,6 +157,8 @@ export function WhatsApp() {
               className="wa-compose"
               onSubmit={(event) => {
                 event.preventDefault()
+                if (!draft.trim()) return
+                window.open(whatsappUrl(active.phone, draft.trim()), '_blank', 'noopener,noreferrer')
                 sendMessage(active.id, draft)
                 setDraft('')
               }}
@@ -161,7 +170,7 @@ export function WhatsApp() {
                 onChange={(event) => setDraft(event.target.value)}
               />
               <button type="submit" className="btn btn-primary" disabled={!draft.trim()}>
-                Enviar
+                Enviar por WhatsApp
               </button>
             </form>
           </section>
