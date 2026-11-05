@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MonthReport } from '../components/MonthReport'
+import { Dialog } from '../components/ui'
 import { isoDate, money, monthStart, monthTitle, parseIso, shiftMonth, weekday } from '../format'
 import { buildMonthReport, change, downloadExcel, excelFilename, rate } from '../report'
 import { useStore } from '../store'
@@ -105,15 +106,6 @@ export function Estadisticas() {
     setExcelNote('')
     setExcelError(false)
   }, [report.key])
-
-  useEffect(() => {
-    if (!preview) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreview(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [preview])
 
   async function onExcel() {
     setExcelBusy(true)
@@ -348,8 +340,8 @@ export function Estadisticas() {
       </div>
 
       {preview && (
-        <div className="overlay report-overlay" role="dialog" aria-modal="true" aria-labelledby="report-title" onClick={() => setPreview(false)}>
-          <div className="report-frame" onClick={(event) => event.stopPropagation()}>
+        <Dialog className="overlay report-overlay" labelledBy="report-title" onClose={() => setPreview(false)} backdrop>
+          <div className="report-frame">
             <div className="report-toolbar">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPreview(false)}>
                 Cerrar
@@ -367,7 +359,7 @@ export function Estadisticas() {
             </div>
             <MonthReport report={report} />
           </div>
-        </div>
+        </Dialog>
       )}
     </section>
   )

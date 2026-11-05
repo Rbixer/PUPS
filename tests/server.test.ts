@@ -3,7 +3,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createApi } from '../server/api'
+import { createApi, networkOf } from '../server/api'
 import { SERVICE_NAMES } from '../src/catalog'
 import { addDays, isoDate } from '../src/format'
 import type { AppState } from '../src/types'
@@ -58,9 +58,9 @@ describe('servidor', () => {
 
   it('bloquea el usuario después de cinco intentos fallidos', async () => {
     for (let index = 0; index < 5; index += 1) {
-      expect((await call('POST', '/api/login', { username: 'admin', password: 'mala' })).status).toBe(401)
+      expect((await call('POST', '/api/login', { username: 'fantasma', password: 'mala' })).status).toBe(401)
     }
-    const locked = await call('POST', '/api/login', { username: 'admin', password: 'pups2026' })
+    const locked = await call('POST', '/api/login', { username: 'fantasma', password: 'pups2026' })
     expect(locked.status).toBe(429)
     expect(locked.body.wait).toBeGreaterThan(0)
   })
@@ -99,6 +99,60 @@ describe('servidor', () => {
     expect((await call('GET', '/api/state', undefined, second.token)).status).toBe(401)
     expect((await call('POST', '/api/login', { username: 'recepcion', password: 'pups2026' })).status).toBe(401)
     await login('recepcion', 'NuevaClave2026')
+  })
+
+  it('recepción no lee planillas ni salarios y no puede borrar ingresos ni cambiar costos', async () => {
+    const admin = await login('admin')
+    const full = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const desk = await login('recepcion', 'NuevaClave2026')
+    const seen = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
+    expect(seen.users.every((item) => item.salary === undefined)).toBe(true)
+    expect(seen.payrolls ?? []).toEqual([])
+    expect(seen.purchases ?? []).toEqual([])
+    const product = seen.products![0]
+    const forged = {
+      ...seen,
+      movements: seen.movements.filter((item) => item.type !== 'egreso'),
+      products: seen.products!.map((item) => (item.id === product.id ? { ...item, cost: 1, price: product.price + 1 } : item)),
+    }
+    const saved = await call('PUT', '/api/state', { base: seen.revision, state: forged }, desk.token)
+    expect(saved.status).toBe(200)
+    const after = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    expect(after.movements.length).toBe(full.movements.length)
+    const stored = after.products!.find((item) => item.id === product.id)!
+    expect(stored.cost).toBe(full.products!.find((item) => item.id === product.id)!.cost)
+    expect(stored.price).toBe(product.price + 1)
+    expect(after.payrolls).toEqual(full.payrolls)
+  })
+
+  it('un día con corte de caja no deja borrar ni agregar cobros', async () => {
+    const admin = await login('admin')
+    const current = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const day = current.movements.find((item) => item.method !== 'Pedido')!.date
+    const closed = { ...current, cashCloses: [{ id: 'corte-x', date: day, opening: 0, expected: 0, counted: 0, difference: 0, note: '', closedAt: '' }, ...(current.cashCloses ?? [])] as never }
+    const first = await call('PUT', '/api/state', { base: current.revision, state: closed }, admin.token)
+    expect(first.status).toBe(200)
+    const before = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const sameDay = before.movements.filter((item) => item.date === day && item.method !== 'Pedido')
+    const extra = { ...sameDay[0], id: 'nuevo-x', document: 'ING-999' }
+    const forged = { ...before, movements: [extra, ...before.movements.filter((item) => item.id !== sameDay[0].id)] }
+    expect((await call('PUT', '/api/state', { base: before.revision, state: forged }, admin.token)).status).toBe(200)
+    const after = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    expect(after.movements.some((item) => item.id === sameDay[0].id)).toBe(true)
+    expect(after.movements.some((item) => item.id === 'nuevo-x')).toBe(false)
+  })
+
+  it('rechaza datos con forma inválida', async () => {
+    const admin = await login('admin')
+    const current = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    expect((await call('PUT', '/api/state', { base: current.revision, state: { ...current, leads: null } }, admin.token)).status).toBe(400)
+    expect((await call('PUT', '/api/state', { base: current.revision, state: { ...current, sales: 5 } }, admin.token)).status).toBe(400)
+  })
+
+  it('agrupa una IPv6 por su red /64', () => {
+    expect(networkOf('2600:1f18:1:2:aaaa:bbbb:cccc:dddd')).toBe('2600:1f18:1:2::/64')
+    expect(networkOf('2600:1f18::5')).toBe('2600:1f18::/64')
+    expect(networkOf('::ffff:10.0.0.1')).toBe('10.0.0.1')
   })
 
   it('la reserva pública rechaza horas pasadas y horarios ocupados', async () => {

@@ -8,7 +8,7 @@ import { isoDate, newId, normalizePhone } from '../src/format'
 import { nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
-import type { Appointment, AppState, Lead, Permission, User } from '../src/types'
+import type { Appointment, AppState, Lead, Movement, Permission, User } from '../src/types'
 import { BOOKING_SLOTS, slotPassed, slotTaken, visitMinutes } from '../src/visit'
 
 type Session = { userId: string; expires: number; remember: boolean }
@@ -29,17 +29,30 @@ const HASH = /^[0-9a-f]{64}$/
 const DATA_URL = /^data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]+)$/
 const MEDIA_NAME = /^[0-9a-f]{32}\.(png|jpg|webp|gif)$/
 
-/** Colecciones que solo cambia quien tiene el permiso. Si llegan cambiadas sin él, se conserva lo del servidor. */
-const GUARDED: [keyof AppState, Permission][] = [
-  ['payrolls', 'planilla'],
-  ['purchases', 'compras'],
-  ['suppliers', 'compras'],
-  ['fixedCosts', 'compras'],
-  ['cashCloses', 'caja'],
-  ['tasks', 'tareas'],
-  ['conversations', 'whatsapp'],
-  ['controlRows', 'equipo'],
+/** Quién puede cambiar cada colección. Si llega cambiada sin alguno de esos permisos, se conserva lo del servidor. */
+const GUARDED: [keyof AppState, Permission[]][] = [
+  ['appointments', ['citas', 'fichas', 'caja']],
+  ['movements', ['caja', 'compras', 'planilla']],
+  ['sales', ['caja']],
+  ['products', ['caja', 'compras']],
+  ['stockMoves', ['caja', 'compras']],
+  ['payrolls', ['planilla']],
+  ['payables', ['compras', 'planilla']],
+  ['purchases', ['compras']],
+  ['suppliers', ['compras']],
+  ['fixedCosts', ['compras']],
+  ['cashCloses', ['caja']],
+  ['tasks', ['tareas']],
+  ['conversations', ['whatsapp']],
+  ['controlRows', ['equipo']],
+  ['leads', ['equipo']],
 ]
+
+const LISTS = GUARDED.map(([key]) => key)
+const COUNTER_JUMP = 1000
+const MAX_LINE_QTY = 20
+const MAX_DAILY_BOOKINGS = 2
+const PRUNE_EVERY = 10 * 60_000
 
 class HttpError extends Error {
   constructor(
@@ -71,6 +84,14 @@ export function verifySecret(stored: string, password: string) {
   return false
 }
 
+let decoyHash = ''
+
+/** Clave de relleno: un usuario inexistente tarda lo mismo en responder que uno real. */
+function decoy() {
+  if (!decoyHash) decoyHash = hashSecret(randomBytes(16).toString('hex'))
+  return decoyHash
+}
+
 export function weakSecret(password: string) {
   const clean = password.trim()
   return clean === DEMO_PASSWORD || clean.length < 8
@@ -83,7 +104,7 @@ function sha(value: string) {
 function writeAtomic(file: string, data: string) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`
-  fs.writeFileSync(temp, data)
+  fs.writeFileSync(temp, data, { mode: 0o600 })
   fs.renameSync(temp, file)
 }
 
@@ -138,9 +159,19 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 /** Detrás de un proxy local (PUPS_TRUST_PROXY=1) la IP real llega en X-Real-IP; sin esa variable no se confía en encabezados. */
 function clientIp(request: IncomingMessage) {
   const direct = request.socket.remoteAddress ?? 'desconocido'
-  if (process.env.PUPS_TRUST_PROXY !== '1' || !LOOPBACK.has(direct)) return direct
   const forwarded = request.headers['x-real-ip']
-  return typeof forwarded === 'string' && forwarded.trim() ? forwarded.trim().slice(0, 64) : direct
+  const ip = process.env.PUPS_TRUST_PROXY === '1' && LOOPBACK.has(direct) && typeof forwarded === 'string' && forwarded.trim() ? forwarded.trim().slice(0, 64) : direct
+  return networkOf(ip)
+}
+
+/** Una IPv6 se agrupa por su red /64: rotar la parte final no da intentos nuevos. */
+export function networkOf(ip: string) {
+  const clean = ip.replace(/^::ffff:/, '')
+  if (!clean.includes(':')) return clean
+  const [head] = clean.split('::')
+  const groups = head.split(':').filter(Boolean)
+  if (clean.includes('::') && groups.length < 4) return `${groups.join(':')}::/64`
+  return `${clean.split(':').slice(0, 4).join(':')}::/64`
 }
 
 function text(value: unknown, max = 120) {
@@ -151,8 +182,78 @@ function strip(state: AppState): AppState {
   return { ...state, sessionUserId: null, users: state.users.map(({ password: _password, ...user }) => user as User) }
 }
 
+/** Lo que cada usuario puede leer: sin claves y sin planillas, salarios ni compras si su rol no los usa. */
+export function viewFor(user: User, state: AppState): AppState {
+  const base = strip(state)
+  const books = allows(user, 'contabilidad') || allows(user, 'equipo')
+  const pay = books || allows(user, 'planilla')
+  const buy = books || allows(user, 'compras')
+  return {
+    ...base,
+    users: pay ? base.users : base.users.map(({ salary: _salary, bonus: _bonus, ...item }) => item as User),
+    ...(pay ? {} : { payrolls: [] }),
+    ...(buy ? {} : { purchases: [], suppliers: [], fixedCosts: [] }),
+    ...(buy || pay ? {} : { payables: [] }),
+  }
+}
+
 function same(left: unknown, right: unknown) {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+}
+
+type Keyed = { id: string }
+
+function byId<T extends Keyed>(items: T[] | undefined) {
+  return new Map((items ?? []).map((item) => [item.id, item]))
+}
+
+/** Revisa que cada colección tenga la forma esperada antes de guardarla. */
+function validShape(incoming: AppState) {
+  if (incoming.version !== DATA_VERSION) return false
+  if (!Array.isArray(incoming.users) || !Array.isArray(incoming.appointments) || !Array.isArray(incoming.movements)) return false
+  if (!incoming.settings || typeof incoming.settings !== 'object' || Array.isArray(incoming.settings)) return false
+  for (const key of [...LISTS, 'users'] as (keyof AppState)[]) {
+    const value = incoming[key]
+    if (value === undefined) continue
+    if (!Array.isArray(value)) return false
+    if (value.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) return false
+    if (key !== 'controlRows' && value.some((item) => typeof (item as Partial<Keyed>).id !== 'string')) return false
+  }
+  if (incoming.counters !== undefined) {
+    if (!incoming.counters || typeof incoming.counters !== 'object') return false
+    if (Object.values(incoming.counters).some((value) => typeof value !== 'number' || !Number.isFinite(value) || value < 0)) return false
+  }
+  return true
+}
+
+/** Un día con corte de caja queda congelado: sus movimientos cobrados no se agregan, cambian ni borran. */
+function lockClosedDays(current: AppState, incoming: Movement[]) {
+  const closed = new Set((current.cashCloses ?? []).map((item) => item.date))
+  if (closed.size === 0) return incoming
+  const frozen = (item: Movement) => closed.has(item.date) && item.method !== 'Pedido'
+  const before = byId(current.movements)
+  const result = incoming.flatMap((item) => {
+    const previous = before.get(item.id)
+    if (previous && frozen(previous)) return [previous]
+    if (frozen(item)) return previous ? [previous] : []
+    return [item]
+  })
+  const present = new Set(result.map((item) => item.id))
+  for (const item of current.movements) if (frozen(item) && !present.has(item.id)) result.push(item)
+  return result
+}
+
+/** Con solo caja se cambian o quitan cobros de citas y pedidos por cobrar; egresos, compras y planillas quedan como estaban. */
+function limitCashier(current: AppState, incoming: Movement[]) {
+  const open = (item: Movement) => item.type === 'ingreso' && (item.method === 'Pedido' || item.folio != null)
+  const before = byId(current.movements)
+  const result = incoming.map((item) => {
+    const previous = before.get(item.id)
+    return previous && !open(previous) && !same(previous, item) ? previous : item
+  })
+  const present = new Set(result.map((item) => item.id))
+  for (const item of current.movements) if (!open(item) && !present.has(item.id)) result.push(item)
+  return result
 }
 
 export function createApi(dataDir = path.resolve('data')) {
@@ -180,9 +281,14 @@ export function createApi(dataDir = path.resolve('data')) {
     const day = isoDate()
     const target = path.join(backupDir, `pups-${day}.json`)
     if (fs.existsSync(target)) return
-    fs.mkdirSync(backupDir, { recursive: true })
+    fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 })
     fs.copyFileSync(stateFile, target)
-    if (fs.existsSync(authFile)) fs.copyFileSync(authFile, path.join(backupDir, `auth-${day}.json`))
+    fs.chmodSync(target, 0o600)
+    if (fs.existsSync(authFile)) {
+      const authCopy = path.join(backupDir, `auth-${day}.json`)
+      fs.copyFileSync(authFile, authCopy)
+      fs.chmodSync(authCopy, 0o600)
+    }
     const old = fs
       .readdirSync(backupDir)
       .filter((name) => name.startsWith('pups-'))
@@ -194,10 +300,12 @@ export function createApi(dataDir = path.resolve('data')) {
     }
   }
 
+  /** Solo se guardan fotos subidas o archivos del propio sitio; una URL externa se descarta. */
   function storeMedia(value: string | undefined) {
-    if (!value || !value.startsWith('data:')) return value
+    if (!value) return value
+    if (!value.startsWith('data:')) return value.startsWith('/') && !value.startsWith('//') ? value : ''
     const match = DATA_URL.exec(value)
-    if (!match) return value
+    if (!match) return ''
     const buffer = Buffer.from(match[2], 'base64')
     const extension = match[1] === 'jpeg' ? 'jpg' : match[1]
     const name = `${sha(buffer.toString('base64')).slice(0, 32)}.${extension}`
@@ -274,8 +382,11 @@ export function createApi(dataDir = path.resolve('data')) {
 
   /** Los consecutivos nunca bajan, aunque se borre un documento o un equipo mande números viejos. */
   function commit(state: AppState, current: AppState) {
-    const counters = { ...(state.counters ?? {}) }
-    for (const [key, value] of Object.entries(current.counters ?? {})) counters[key] = Math.max(value, counters[key] ?? 0)
+    const counters: Record<string, number> = {}
+    for (const key of new Set([...Object.keys(state.counters ?? {}), ...Object.keys(current.counters ?? {})])) {
+      const saved = current.counters?.[key] ?? 0
+      counters[key] = Math.max(saved, Math.min(state.counters?.[key] ?? 0, saved + COUNTER_JUMP))
+    }
     return writeState(withCounters({ ...state, counters, revision: (current.revision ?? 0) + 1 }))
   }
 
@@ -303,9 +414,20 @@ export function createApi(dataDir = path.resolve('data')) {
     return found
   }
 
+  let prunedAt = Date.now()
+
+  /** Los mapas de intentos y solicitudes se limpian solos para no crecer sin fin. */
+  function prune(now: number) {
+    if (now - prunedAt < PRUNE_EVERY) return
+    prunedAt = now
+    for (const [ip, hits] of publicHits) if (hits.every((at) => now - at >= PUBLIC_WINDOW)) publicHits.delete(ip)
+    for (const [key, lock] of locks) if (lock.until < now - PRUNE_EVERY) locks.delete(key)
+  }
+
   function limitPublic(request: IncomingMessage) {
     const ip = clientIp(request)
     const now = Date.now()
+    prune(now)
     const hits = (publicHits.get(ip) ?? []).filter((at) => now - at < PUBLIC_WINDOW)
     if (hits.length >= PUBLIC_MAX) throw new HttpError(429, 'Demasiadas solicitudes. Espera unos minutos.')
     hits.push(now)
@@ -314,9 +436,7 @@ export function createApi(dataDir = path.resolve('data')) {
 
   /** Une lo que manda el panel con lo guardado, respetando lo que cada permiso puede cambiar. */
   function guard(user: User, current: AppState, incoming: AppState): AppState {
-    if (incoming.version !== DATA_VERSION || !Array.isArray(incoming.users) || !Array.isArray(incoming.appointments) || !Array.isArray(incoming.movements)) {
-      throw new HttpError(400, 'Los datos enviados no son válidos.')
-    }
+    if (!validShape(incoming)) throw new HttpError(400, 'Los datos enviados no son válidos.')
     const team = allows(user, 'equipo')
     let users: User[]
     if (team) {
@@ -346,14 +466,32 @@ export function createApi(dataDir = path.resolve('data')) {
       : {
           ...current.settings,
           ...(allows(user, 'whatsapp') ? { whatsapp: incoming.settings?.whatsapp ?? current.settings.whatsapp } : {}),
-          ...(allows(user, 'contabilidad') ? { taxRegime: incoming.settings?.taxRegime } : {}),
+          ...(allows(user, 'contabilidad') ? { taxRegime: incoming.settings?.taxRegime, taxHistory: incoming.settings?.taxHistory } : {}),
           ...(allows(user, 'caja') ? { cashFloat: incoming.settings?.cashFloat } : {}),
         }
     const merged: AppState = { ...incoming, users, settings, sessionUserId: null }
-    for (const [key, permission] of GUARDED) {
-      if (!allows(user, permission) && !same(incoming[key], current[key])) {
+    for (const [key, permissions] of GUARDED) {
+      if (!permissions.some((permission) => allows(user, permission)) && !same(incoming[key], current[key])) {
         ;(merged as Record<string, unknown>)[key] = current[key]
       }
+    }
+    if (!['compras', 'planilla', 'equipo'].some((permission) => allows(user, permission as Permission))) {
+      merged.movements = limitCashier(current, merged.movements)
+    }
+    merged.movements = lockClosedDays(current, merged.movements)
+    if (!allows(user, 'costos')) {
+      const before = byId(current.appointments)
+      merged.appointments = merged.appointments.map((item) => {
+        const previous = before.get(item.id)
+        return previous && previous.cost > 0 && item.cost !== previous.cost ? { ...item, cost: previous.cost } : item
+      })
+    }
+    if (!allows(user, 'compras') && merged.products) {
+      const before = byId(current.products)
+      merged.products = merged.products.map((item) => {
+        const previous = before.get(item.id)
+        return previous && item.cost !== previous.cost && item.stock === previous.stock ? { ...item, cost: previous.cost } : item
+      })
     }
     return merged
   }
@@ -374,7 +512,8 @@ export function createApi(dataDir = path.resolve('data')) {
     const auth = loadAuth()
     const user = state.users.find((item) => item.username.toLowerCase() === username && item.active)
     const stored = user ? auth.passwords[user.id] : undefined
-    if (!user || !stored || !password || !verifySecret(stored, password)) {
+    const valid = verifySecret(stored ?? decoy(), password)
+    if (!user || !stored || !password || !valid) {
       const next = lock ?? { count: 0, strikes: 0, until: 0 }
       next.count += 1
       if (next.count >= MAX_TRIES) {
@@ -444,6 +583,8 @@ export function createApi(dataDir = path.resolve('data')) {
     if (slotPassed(date, time)) throw new HttpError(400, 'Ese horario ya pasó. Elige otro.')
     const state = readState()
     if (slotTaken(state.appointments, date, time, service)) throw new HttpError(409, 'Esa hora ya está ocupada. Elige otro horario libre.')
+    const sameDay = state.appointments.filter((item) => item.date === date && item.status !== 'cancelada' && item.phone === normalizePhone(phone))
+    if (sameDay.length >= MAX_DAILY_BOOKINGS) throw new HttpError(429, 'Ya tienes citas ese día. Escríbenos si necesitas otra.')
     const folio = nextFolio(state)
     const appointment: Appointment = {
       id: newId(),
@@ -472,6 +613,9 @@ export function createApi(dataDir = path.resolve('data')) {
     const lines = Array.isArray(body.lines)
       ? body.lines.slice(0, 50).map((line) => ({ id: text(line.id, 80), qty: Number(line.qty) })).filter((line) => line.id && Number.isFinite(line.qty))
       : []
+    if (lines.some((line) => !Number.isInteger(line.qty) || line.qty < 1 || line.qty > MAX_LINE_QTY)) {
+      throw new HttpError(400, `Cada producto admite de 1 a ${MAX_LINE_QTY} unidades por pedido.`)
+    }
     const state = readState()
     const result = placeOrder(state, { name: text(body.name), phone: text(body.phone, 40), lines })
     if (!result.ok) throw new HttpError(400, result.error)
@@ -496,14 +640,16 @@ export function createApi(dataDir = path.resolve('data')) {
     const body = await readJsonBody<{ base?: number; state?: AppState }>(request, PRIVATE_LIMIT)
     if (!body.state) throw new HttpError(400, 'Faltan los datos.')
     if (body.base !== (current.revision ?? 0)) {
-      send(response, 409, { state: strip(current) })
+      send(response, 409, { state: viewFor(user, current) })
       return
     }
     const merged = guard(user, current, body.state)
     const { state: withMedia, changed } = extractMedia(merged)
     const saved = commit(withMedia, current)
-    const adjusted = changed || GUARDED.some(([key]) => !same(saved[key], body.state?.[key])) || !same(saved.users, strip(body.state).users)
-    send(response, 200, adjusted ? { revision: saved.revision, state: strip(saved) } : { revision: saved.revision })
+    const view = viewFor(user, saved)
+    const sent = body.state
+    const adjusted = changed || [...LISTS, 'users', 'settings'].some((key) => !same(view[key as keyof AppState], key === 'users' ? strip(sent).users : sent[key as keyof AppState]))
+    send(response, 200, adjusted ? { revision: saved.revision, state: view } : { revision: saved.revision })
   }
 
   function media(name: string, response: ServerResponse) {
@@ -544,10 +690,10 @@ export function createApi(dataDir = path.resolve('data')) {
     }
     if (at === '/api/password' && method === 'POST') return changePassword(request, response)
     if (at === '/api/state' && method === 'GET') {
-      const { state } = requireUser(request)
+      const { user, state } = requireUser(request)
       const since = Number(url.searchParams.get('since'))
       if (url.searchParams.has('since') && since === (state.revision ?? 0)) return send(response, 204)
-      return send(response, 200, strip(state))
+      return send(response, 200, viewFor(user, state))
     }
     if (at === '/api/state' && method === 'PUT') return putState(request, response)
     send(response, 404, { error: 'No existe.' })

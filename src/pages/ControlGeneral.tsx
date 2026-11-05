@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Metrics } from '../components/ui'
 import { CONTROL_COUNTS, CONTROL_MONEY, controlFilename, controlGroups, controlSheet } from '../control'
-import { downloadControlExcel, downloadControlPdf } from '../controlExport'
 import { count, isoDate, money, parseAmount } from '../format'
 import { buildJournal, incomeStatement } from '../ledger'
 import { payableBalance, round2 } from '../ops'
@@ -30,6 +29,7 @@ export function ControlGeneral() {
     setFailed(false)
     setNote('')
     try {
+      const { downloadControlExcel } = await import('../controlExport')
       await downloadControlExcel(sheet)
       setNote(`Se descargó ${controlFilename(year, 'xlsx')}.`)
     } catch {
@@ -40,11 +40,12 @@ export function ControlGeneral() {
     }
   }
 
-  function onPdf() {
+  async function onPdf() {
     setBusy('pdf')
     setFailed(false)
     setNote('')
     try {
+      const { downloadControlPdf } = await import('../controlExport')
       downloadControlPdf(sheet)
       setNote(`Se descargó ${controlFilename(year, 'pdf')}.`)
     } catch {
@@ -72,7 +73,7 @@ export function ControlGeneral() {
           <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== ''} onClick={() => void onExcel()}>
             {busy === 'excel' ? 'Preparando…' : 'Excel'}
           </button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={busy !== ''} onClick={onPdf}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy !== ''} onClick={() => void onPdf()}>
             {busy === 'pdf' ? 'Preparando…' : 'PDF'}
           </button>
         </div>

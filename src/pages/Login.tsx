@@ -74,6 +74,7 @@ export function Login() {
           <Field label="Clave">
             <input
               name="password"
+              aria-label="Clave"
               type={reveal ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -84,7 +85,7 @@ export function Login() {
               enterKeyHint="go"
               required
             />
-            <button type="button" className="reveal" aria-pressed={reveal} onClick={() => setReveal((value) => !value)}>
+            <button type="button" className="reveal" aria-pressed={reveal} aria-label="Mostrar la clave" onClick={() => setReveal((value) => !value)}>
               {reveal ? 'Ocultar' : 'Ver'}
             </button>
           </Field>

@@ -47,7 +47,7 @@ export function Market() {
         </p>
       </div>
 
-      <div className="market-filters" role="tablist" aria-label="Categorías">
+      <div className="market-filters" role="group" aria-label="Categorías">
         {SHOP_CATEGORIES.map((item) => (
           <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)}>
             {item}
@@ -97,7 +97,18 @@ export function Market() {
           })}
         </div>
 
-        <aside className="cart">
+        {lines.length > 0 ? (
+          <div className="cart-bar" role="status">
+            <span>
+              {lines.reduce((sum, line) => sum + line.qty, 0)} en el pedido · <strong className="num">{money(total)}</strong>
+            </span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => document.getElementById('pedido')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              Ver pedido
+            </button>
+          </div>
+        ) : null}
+
+        <aside className="cart" id="pedido">
           <h3>Pedido</h3>
           {lines.length === 0 ? <p className="hint">Todavía no hay productos.</p> : null}
           <ul>
@@ -157,8 +168,8 @@ export function Market() {
             <Field label="Teléfono">
               <input value={phone} autoComplete="tel" inputMode="tel" placeholder="+502" onChange={(event) => setPhone(event.target.value)} required />
             </Field>
-            {error ? <p className="form-error">{error}</p> : null}
-            {sent ? <p className="banner">{sent}</p> : null}
+            {error ? <p className="form-error" role="alert">{error}</p> : null}
+            {sent ? <p className="banner" role="status">{sent}</p> : null}
             <button type="submit" className="btn btn-primary" disabled={lines.length === 0 || sending}>
               {sending ? 'Enviando…' : 'Enviar pedido'}
             </button>

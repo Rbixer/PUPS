@@ -149,6 +149,7 @@ body {
 .route-loading span:first-child { height: 38px; width: 42%; }
 .fault {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-content: center;
   gap: 12px;
@@ -161,6 +162,9 @@ body {
 
 /* Avisos de instalación y de conexión */
 html.has-install .admin-main { padding-bottom: 128px; }
+/* Con un diálogo abierto, el aviso no tapa sus botones y el fondo no se desplaza. */
+html:has(.overlay) { overflow: hidden; }
+html:has(.overlay) .install-banner { display: none; }
 .install-banner,
 .offline-chip {
   position: fixed;

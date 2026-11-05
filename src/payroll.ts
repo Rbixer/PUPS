@@ -30,11 +30,14 @@ function servicesFor(user: User, appointments: Appointment[], period: string) {
   )
 }
 
-/** Parte del mes trabajada por quien entró a mitad de ese mes, en base de 30 días. */
+/** Parte del mes trabajada por quien entró a mitad de ese mes, en base de 30 días; febrero usa sus días reales. */
 export function workedShare(hiredAt: string | undefined, period: string) {
   if (!hiredAt || !hiredAt.startsWith(period)) return hiredAt && hiredAt.slice(0, 7) > period ? 0 : 1
-  const day = Math.min(30, Number(hiredAt.slice(8, 10)) || 1)
-  return (30 - day + 1) / 30
+  const [year, month] = period.split('-').map(Number)
+  const length = new Date(year, month, 0).getDate()
+  const base = Math.min(30, length)
+  const day = Math.min(base, Number(hiredAt.slice(8, 10)) || 1)
+  return (base - day + 1) / base
 }
 
 export function payrollLine(user: User, appointments: Appointment[], period: string, adjust: PayrollAdjust = { extra: 0, deductions: 0 }): PayrollLine {

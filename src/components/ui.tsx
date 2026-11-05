@@ -6,7 +6,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <span className={compact ? 'brand compact' : 'brand'}>
       <span className="logo-badge">
-        <img src="/logo.png" alt="" />
+        <img src="/logo.png" alt="" width={342} height={345} />
       </span>
       <span className="brand-name">
         <strong>PUP'S</strong>
@@ -80,7 +80,22 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * Ventana modal: lleva el foco adentro, lo mantiene ahí con Tab, cierra con Escape
  * y al cerrar devuelve el foco al botón que la abrió.
  */
-export function Dialog({ labelledBy, onClose, children, className = 'overlay', escape = true }: { labelledBy: string; onClose: () => void; children: ReactNode; className?: string; escape?: boolean }) {
+export function Dialog({
+  labelledBy,
+  onClose,
+  children,
+  className = 'overlay',
+  escape = true,
+  backdrop = false,
+}: {
+  labelledBy: string
+  onClose: () => void
+  children: ReactNode
+  className?: string
+  escape?: boolean
+  /** Cerrar al tocar fuera del contenido. */
+  backdrop?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   close.current = onClose
@@ -117,7 +132,14 @@ export function Dialog({ labelledBy, onClose, children, className = 'overlay', e
   }, [escape])
 
   return (
-    <div ref={ref} className={className} role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+    <div
+      ref={ref}
+      className={className}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={labelledBy}
+      onClick={backdrop ? (event) => event.target === event.currentTarget && onClose() : undefined}
+    >
       {children}
     </div>
   )

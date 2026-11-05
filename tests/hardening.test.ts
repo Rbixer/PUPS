@@ -5,7 +5,7 @@ import * as ops from '../src/ops'
 import type { Op } from '../src/ops'
 import { payrollLine, workedShare } from '../src/payroll'
 import { createSeed } from '../src/seed'
-import { mergeOffline } from '../src/store'
+import { mergeOffline, touchedBy } from '../src/store'
 import type { Appointment, AppState, Movement, User } from '../src/types'
 
 function apply<T>(state: AppState, result: Op<T>) {
@@ -156,6 +156,8 @@ describe('planilla', () => {
   it('quien entra a mitad de mes cobra la parte trabajada', () => {
     expect(workedShare('2026-03-16', '2026-03')).toBe(0.5)
     expect(workedShare('2026-04-01', '2026-03')).toBe(0)
+    expect(workedShare('2026-02-28', '2026-02')).toBeCloseTo(1 / 28)
+    expect(workedShare('2026-02-01', '2026-02')).toBe(1)
     const line = payrollLine({ ...worker, hiredAt: '2026-03-16' }, [], '2026-03')
     expect(line.salary).toBe(1500)
     expect(line.bonus).toBe(125)
@@ -185,5 +187,84 @@ describe('consecutivos', () => {
     expect(merged.movements.find((item) => item.id === 'remoto')!.document).toBe(document)
     expect(local.document).not.toBe(document)
     expect(new Set(merged.movements.map((item) => item.document)).size).toBe(merged.movements.length)
+  })
+})
+
+describe('auditoría contable', () => {
+  const supplier = { id: 'prov', name: 'Distribuidora', nit: '', phone: '', email: '', contact: '', notes: '' }
+  const balance = (state: AppState, code: string) =>
+    Math.round(buildJournal(state).reduce((sum, entry) => sum + entry.lines.filter((line) => line.code === code).reduce((acc, line) => acc + line.debit - line.credit, 0), 0) * 100) / 100
+
+  it('una venta anulada no deja IVA por pagar', () => {
+    const seed: AppState = { ...createSeed(), settings: { ...createSeed().settings, taxRegime: 'general' }, movements: [], sales: [], stockMoves: [] }
+    const sold = apply(seed, ops.recordSale(seed, { clientName: 'Ana', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 1, price: 112 }], discount: 0, method: 'Efectivo' }))
+    const voided = apply(sold.state, ops.voidSale(sold.state, sold.value.id, 'Error de cobro')).state
+    const month = taxMonths(buildJournal(voided), voided.settings, Number(today.slice(0, 4))).find((item) => item.month === today.slice(0, 7))!
+    expect(month.debitTax).toBe(0)
+    expect(month.payable).toBe(0)
+    expect(balance(voided, '2105')).toBe(0)
+  })
+
+  it('el primer régimen aplica a todo y un cambio rige desde el inicio del mes', () => {
+    const first = ops.changeRegime(createSeed().settings, 'general', '2026-06-15')
+    expect(ops.regimeOn(first, '2025-01-01')).toBe('general')
+    const changed = ops.changeRegime(first, 'pequeno', '2026-08-20')
+    expect(ops.regimeOn(changed, '2026-07-31')).toBe('general')
+    expect(ops.regimeOn(changed, '2026-08-01')).toBe('pequeno')
+  })
+
+  it('una compra a otro precio no cambia el valor de la existencia de apertura', () => {
+    const seed: AppState = { ...createSeed(), suppliers: [supplier], stockMoves: [] }
+    const shampoo = seed.products!.find((item) => item.kind !== 'insumo' && (item.cost ?? 0) > 0)!
+    const bought = apply(seed, ops.recordPurchase(seed, { date: today, supplierId: 'prov', invoice: '', withTax: false, lines: [{ productId: shampoo.id, description: '', qty: 10, cost: (shampoo.cost ?? 0) + 14 }], terms: 'contado', method: 'Efectivo', notes: '' })).state
+    const onShelf = Math.round((bought.products ?? []).reduce((sum, item) => sum + Math.max(0, item.stock) * (item.cost ?? 0), 0) * 100) / 100
+    expect(Math.abs(balance(bought, '1104') - onShelf)).toBeLessThan(0.5)
+  })
+
+  it('anular una venta devuelve las unidades a su costo de salida', () => {
+    const base = createSeed()
+    const products = base.products!.map((item) => (item.id === 'collar' ? { ...item, stock: 18, cost: 22 } : item))
+    const seed: AppState = { ...base, products, suppliers: [supplier], stockMoves: [] }
+    const sold = apply(seed, ops.recordSale(seed, { clientName: '', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 18, price: 50 }], discount: 0, method: 'Efectivo' }))
+    const bought = apply(sold.state, ops.recordPurchase(sold.state, { date: today, supplierId: 'prov', invoice: '', withTax: false, lines: [{ productId: 'collar', description: '', qty: 2, cost: 40 }], terms: 'contado', method: 'Efectivo', notes: '' })).state
+    const voided = apply(bought, ops.voidSale(bought, sold.value.id, 'Devolución')).state
+    expect(voided.products!.find((item) => item.id === 'collar')!.cost).toBe(23.8)
+  })
+})
+
+describe('sincronización sin conexión', () => {
+  it('suma la venta hecha sin red a las existencias y renumera la venta que choca', () => {
+    const seed = ops.withCounters({ ...createSeed(), sales: [], stockMoves: [] })
+    const remoteSale = apply(seed, ops.recordSale(seed, { clientName: 'Remoto', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 1, price: 50 }], discount: 0, method: 'Efectivo' })).state
+    const localSale = apply(seed, ops.recordSale(seed, { clientName: 'Local', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 2, price: 50 }], discount: 0, method: 'Efectivo' }))
+    const touched = touchedBy(seed, localSale.state)
+    const merged = mergeOffline(remoteSale, localSale.state, touched)
+    const start = seed.products!.find((item) => item.id === 'collar')!.stock
+    expect(merged.products!.find((item) => item.id === 'collar')!.stock).toBe(start - 3)
+    const numbers = merged.sales!.map((item) => item.number)
+    expect(new Set(numbers).size).toBe(numbers.length)
+    const mine = merged.sales!.find((item) => item.id === localSale.value.id)!
+    const movement = merged.movements.find((item) => item.saleId === mine.id)!
+    expect(mine.document).toBe(movement.document)
+    expect(merged.stockMoves!.find((item) => item.productId === 'collar' && item.qty === -2)!.reference).toBe(mine.number)
+  })
+
+  it('un abono hecho sin red baja el saldo de la cuenta por pagar', () => {
+    const seed = ops.withCounters(createSeed())
+    const created = apply(seed, ops.savePayable(seed, { date: today, dueDate: today, supplierName: 'Luz', invoice: '', concept: 'Energía', category: 'Luz', amount: 100 }))
+    const remote = created.state
+    const paid = apply(remote, ops.payPayable(remote, { payableId: created.value.id, amount: 100, method: 'Efectivo', date: today })).state
+    const merged = mergeOffline(remote, paid, touchedBy(remote, paid))
+    expect(ops.payableBalance(merged.payables!.find((item) => item.id === created.value.id)!)).toBe(0)
+    expect(merged.movements.some((item) => item.payableId === created.value.id)).toBe(true)
+  })
+
+  it('una anulación sin red no se pierde', () => {
+    const seed = ops.withCounters({ ...createSeed(), sales: [], stockMoves: [] })
+    const sold = apply(seed, ops.recordSale(seed, { clientName: 'Ana', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 1, price: 50 }], discount: 0, method: 'Efectivo' }))
+    const voided = apply(sold.state, ops.voidSale(sold.state, sold.value.id, 'Error')).state
+    const merged = mergeOffline(sold.state, voided, touchedBy(sold.state, voided))
+    expect(merged.sales!.find((item) => item.id === sold.value.id)!.status).toBe('anulada')
+    expect(merged.products!.find((item) => item.id === 'collar')!.stock).toBe(seed.products!.find((item) => item.id === 'collar')!.stock)
   })
 })

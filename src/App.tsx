@@ -2,14 +2,15 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { allows, homeFor } from './access'
 import { useStore } from './store'
 import { InstallBanner, OfflineChip } from './components/InstallBanner'
-import { AdminLayout } from './pages/AdminLayout'
-import { Login } from './pages/Login'
-import { PublicLayout } from './pages/PublicLayout'
+import { NoEncontrada, PublicLayout } from './pages/PublicLayout'
 import type { Permission } from './types'
-import { lazy, type ComponentType, type ReactNode } from 'react'
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
 
 const page = <T extends Record<string, unknown>, K extends keyof T>(load: () => Promise<T>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] as ComponentType })))
+
+const AdminLayout = page(() => import('./pages/AdminLayout'), 'AdminLayout')
+const Login = page(() => import('./pages/Login'), 'Login')
 
 const Citas = page(() => import('./pages/Citas'), 'Citas')
 const Egresos = page(() => import('./pages/Egresos'), 'Egresos')
@@ -107,6 +108,11 @@ function SinAcceso() {
   )
 }
 
+function AdminHome() {
+  const { currentUser } = useStore()
+  return <Navigate to={currentUser ? homeFor(currentUser) : '/login'} replace />
+}
+
 function PublicTo({ path }: { path: string }) {
   const location = useLocation()
   return <Navigate to={{ pathname: path, search: location.search }} replace />
@@ -116,12 +122,14 @@ export function App() {
   return (
     <>
     <StaffChrome />
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<Home />} />
         <Route path="servicios" element={<Servicios />} />
         <Route path="reservar" element={<Reservar />} />
         <Route path="contacto" element={<Contacto />} />
+        <Route path="*" element={<NoEncontrada />} />
       </Route>
       <Route path="admin/inicio" element={<PublicTo path="/" />} />
       <Route path="admin/servicios" element={<PublicTo path="/servicios" />} />
@@ -236,9 +244,10 @@ export function App() {
           <Route key={item.path} path={item.path} element={<Guard permission={item.permission}>{item.element}</Guard>} />
         ))}
         <Route path="sin-acceso" element={<SinAcceso />} />
+        <Route path="*" element={<AdminHome />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
     </>
   )
 }

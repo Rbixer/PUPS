@@ -167,6 +167,18 @@
   html[data-theme="dark"] .admin .report-sheet *,
   html[data-theme="dark"] .admin .sheet * { border-color: #e5ded4; }
 
+  /* La constancia se edita con los colores del tema; al imprimir vuelve a ser papel claro. */
+  html[data-theme="dark"] .admin .constancia-mast {
+    background: linear-gradient(var(--ink), var(--ink)) top / 100% 3px no-repeat, transparent;
+  }
+  html[data-theme="dark"] .admin .constancia-mast img { background: var(--cream); }
+  html[data-theme="dark"] .admin .grooming-pick select {
+    color: var(--ink);
+    border-color: var(--line);
+    background-color: var(--surface);
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  }
+
   /* Colores escritos a mano que quedaban oscuros sobre fondo oscuro */
   html[data-theme="dark"] .admin .slot time,
   html[data-theme="dark"] .admin .photo-slot,

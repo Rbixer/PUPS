@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { COATS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
 import { Field } from '../components/ui'
@@ -15,6 +15,7 @@ export function Reservar() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+  const banner = useRef<HTMLParagraphElement>(null)
   const today = isoDate()
   const [form, setForm] = useState({
     clientName: params.get('tutor') ?? '',
@@ -42,8 +43,13 @@ export function Reservar() {
   )
 
   useEffect(() => {
-    if (free.length > 0 && !free.includes(form.time)) set('time', free[0])
-  }, [free, form.time])
+    if (folio !== null) return
+    if (free.length > 0 && !free.includes(form.time)) setForm((current) => ({ ...current, time: free[0] }))
+  }, [free, form.time, folio])
+
+  useEffect(() => {
+    if (folio !== null) banner.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [folio])
 
   const chosenTaken = !free.includes(form.time)
 
@@ -52,13 +58,13 @@ export function Reservar() {
       <header className="book-head">
         <div>
           <p className="eyebrow">Reservar</p>
-          <h2>Agenda la visita.</h2>
+          <h1 className="page-title">Agenda la visita.</h1>
           <p className="lede">
             Tus datos, los de tu mascota y un horario libre. Te confirmamos la cita con su número de folio.
           </p>
         </div>
         {folio ? (
-          <p className="banner" role="status">
+          <p className="banner" role="status" ref={banner}>
             Tu cita #{folio} quedó agendada. Guarda el número de folio.{' '}
             {confirm ? (
               <a href={confirm} target="_blank" rel="noreferrer">
@@ -232,7 +238,7 @@ export function Reservar() {
             </div>
           </dl>
           {chosenTaken ? <p className="form-error">Esa hora ya está ocupada.</p> : null}
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           {free.length === 0 ? <p className="form-error">Ya no quedan horarios libres ese día. Elige otra fecha.</p> : null}
           <button type="submit" className="btn btn-primary" disabled={chosenTaken || sending || free.length === 0}>
             {sending ? 'Agendando…' : 'Confirmar cita'}

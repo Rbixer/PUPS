@@ -1,4 +1,4 @@
-import { Workbook, type Cell } from 'exceljs'
+import type { Cell, Worksheet } from 'exceljs'
 import { formatName, isoDate, monthTitle } from './format'
 import type { AppState, Appointment, Movement } from './types'
 
@@ -188,7 +188,7 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
   }
 }
 
-function paintHeader(sheet: ReturnType<Workbook['addWorksheet']>, columnCount: number) {
+function paintHeader(sheet: Worksheet, columnCount: number) {
   const header = sheet.getRow(4)
   header.height = 22
   for (let column = 1; column <= columnCount; column += 1) {
@@ -204,7 +204,7 @@ function paintHeader(sheet: ReturnType<Workbook['addWorksheet']>, columnCount: n
   }
 }
 
-function stamp(sheet: ReturnType<Workbook['addWorksheet']>, report: MonthReport, columns: number) {
+function stamp(sheet: Worksheet, report: MonthReport, columns: number) {
   sheet.mergeCells(1, 1, 1, columns)
   const title = sheet.getCell(1, 1)
   title.value = "PUP'S Pet Shop y Grooming"
@@ -214,7 +214,7 @@ function stamp(sheet: ReturnType<Workbook['addWorksheet']>, report: MonthReport,
   sheet.getRow(1).height = 24
 }
 
-function widths(sheet: ReturnType<Workbook['addWorksheet']>, values: number[]) {
+function widths(sheet: Worksheet, values: number[]) {
   values.forEach((width, index) => {
     sheet.getColumn(index + 1).width = width
   })
@@ -226,7 +226,7 @@ function moneyCell(cell: Cell, value: number) {
   cell.alignment = { horizontal: 'right' }
 }
 
-function zebra(sheet: ReturnType<Workbook['addWorksheet']>, rowNumber: number, columns: number) {
+function zebra(sheet: Worksheet, rowNumber: number, columns: number) {
   if (rowNumber % 2 === 0) return
   const row = sheet.getRow(rowNumber)
   for (let column = 1; column <= columns; column += 1) {
@@ -239,6 +239,7 @@ export function excelFilename(report: MonthReport) {
 }
 
 export async function downloadExcel(report: MonthReport) {
+  const { Workbook } = await import('exceljs')
   const workbook = new Workbook()
   workbook.creator = "PUP'S Pet Shop y Grooming"
   workbook.created = new Date()

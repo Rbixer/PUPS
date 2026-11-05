@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { updateWaiting } from '../pwa'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -17,7 +18,7 @@ function isStandalone() {
 
 export function InstallBanner() {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [update, setUpdate] = useState(false)
+  const [update, setUpdate] = useState(updateWaiting)
   const [iosHint, setIosHint] = useState(false)
   const [hidden, setHidden] = useState(true)
 

@@ -28,6 +28,7 @@ export default defineConfig({
       manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,ico,woff2}'],
+        globIgnores: ['**/exceljs*', '**/inter-{cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
@@ -43,13 +44,18 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            urlPattern: /\/assets\/.+\.(?:js|woff2)$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'pups-fonts',
-              expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheName: 'pups-lazy',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [200] },
             },
+          },
+          {
+            urlPattern: /\/shop\/.+\.jpg$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'pups-shop', expiration: { maxEntries: 40 }, cacheableResponse: { statuses: [200] } },
           },
         ],
       },

@@ -14,7 +14,7 @@ export function Contacto() {
     <section className="section page split">
       <div>
         <p className="eyebrow">Contacto</p>
-        <h2>Escríbenos y te respondemos.</h2>
+        <h1 className="page-title">Escríbenos y te respondemos.</h1>
         <p className="lede">
           {state.settings.address.trim() || 'Guatemala'}. {state.settings.hours.trim() || 'Horario por confirmar.'}
         </p>
@@ -60,7 +60,7 @@ export function Contacto() {
             required
           />
         </Field>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
         <button type="submit" className="btn btn-primary" disabled={sending}>
           {sending ? 'Enviando…' : 'Enviar mensaje'}
         </button>

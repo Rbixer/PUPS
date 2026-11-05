@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { accountName, balanceSheet, buildJournal, incomeStatement, taxMonths, type Balance } from '../ledger'
-import { downloadLedgerExcel } from '../ledgerExport'
 import { round2 } from '../ops'
 import { useStore } from '../store'
 
@@ -47,6 +46,7 @@ export function Contabilidad() {
     setNote('')
     try {
       const filename = `pups-contabilidad-${scope === 'mes' ? month : year}.xlsx`
+      const { downloadLedgerExcel } = await import('../ledgerExport')
       await downloadLedgerExcel({ label, filename, entries: inRange, statement, sheet, taxes })
       setNote(`Se descargó ${filename}.`)
     } catch {

@@ -128,30 +128,186 @@ function anonymous(data?: PublicData | null): AppState {
   }
 }
 
-/** Une lo hecho sin conexión con lo que el servidor guardó mientras tanto: suma los registros nuevos de este equipo. */
-export function mergeOffline(remote: AppState, local: AppState): AppState {
-  const keys = ['appointments', 'movements', 'leads', 'conversations', 'sales', 'stockMoves', 'suppliers', 'purchases', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses'] as const
+const MERGED = ['appointments', 'movements', 'leads', 'conversations', 'sales', 'stockMoves', 'suppliers', 'purchases', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses', 'products'] as const
+
+type Merged = (typeof MERGED)[number]
+
+/** Registros que este equipo creó, cambió o borró y todavía no suben, por colección. */
+export type Touched = Partial<Record<Merged, string[]>>
+
+/** Anota qué registros cambió una operación comparando el estado antes y después. */
+export function touchedBy(before: AppState, after: AppState, into: Touched = {}): Touched {
+  for (const key of MERGED) {
+    const old = (before[key] ?? []) as { id: string }[]
+    const now = (after[key] ?? []) as { id: string }[]
+    if (old === now) continue
+    const ids = new Set(into[key] ?? [])
+    const previous = new Map(old.map((item) => [item.id, item]))
+    for (const item of now) {
+      const was = previous.get(item.id)
+      if (was !== item && JSON.stringify(was) !== JSON.stringify(item)) ids.add(item.id)
+      previous.delete(item.id)
+    }
+    for (const id of previous.keys()) ids.add(id)
+    if (ids.size) into[key] = [...ids]
+  }
+  return into
+}
+
+function unite(first: Touched, second: Touched): Touched {
+  const result: Touched = { ...first }
+  for (const [key, ids] of Object.entries(second) as [Merged, string[]][]) result[key] = [...new Set([...(result[key] ?? []), ...ids])]
+  return result
+}
+
+const sequence = (value: string) => Number(value.replace(/\D/g, '')) || 0
+
+/**
+ * Une lo hecho sin conexión con lo que el servidor guardó mientras tanto. De los registros que este equipo tocó
+ * gana su versión; del resto, la del servidor. Las existencias suman los movimientos de kárdex de los dos lados y
+ * los números de documento que choquen se renumeran junto con sus referencias.
+ * Sin la lista de registros tocados (copias viejas) solo se suman los registros nuevos.
+ */
+export function mergeOffline(remote: AppState, local: AppState, touched?: Touched): AppState {
   const merged: AppState = { ...remote }
-  for (const key of keys) {
+  const remoteIds = new Set<string>()
+  for (const key of MERGED) {
     const theirs = (remote[key] ?? []) as { id: string }[]
     const mine = (local[key] ?? []) as { id: string }[]
+    for (const item of theirs) remoteIds.add(`${key}:${item.id}`)
     const known = new Set(theirs.map((item) => item.id))
-    const added = mine.filter((item) => !known.has(item.id))
-    if (added.length) (merged as Record<string, unknown>)[key] = [...added, ...theirs]
-  }
-  const used = new Set(remote.movements.map((item) => item.document))
-  const renumbered: Movement[] = []
-  for (const item of merged.movements) {
-    if (remote.movements.some((theirs) => theirs.id === item.id) || !used.has(item.document)) {
-      used.add(item.document)
-      renumbered.push(item)
+    const added = mine.filter((item) => !known.has(item.id) && (!touched || touched[key]?.includes(item.id)))
+    if (!touched) {
+      if (key !== 'products' && added.length) (merged as Record<string, unknown>)[key] = [...added, ...theirs]
       continue
     }
-    const document = ops.nextDocument({ ...merged, movements: [...renumbered, ...merged.movements] }, item.type)
-    used.add(document)
-    renumbered.push({ ...item, document })
+    const ids = new Set(touched[key] ?? [])
+    const own = new Map(mine.map((item) => [item.id, item]))
+    const kept = theirs.flatMap((item) => {
+      if (!ids.has(item.id)) return [item]
+      const next = own.get(item.id)
+      return next ? [mergeRecord(key, item, next)] : []
+    })
+    ;(merged as Record<string, unknown>)[key] = [...added, ...kept]
   }
-  return { ...merged, movements: renumbered }
+
+  const freshMoves = (local.stockMoves ?? []).filter((item) => !remoteIds.has(`stockMoves:${item.id}`))
+  if (touched && merged.products) {
+    merged.products = merged.products.map((item) => {
+      if (!remoteIds.has(`products:${item.id}`)) return item
+      const theirs = remote.products?.find((product) => product.id === item.id)
+      if (!theirs) return item
+      const delta = freshMoves.filter((move) => move.productId === item.id).reduce((sum, move) => sum + move.qty, 0)
+      return { ...item, stock: theirs.stock + delta }
+    })
+  }
+
+  const fresh = (key: Merged, id: string) => !remoteIds.has(`${key}:${id}`)
+  const renames = new Map<string, string>()
+  const serials = [
+    ['sales', 'VEN'],
+    ['purchases', 'COM'],
+    ['payables', 'CXP'],
+  ] as const
+  for (const [key, prefix] of serials) {
+    const list = (merged[key] ?? []) as { id: string; number: string }[]
+    const used = new Set(((remote[key] ?? []) as { number: string }[]).map((item) => item.number))
+    let top = Math.max(remote.counters?.[prefix] ?? 0, ...list.map((item) => sequence(item.number)))
+    ;(merged as Record<string, unknown>)[key] = list.map((item) => {
+      if (!fresh(key, item.id) || !used.has(item.number)) {
+        used.add(item.number)
+        return item
+      }
+      top += 1
+      const number = `${prefix}-${String(top).padStart(4, '0')}`
+      renames.set(item.number, number)
+      used.add(number)
+      return { ...item, number }
+    })
+  }
+
+  const usedFolios = new Set(remote.appointments.map((item) => item.folio))
+  let topFolio = ops.nextFolio(merged) - 1
+  const folios = new Map<number, number>()
+  merged.appointments = merged.appointments.map((item) => {
+    if (!fresh('appointments', item.id) || !usedFolios.has(item.folio)) {
+      usedFolios.add(item.folio)
+      return item
+    }
+    topFolio += 1
+    folios.set(item.folio, topFolio)
+    usedFolios.add(topFolio)
+    return { ...item, folio: topFolio }
+  })
+
+  const rename = (text: string) => {
+    let next = text
+    for (const [from, to] of renames) next = next.split(from).join(to)
+    return next
+  }
+  const usedDocs = new Set(remote.movements.map((item) => item.document))
+  /** Documento viejo y nuevo de cada movimiento renumerado, por id del movimiento. */
+  const documents = new Map<string, { from: string; to: string }>()
+  const renumbered: Movement[] = []
+  for (const original of merged.movements) {
+    if (!fresh('movements', original.id)) {
+      usedDocs.add(original.document)
+      renumbered.push(original)
+      continue
+    }
+    let item: Movement = { ...original, concept: rename(original.concept), notes: rename(original.notes) }
+    if (item.folio != null && folios.has(item.folio)) item = { ...item, folio: folios.get(item.folio) }
+    if (usedDocs.has(item.document)) {
+      const document = ops.nextDocument({ ...merged, movements: [...renumbered, ...merged.movements] }, item.type)
+      documents.set(item.id, { from: item.document, to: document })
+      item = { ...item, document }
+    }
+    usedDocs.add(item.document)
+    renumbered.push(item)
+  }
+  merged.movements = renumbered
+  merged.stockMoves = (merged.stockMoves ?? []).map((item) => (fresh('stockMoves', item.id) && renames.has(item.reference) ? { ...item, reference: renames.get(item.reference)! } : item))
+  merged.sales = (merged.sales ?? []).map((item) => {
+    const movement = renumbered.find((candidate) => candidate.saleId === item.id && !candidate.reverses)
+    const change = movement ? documents.get(movement.id) : undefined
+    return change && item.document === change.from ? { ...item, document: change.to } : item
+  })
+  merged.payables = (merged.payables ?? []).map((item) => {
+    const swap = new Map(
+      renumbered.flatMap((candidate) => {
+        const change = candidate.payableId === item.id ? documents.get(candidate.id) : undefined
+        return change ? [[change.from, change.to] as const] : []
+      }),
+    )
+    if (!swap.size && !(renames.size && fresh('payables', item.id))) return item
+    return {
+      ...item,
+      concept: fresh('payables', item.id) ? rename(item.concept) : item.concept,
+      payments: item.payments.map((payment) => ({ ...payment, document: swap.get(payment.document) ?? payment.document })),
+    }
+  })
+  return ops.withCounters(merged)
+}
+
+/** Versión de este equipo de un registro que existe en los dos lados. */
+function mergeRecord(key: Merged, theirs: { id: string }, mine: { id: string }) {
+  if (key === 'payables') {
+    const remote = theirs as Payable
+    const local = mine as Payable
+    const seen = new Set(remote.payments.map((item) => item.id))
+    return { ...local, payments: [...remote.payments, ...local.payments.filter((item) => !seen.has(item.id))] }
+  }
+  if (key === 'appointments') {
+    const remote = theirs as Appointment
+    const local = mine as Appointment
+    return { ...local, beforePhoto: local.beforePhoto || remote.beforePhoto, afterPhoto: local.afterPhoto || remote.afterPhoto }
+  }
+  if (key === 'products') {
+    const remote = theirs as CatalogItem
+    const local = mine as CatalogItem
+    return { ...local, image: local.image || remote.image }
+  }
+  return mine
 }
 
 function readJson<T>(storage: Storage, key: string): T | null {
@@ -185,11 +341,13 @@ function readCache(): AppState | null {
   return absorb(parsed, null)
 }
 
-function readSync() {
-  return readJson<{ base: number; dirty: boolean }>(localStorage, SYNC) ?? { base: 0, dirty: false }
+type SyncMark = { base: number; dirty: boolean; touched?: Touched }
+
+function readSync(): SyncMark {
+  return readJson<SyncMark>(localStorage, SYNC) ?? { base: 0, dirty: false }
 }
 
-function persist(payload: AppState, sync: { base: number; dirty: boolean }) {
+function persist(payload: AppState, sync: SyncMark) {
   try {
     localStorage.setItem(SYNC, JSON.stringify(sync))
     localStorage.setItem(KEY, JSON.stringify(lightweight({ ...payload, sessionUserId: null })))
@@ -294,6 +452,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const latest = useRef(state)
   const server = useRef<AppState | null>(null)
   const pending = useRef<Mutation[]>([])
+  const touched = useRef<Touched>({})
   const token = useRef<string | null>(bootSession.current?.token ?? null)
   const pushing = useRef(false)
   const pushTimer = useRef<number | null>(null)
@@ -304,8 +463,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState(next)
     setUnsynced(pending.current.length > 0)
     if (token.current) {
-      const base = server.current?.revision ?? readSync().base
-      persist(next, { base, dirty: pending.current.length > 0 || (!server.current && readSync().dirty) })
+      const saved = readSync()
+      const base = server.current?.revision ?? saved.base
+      const dirty = pending.current.length > 0 || (!server.current && saved.dirty)
+      if (!dirty) touched.current = {}
+      persist(next, { base, dirty, touched: server.current ? touched.current : unite(saved.touched ?? {}, touched.current) })
     }
   }
 
@@ -345,6 +507,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   function commit(mutation: Mutation) {
     const next = mutation(latest.current)
     if (!next) return false
+    touchedBy(latest.current, next, touched.current)
     pending.current.push(mutation)
     show(next)
     schedulePush()
@@ -406,7 +569,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         restoreRef.current = null
         if (cached && sync.dirty) {
           const same = (remote.revision ?? 0) === sync.base
-          pending.current = [same ? () => ({ ...cached, revision: remote.revision }) : (current) => mergeOffline(current, cached), ...pending.current]
+          const marks = sync.touched
+          if (marks) touched.current = unite(touched.current, marks)
+          pending.current = [same ? () => ({ ...cached, revision: remote.revision }) : (current) => mergeOffline(current, cached, marks), ...pending.current]
         }
         rebase()
         if (pending.current.length > 0) schedulePush()
@@ -419,9 +584,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         const response = await fetch('/api/public', { cache: 'no-store' })
         if (!response.ok) return
-        const data = (await response.json()) as PublicData
-        localStorage.setItem(PUBLIC, JSON.stringify(data))
-        if (!token.current) show(anonymous(data))
+        const raw = await response.text()
+        const unchanged = raw === localStorage.getItem(PUBLIC) && latest.current.revision === (JSON.parse(raw) as PublicData).revision
+        localStorage.setItem(PUBLIC, raw)
+        if (!token.current && !unchanged) show(anonymous(JSON.parse(raw) as PublicData))
       } catch {
         /* Sin conexión el sitio sigue con la última copia del catálogo. */
       }

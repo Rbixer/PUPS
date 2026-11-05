@@ -151,12 +151,16 @@ export function buildJournal(state: AppState): Entry[] {
   const products = shelfOf(state.products)
   const moves = state.stockMoves ?? []
   const firstDate = [...state.movements.map((item) => item.date), ...moves.map((item) => item.date)].sort()[0] ?? isoDate()
-  /** La apertura usa el primer costo conocido de cada producto, así no cambia con las compras de después. */
+  /**
+   * La apertura se valora con el costo que tenía cada producto antes de su primer movimiento, así no cambia con las compras de después.
+   * Una compra registra el precio de compra y no el costo anterior, por eso no sirve para valorar la apertura.
+   */
   const opening = products.reduce((sum, item) => {
     const own = moves.filter((move) => move.productId === item.id)
     const tracked = own.reduce((total, move) => total + move.qty, 0)
-    const first = [...own].sort((a, b) => a.at.localeCompare(b.at))[0]
-    return sum + Math.max(0, item.stock - tracked) * (first?.unitCost ?? item.cost ?? 0)
+    const first = [...own].reverse().sort((a, b) => a.at.localeCompare(b.at))[0]
+    const cost = first?.costBefore ?? (first && first.kind !== 'compra' ? first.unitCost : undefined) ?? item.cost ?? 0
+    return sum + Math.max(0, item.stock - tracked) * cost
   }, 0)
   push({ id: 'apertura', date: firstDate, ref: 'APERTURA', concept: 'Inventario inicial', lines: [debit('1104', opening), credit('3101', opening)] })
 
@@ -236,25 +240,30 @@ export function buildJournal(state: AppState): Entry[] {
       const inMonth = entries.filter((entry) => entry.date.startsWith(month))
       const total = (code: string, side: 'debit' | 'credit') =>
         round2(inMonth.reduce((sum, entry) => sum + entry.lines.filter((line) => line.code === code).reduce((acc, line) => acc + line[side], 0), 0))
+      const creditTax = round2(total('1105', 'debit') - total('1105', 'credit'))
       if (!regime) {
-        available = round2(available + total('1105', 'debit'))
+        available = round2(available + creditTax)
         continue
       }
       if (regime === 'pequeno') {
         const revenue = total('4101', 'credit') + total('4102', 'credit') - total('4101', 'debit') - total('4102', 'debit')
         const tax = round2(Math.max(0, revenue) * 0.05)
         push({ id: `isr-${month}`, date: lastDay(month), ref: `IMP-${month}`, concept: `Impuesto 5 % del mes ${month}`, lines: [debit('6301', tax), credit('2105', tax)] })
+        available = round2(available + creditTax)
       } else {
-        available = round2(available + total('1105', 'debit'))
-        const owed = total('2104', 'credit')
-        const used = Math.min(available, owed)
-        available = round2(available - used)
+        const pool = round2(available + creditTax)
+        const owed = round2(total('2104', 'credit') - total('2104', 'debit'))
+        const used = Math.min(pool, Math.max(0, owed))
+        available = round2(pool - used - Math.min(0, owed))
         push({
           id: `iva-${month}`,
           date: lastDay(month),
           ref: `IVA-${month}`,
           concept: `Liquidación de IVA ${month}`,
-          lines: [debit('2104', owed), credit('1105', used), credit('2105', owed - used)],
+          lines:
+            owed >= 0
+              ? [debit('2104', owed), credit('1105', used), credit('2105', owed - used)]
+              : [debit('1105', -owed), credit('2104', -owed)],
         })
       }
     }
@@ -427,8 +436,8 @@ export function taxMonths(entries: Entry[], settings: Settings, year: number): T
       round2(inMonth.reduce((total, entry) => total + entry.lines.filter((line) => line.code === code).reduce((acc, line) => acc + line[side], 0), 0))
     const regime = regimeOn(settings, monthEnd(month))
     const base = round2(sum('4101', 'credit') + sum('4102', 'credit') - sum('4101', 'debit') - sum('4102', 'debit'))
-    const debitTax = regime === 'general' ? sum('2104', 'credit') : 0
-    const creditTax = sum('1105', 'debit')
+    const debitTax = regime === 'general' ? round2(sum('2104', 'credit') - sum('2104', 'debit')) : 0
+    const creditTax = round2(sum('1105', 'debit') - sum('1105', 'credit'))
     const carried = available
     let payable = 0
     if (regime === 'pequeno') {
@@ -436,9 +445,9 @@ export function taxMonths(entries: Entry[], settings: Settings, year: number): T
       available = round2(available + creditTax)
     } else if (regime === 'general') {
       const pool = round2(available + creditTax)
-      const used = Math.min(pool, debitTax)
-      payable = round2(debitTax - used)
-      available = round2(pool - used)
+      const used = Math.min(pool, Math.max(0, debitTax))
+      payable = round2(Math.max(0, debitTax) - used)
+      available = round2(pool - used - Math.min(0, debitTax))
     } else {
       available = round2(available + creditTax)
     }

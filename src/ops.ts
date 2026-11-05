@@ -61,11 +61,15 @@ export function regimeOn(settings: AppState['settings'], date: string) {
   return regime
 }
 
-/** Cambia el régimen desde hoy y guarda el anterior para el historial. */
+/**
+ * Cambia el régimen desde el primer día del mes en curso, porque el impuesto se liquida por mes completo.
+ * El primer régimen que se elige aplica a todo lo anterior.
+ */
 export function changeRegime(settings: AppState['settings'], regime: AppState['settings']['taxRegime'], today = isoDate()): AppState['settings'] {
   const history = settings.taxHistory?.length ? [...settings.taxHistory] : settings.taxRegime ? [{ from: '0000-01-01', regime: settings.taxRegime }] : []
-  const kept = history.filter((item) => item.from < today)
-  return { ...settings, taxRegime: regime, taxHistory: [...kept, { from: today, regime }] }
+  const start = history.some((item) => item.regime) ? `${today.slice(0, 7)}-01` : '0000-01-01'
+  const kept = history.filter((item) => item.from < start)
+  return { ...settings, taxRegime: regime, taxHistory: [...kept, { from: start, regime }] }
 }
 
 const sequence = (value: string) => Number(value.replace(/\D/g, '')) || 0
@@ -168,6 +172,7 @@ export function chargeAppointment(state: AppState, appointment: Appointment, met
 function shift(products: CatalogItem[], productId: string, qty: number, kind: StockKind, reference: string, note: string, date: string, unitCost?: number) {
   const item = products.find((product) => product.id === productId)
   if (!item) return null
+  const costBefore = item.cost
   item.stock += qty
   const move: StockMove = {
     id: newId(),
@@ -180,6 +185,7 @@ function shift(products: CatalogItem[], productId: string, qty: number, kind: St
     note,
     balance: item.stock,
     unitCost: unitCost ?? item.cost,
+    ...(costBefore !== undefined ? { costBefore } : {}),
   }
   return move
 }
@@ -388,7 +394,13 @@ export function voidSale(state: AppState, saleId: string, reason: string, date =
   const moves: StockMove[] = []
   for (const line of sale.lines) {
     if (!line.productId) continue
-    const move = shift(products, line.productId, line.qty, 'anulación', sale.number, reason.trim(), date)
+    const item = products.find((product) => product.id === line.productId)
+    const before = Math.max(item?.stock ?? 0, 0)
+    const move = shift(products, line.productId, line.qty, 'anulación', sale.number, reason.trim(), date, line.cost)
+    if (item && line.cost !== undefined) {
+      const cost = line.cost
+      item.cost = round2(before + line.qty > 0 ? (before * (item.cost ?? cost) + line.qty * cost) / (before + line.qty) : cost)
+    }
     if (move) moves.push(move)
   }
   const next: Sale = { ...sale, status: 'anulada' }
@@ -539,8 +551,9 @@ export function recordPurchase(state: AppState, input: PurchaseInput): Op<Purcha
     if (!item) return fail('Un producto de la compra ya no existe.')
     const unit = credit ? line.cost / (1 + IVA_RATE) : line.cost
     const before = Math.max(item.stock, 0)
-    item.cost = round2(before + line.qty > 0 ? (before * (item.cost ?? unit) + line.qty * unit) / (before + line.qty) : unit)
+    const cost = round2(before + line.qty > 0 ? (before * (item.cost ?? unit) + line.qty * unit) / (before + line.qty) : unit)
     const move = shift(products, item.id, line.qty, 'compra', number, supplier.name, input.date, round2(unit))
+    item.cost = cost
     if (move) moves.push(move)
   }
   const purchase: Purchase = {

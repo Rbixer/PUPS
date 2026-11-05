@@ -8,7 +8,7 @@ export function Servicios() {
     <section className="section page">
       <div className="section-head">
         <p className="eyebrow">Servicios</p>
-        <h2>Lo que se agenda, se ficha y se cobra.</h2>
+        <h1 className="page-title">Grooming, veterinaria y pet shop.</h1>
         <p className="lede">
           El precio se confirma según el tamaño, el pelaje y el trabajo que necesite tu mascota.
         </p>

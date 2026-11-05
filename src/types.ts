@@ -200,6 +200,8 @@ export type StockMove = {
   note: string
   balance: number
   unitCost?: number
+  /** Costo promedio del producto antes de este movimiento; valora la existencia de apertura. */
+  costBefore?: number
 }
 
 export type Supplier = {

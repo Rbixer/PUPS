@@ -42,7 +42,7 @@ export function Home() {
         <div className="hero-stage">
           <article className="stage-card">
           <div className="logo-badge hero-logo">
-            <img src="/logo.png" alt="Logo de PUP'S, un shih tzu sobre el letrero de la tienda" />
+            <img src="/logo.png" alt="Logo de PUP'S, un shih tzu sobre el letrero de la tienda" width={342} height={345} />
           </div>
           <article className="float-card">
             <p className="eyebrow">Así se ve el día</p>

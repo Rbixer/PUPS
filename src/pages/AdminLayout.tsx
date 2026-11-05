@@ -497,7 +497,7 @@ export function AdminLayout() {
                           </span>
                           <span className="truncate">{link.label}</span>
                           {badges[link.to] ? (
-                            <b className={`ml-auto rounded-full px-1.5 text-[11px] leading-5 font-semibold ${isActive ? 'bg-white/20 text-white' : 'bg-caramel text-white'}`}>
+                            <b className={`ml-auto rounded-full px-1.5 text-[11px] leading-5 font-semibold ${isActive ? 'bg-white/20 text-white' : 'bg-caramel-deep text-white'}`}>
                               {badges[link.to]}
                             </b>
                           ) : null}

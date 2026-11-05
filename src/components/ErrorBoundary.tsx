@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <main className="fault" role="alert">
         <h1>Algo no salió bien</h1>
-        <p>Tus datos están a salvo en este dispositivo. Recarga para volver al panel.</p>
+        <p>No se perdió nada de lo que ya estaba guardado. Recarga la página para continuar.</p>
         <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
           Recargar
         </button>
