@@ -37,9 +37,14 @@ export type GroomingReport = {
   castrated: Mark
   ingreso: Record<string, CheckItem>
   egreso: Record<string, CheckItem>
+  /** Comportamiento por área: "si" es que tuvo dificultad, "no" que se dejó trabajar. */
+  behavior?: Partial<Record<BehaviorArea, CheckItem>>
   recommendations: string
+  /** 0 antes, 1 durante, 2 después, 3 segunda de durante. */
   photos: string[]
 }
+
+export type BehaviorArea = 'bano' | 'secado' | 'corte' | 'unas'
 
 export type User = {
   id: string
@@ -62,6 +67,20 @@ export type User = {
   /** Bonificación incentivo mensual. Si falta, se usa la de ley. */
   bonus?: number
   hiredAt?: string
+  /** Meta mensual en quetzales de ventas de mostrador. */
+  salesGoal?: number
+  /** Meta mensual de servicios completados. */
+  servicesGoal?: number
+}
+
+/** Entrada y salida que marca cada trabajador. Las horas se guardan en ISO (UTC). */
+export type Attendance = {
+  id: string
+  userId: string
+  date: string
+  inAt: string
+  outAt?: string
+  note?: string
 }
 
 export type ControlField =
@@ -145,7 +164,13 @@ export type Movement = {
   reverses?: string
   /** Gasto con factura: en el régimen general separa el crédito fiscal. */
   withTax?: boolean
+  /** Cobro facturado. Se marca al cobrar; si falta, el cobro cuenta como sin factura. */
+  invoiced?: boolean
+  /** Rubro del gasto para el estado de resultados. */
+  area?: ExpenseArea
 }
+
+export type ExpenseArea = 'administrativo' | 'venta' | 'servicio'
 
 export type ShopCategoryName = 'Shampoo' | 'Accesorios' | 'Cuidado' | 'Snacks' | 'Insumos'
 
@@ -164,7 +189,7 @@ export type CatalogItem = {
   cost?: number
   minStock?: number
   /** Los insumos se controlan en inventario y no salen en la tienda. */
-  kind?: 'venta' | 'insumo'
+  kind?: ProductUse
   sku?: string
 }
 
@@ -187,6 +212,9 @@ export type Sale = {
   status: SaleStatus
   document: string
   userId?: string
+  invoiced?: boolean
+  /** Compra de un trabajador; si se paga con descuento en planilla queda pendiente hasta la planilla. */
+  employeeId?: string
 }
 
 export type StockKind = 'inicial' | 'compra' | 'venta' | 'pedido' | 'ajuste' | 'consumo' | 'anulación'
@@ -216,7 +244,16 @@ export type Supplier = {
   notes: string
 }
 
-export type PurchaseLine = { productId?: string; description: string; qty: number; cost: number }
+export type PurchaseLine = {
+  productId?: string
+  description: string
+  qty: number
+  cost: number
+  /** Para venta o para uso en servicio, según el producto al momento de la compra. */
+  use?: ProductUse
+}
+
+export type ProductUse = 'venta' | 'insumo'
 
 export type Purchase = {
   id: string
@@ -267,6 +304,7 @@ export type FixedCost = {
   active: boolean
   /** Llega con factura que separa IVA crédito. */
   withTax?: boolean
+  area?: ExpenseArea
 }
 
 export type PayrollLine = {
@@ -281,6 +319,8 @@ export type PayrollLine = {
   bonus: number
   extra: number
   deductions: number
+  /** Parte de los descuentos que paga compras del trabajador. */
+  purchases?: number
   igss: number
   net: number
   employerIgss: number
@@ -318,17 +358,38 @@ export type Task = {
 
 export type CashClose = {
   id: string
+  /** Último día que cubre el corte. */
   date: string
+  /** Primer día que cubre; los cortes viejos cubren solo `date`. */
+  from?: string
   opening: number
   cashIn: number
   cashOut: number
+  /** Efectivo que salió a depósitos en esos días. */
+  deposited?: number
   expected: number
   counted: number
   difference: number
   byMethod: Record<string, number>
+  split?: CashSplit
   closedBy?: string
   closedAt: string
   note: string
+}
+
+/** Cobros de ventas y servicios separados por factura. */
+export type CashSplit = Record<'facturado' | 'sinFactura', { ventas: number; servicios: number }>
+
+/** Efectivo que sale de la caja al banco. No es gasto: solo baja el efectivo acumulado. */
+export type CashDeposit = {
+  id: string
+  date: string
+  amount: number
+  bank: string
+  reference: string
+  note: string
+  userId?: string
+  at: string
 }
 
 export type Lead = {
@@ -406,6 +467,8 @@ export type AppState = {
   payrolls?: PayrollRun[]
   tasks?: Task[]
   cashCloses?: CashClose[]
+  deposits?: CashDeposit[]
+  attendance?: Attendance[]
   /** Último número usado por serie (ING, EG, VEN, COM, CXP, FOLIO). Evita repetir documentos borrados. */
   counters?: Record<string, number>
 }

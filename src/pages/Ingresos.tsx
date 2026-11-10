@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { METHODS } from '../catalog'
-import { Field } from '../components/ui'
+import { Field, InvoiceChoice } from '../components/ui'
 import { isoDate, longDate, money, parseAmount } from '../format'
 import { INCOME_CATEGORIES } from '../ops'
 import { useStore } from '../store'
@@ -18,6 +18,7 @@ export function Ingresos() {
     notes: '',
     folio: '',
     category: 'Servicio',
+    invoiced: false,
   })
 
   return (
@@ -54,6 +55,7 @@ export function Ingresos() {
             notes: form.notes,
             folio,
             category: form.category === 'Servicio' ? undefined : form.category,
+            ...(form.category === 'Servicio' ? { invoiced: form.invoiced } : {}),
           })
           if (!created.ok) {
             setError(created.error)
@@ -62,7 +64,7 @@ export function Ingresos() {
           }
           setError('')
           setNotice(`Ingreso ${created.value.document} registrado.`)
-          setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '', folio: '', category: 'Servicio' })
+          setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '', folio: '', category: 'Servicio', invoiced: false })
         }}
       >
         <Field label="Fecha">
@@ -88,6 +90,7 @@ export function Ingresos() {
             ))}
           </select>
         </Field>
+        {form.category === 'Servicio' ? <InvoiceChoice value={form.invoiced} onChange={(invoiced) => setForm({ ...form, invoiced })} /> : null}
         <Field label="Folio de cita">
           <input className="num" value={form.folio} onChange={(event) => setForm({ ...form, folio: event.target.value })} placeholder="Opcional" />
         </Field>
@@ -118,6 +121,7 @@ export function Ingresos() {
                   {item.document} · {longDate(item.date)} · {item.method}
                   {item.folio ? ` · cita #${item.folio}` : ''}
                   {item.category ? ` · ${item.category}` : ''}
+                  {item.invoiced ? ' · con factura' : ''}
                 </span>
               </div>
               <b className="num ok-text">{money(item.amount)}</b>

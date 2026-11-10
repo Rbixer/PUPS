@@ -142,6 +142,34 @@ describe('servidor', () => {
     expect(after.movements.some((item) => item.id === 'nuevo-x')).toBe(false)
   })
 
+  it('cada quien marca su propia asistencia con la hora del servidor y solo ve la suya', async () => {
+    const admin = await login('admin')
+    const desk = await login('recepcion', 'NuevaClave2026')
+    const seen = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
+    const today = isoDate()
+    const mine = { id: 'asis-1', userId: desk.userId, date: today, inAt: '2020-01-01T08:00:00.000Z' }
+    const other = { id: 'asis-2', userId: admin.userId, date: today, inAt: '2020-01-01T08:00:00.000Z' }
+    const saved = await call('PUT', '/api/state', { base: seen.revision, state: { ...seen, attendance: [mine, other] } }, desk.token)
+    expect(saved.status).toBe(200)
+    const stored = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    expect(stored.attendance?.map((item) => item.id)).toEqual(['asis-1'])
+    const record = stored.attendance![0]
+    expect(Date.now() - Date.parse(record.inAt)).toBeLessThan(60_000)
+
+    const again = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
+    const out = { ...again.attendance![0], inAt: '2020-01-01T07:00:00.000Z', outAt: '2020-01-01T20:00:00.000Z' }
+    await call('PUT', '/api/state', { base: again.revision, state: { ...again, attendance: [out] } }, desk.token)
+    const closed = ((await call('GET', '/api/state', undefined, admin.token)).body as AppState).attendance![0]
+    expect(closed.inAt).toBe(record.inAt)
+    expect(Date.now() - Date.parse(closed.outAt!)).toBeLessThan(60_000)
+
+    const full = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const fixed = { ...full, attendance: [...full.attendance!, { ...other, id: 'asis-3' }] }
+    expect((await call('PUT', '/api/state', { base: full.revision, state: fixed }, admin.token)).status).toBe(200)
+    const deskView = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
+    expect(deskView.attendance?.map((item) => item.id)).toEqual(['asis-1'])
+  })
+
   it('rechaza datos con forma inválida', async () => {
     const admin = await login('admin')
     const current = (await call('GET', '/api/state', undefined, admin.token)).body as AppState

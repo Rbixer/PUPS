@@ -74,15 +74,15 @@ function originOf(request: http.IncomingMessage) {
 const PAGES: Record<string, { title: string; description: string }> = {
   '/': {
     title: "PUP'S · Pet Shop y Grooming",
-    description: "PUP'S Pet Shop y Grooming en Guatemala. Grooming, veterinaria y tienda para tu mascota. Reserva tu cita en línea.",
+    description: "PUP'S Pet Shop y Grooming en Guatemala. Baño, corte y tienda para tu mascota. Reserva tu cita en línea.",
   },
   '/servicios': {
     title: "Servicios · PUP'S",
-    description: 'Precios de grooming por tamaño, paquete premium, veterinaria y pet shop en PUP\'S Guatemala.',
+    description: "Baño y secado, corte de raza, corte higiénico, grooming premium y pet shop en PUP'S Guatemala.",
   },
   '/reservar': {
     title: "Reservar · PUP'S",
-    description: 'Reserva en línea el grooming o la consulta de tu mascota en PUP\'S: eliges servicio, día y hora.',
+    description: "Reserva en línea el grooming de tu mascota en PUP'S: eliges servicio, día y hora.",
   },
   '/contacto': {
     title: "Contacto · PUP'S",

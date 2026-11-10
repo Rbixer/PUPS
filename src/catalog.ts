@@ -16,16 +16,8 @@ export const SERVICES = [
     detail: 'Zonas sensibles, almohadillas y uñas. Útil entre cortes completos.',
   },
   {
-    name: 'Consulta veterinaria',
-    detail: 'Revisión clínica. Motivo, alergias y el siguiente paso quedan en la ficha.',
-  },
-  {
-    name: 'Vacunación',
-    detail: 'Aplicación y registro de la vacuna en la visita, con constancia imprimible.',
-  },
-  {
-    name: 'Desparasitación',
-    detail: 'Control interno o externo, anotado junto al peso del servicio.',
+    name: 'Grooming premium',
+    detail: 'Todo el grooming más deslanado, cepillado de dientes y extracción de glándulas.',
   },
   {
     name: 'Pet shop',
@@ -38,5 +30,10 @@ export const SEXES = ['Macho', 'Hembra'] as const
 export const COATS = ['Corto', 'Largo', 'Rizado', 'Duro'] as const
 /** Medios con los que de verdad entra o sale dinero. "Pedido" lo usan solo los pedidos de la tienda por cobrar. */
 export const METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Otro'] as const
+/** Los gastos salen de la caja chica salvo que se pague de otra forma. */
+export const EXPENSE_METHODS = ['Caja chica', ...METHODS] as const
 
 export const SERVICE_NAMES: string[] = SERVICES.map((service) => service.name)
+
+/** Lo que se agenda con hora; la tienda se pide aparte. */
+export const BOOKABLE_SERVICES: string[] = SERVICE_NAMES.filter((name) => name !== 'Pet shop')

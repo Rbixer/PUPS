@@ -1,5 +1,6 @@
 import { isoDate } from './format'
 import { packageOf } from './grooming'
+import { PETTY_REFILL } from './ops'
 import type { AppState, ControlField, ControlRow, Movement } from './types'
 
 export const CONTROL_MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -129,6 +130,7 @@ export function controlAuto(state: AppState, year: number, goal = CONTROL_GOAL) 
       else values.gastos += amount
       continue
     }
+    if (movement.category === PETTY_REFILL) continue
     const run = movement.payrollId ? payrolls.get(movement.payrollId) : undefined
     if (run) {
       const commission = round2(run.lines.reduce((sum, line) => sum + line.commission, 0))
@@ -183,7 +185,7 @@ const NOT_REVENUE = new Set(['Aporte de capital', 'Préstamo recibido', 'Otro in
 
 const EXPENSE_RULES: [RegExp, ControlField][] = [
   [/alquiler|renta|arrendamiento|\blocal\b/i, 'local'],
-  [/tel[eé]fono|celular/i, 'telefono'],
+  [/tel[eé]fono|celular|m[oó]vil/i, 'telefono'],
   [/internet|wifi|cable/i, 'internet'],
   [/\bluz\b|energ[ií]a|electricidad|eegsa/i, 'luz'],
   [/impuesto|\bsat\b|\biva\b|\bisr\b/i, 'impuesto'],

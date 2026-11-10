@@ -1,7 +1,9 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
+import { alertBadges } from '../alerts'
 import { saveBackupFile } from '../backup'
+import { AlertsBanner } from '../components/AlertsBanner'
 import { BackupReminder } from '../components/BackupReminder'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { Brand, Field } from '../components/ui'
@@ -30,6 +32,7 @@ const GROUPS: { label: string; links: { to: string; label: string; end: boolean;
       { to: '/admin/ingresos', label: 'Registrar ingreso', end: false, permission: 'caja' },
       { to: '/admin/egresos', label: 'Documento de egreso', end: false, permission: 'caja' },
       { to: '/admin/corte', label: 'Corte de caja', end: false, permission: 'caja' },
+      { to: '/admin/compras-empleados', label: 'Compras de empleados', end: false, permission: 'caja' },
       { to: '/admin/constancias', label: 'Constancias', end: false, permission: 'caja' },
     ],
   },
@@ -54,6 +57,7 @@ const GROUPS: { label: string; links: { to: string; label: string; end: boolean;
   {
     label: 'Equipo',
     links: [
+      { to: '/admin/asistencia', label: 'Asistencia', end: false },
       { to: '/admin/trabajadores', label: 'Trabajadores', end: false, permission: 'equipo' },
       { to: '/admin/usuarios', label: 'Usuarios', end: false, permission: 'equipo' },
     ],
@@ -241,6 +245,18 @@ function NavIcon({ to }: { to: string }) {
         <path d="M3.5 19c.8-3 2.8-4.5 5.5-4.5s4.7 1.5 5.5 4.5M16 7.5h4.5M16 11h4.5M17.5 14.5h3" />
       </>
     ),
+    '/admin/asistencia': (
+      <>
+        <circle cx="12" cy="12.5" r="8" />
+        <path d="M12 8v4.5l3 2M9.5 2.5h5" />
+      </>
+    ),
+    '/admin/compras-empleados': (
+      <>
+        <path d="M6 8.5h12l-1 11h-10l-1-11z" />
+        <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5M9.5 14.5h5" />
+      </>
+    ),
     '/admin/contabilidad': (
       <>
         <rect x="5" y="3.5" width="14" height="17" rx="2" />
@@ -325,9 +341,7 @@ function PasswordNotice() {
 
 export function AdminLayout() {
   const { state, currentUser, logout, isAdmin, resetDemo, exportBackup, weakPassword, syncNotice, dismissSyncNotice, unsynced } = useStore()
-  const unread = state.conversations.reduce((sum, item) => sum + (item.unread > 0 ? 1 : 0), 0)
-  const myTasks = (state.tasks ?? []).filter((item) => item.assigneeId === currentUser?.id && item.status !== 'hecha').length
-  const badges: Record<string, number> = { '/admin/whatsapp': unread, '/admin/tareas': myTasks }
+  const badges = alertBadges(state, currentUser)
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -579,6 +593,7 @@ export function AdminLayout() {
           </div>
         ) : null}
         {currentUser && allows(currentUser, 'equipo') ? <BackupReminder /> : null}
+        <AlertsBanner />
         <Suspense
           fallback={
             <div className="route-loading" aria-busy="true" aria-label="Cargando">

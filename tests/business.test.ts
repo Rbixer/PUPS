@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { defaultsFor } from '../src/access'
+import { alertBadges, buildAlerts, openCashDays } from '../src/alerts'
 import { clientProfiles } from '../src/clients'
-import { isoDate } from '../src/format'
+import { addDays, isoDate } from '../src/format'
 import { balanceSheet, balances, buildJournal, incomeStatement } from '../src/ledger'
 import * as ops from '../src/ops'
 import type { Op } from '../src/ops'
-import { laborLiability, payrollLine } from '../src/payroll'
+import { behindGoal, goalProgress, laborLiability, payrollLine } from '../src/payroll'
 import { createSeed } from '../src/seed'
-import type { AppState } from '../src/types'
+import type { AppState, Movement, Sale } from '../src/types'
 
 function apply<T>(state: AppState, result: Op<T>) {
   if (!result.ok) throw new Error(result.error)
@@ -109,6 +111,50 @@ describe('compras y cuentas por pagar', () => {
     expect(state.movements[0]).toMatchObject({ type: 'egreso', amount: 40, purchaseId: value.id })
   })
 
+  it('da de alta productos nuevos desde la compra, separados en venta y uso en servicio', () => {
+    const seed = withSupplier(createSeed()).state
+    const supplierId = seed.suppliers![0].id
+    const create = (kind: 'venta' | 'insumo') => ({ kind, unit: 'galón', price: kind === 'venta' ? 95 : 0, category: 'Shampoo' as const })
+    const { state, value } = apply(
+      seed,
+      ops.recordPurchase(seed, {
+        date: isoDate(),
+        supplierId,
+        invoice: 'B-7',
+        withTax: false,
+        lines: [
+          { description: 'Shampoo avena 1 L', qty: 6, cost: 40, create: create('venta') },
+          { description: 'Shampoo profesional galón', qty: 2, cost: 150, create: create('insumo') },
+          { productId: 'collar', description: 'Collar', qty: 1, cost: 20 },
+          { description: 'Flete', qty: 1, cost: 25 },
+        ],
+        terms: 'contado',
+        method: 'Efectivo',
+        notes: '',
+      }),
+    )
+    const retail = state.products!.find((item) => item.name === 'Shampoo avena 1 L')!
+    const supply = state.products!.find((item) => item.name === 'Shampoo profesional galón')!
+    expect(retail).toMatchObject({ kind: 'venta', stock: 6, price: 95, cost: 40, active: false })
+    expect(supply).toMatchObject({ kind: 'insumo', stock: 2, category: 'Insumos', price: 0 })
+    expect(value.lines.map((line) => line.use)).toEqual(['venta', 'insumo', 'venta', undefined])
+    expect(ops.purchaseSplit([value], state.products)).toEqual({ venta: 260, insumo: 300, gasto: 25 })
+    expect(state.stockMoves?.filter((move) => move.reference === value.number)).toHaveLength(3)
+    balancedJournal(state)
+
+    const again = ops.recordPurchase(state, {
+      date: isoDate(),
+      supplierId,
+      invoice: 'B-8',
+      withTax: false,
+      lines: [{ description: 'shampoo avena 1 l', qty: 1, cost: 40, create: create('venta') }],
+      terms: 'contado',
+      method: 'Efectivo',
+      notes: '',
+    })
+    expect(again.ok).toBe(false)
+  })
+
   it('al crédito crea la factura por pagar y los abonos bajan el saldo', () => {
     const seed = withSupplier(createSeed()).state
     const supplierId = seed.suppliers![0].id
@@ -130,6 +176,30 @@ describe('compras y cuentas por pagar', () => {
     const paid = apply(fixed.state, ops.payFixedCost(fixed.state, { fixedId: fixed.value.id, period, amount: 3500, method: 'Transferencia', date: isoDate() }))
     expect(paid.value.category).toBe('Alquiler')
     expect(ops.payFixedCost(paid.state, { fixedId: fixed.value.id, period, amount: 3500, method: 'Transferencia', date: isoDate() }).ok).toBe(false)
+  })
+
+  it('los gastos salen de la caja chica sin pasar de su saldo y llevan rubro', () => {
+    const seed = createSeed()
+    const today = isoDate()
+    const refill: Movement = { id: 'cc1', type: 'egreso', date: today, concept: 'Reposición de caja chica', amount: 500, method: 'Efectivo', notes: '', document: 'EG-9001', category: ops.PETTY_REFILL }
+    const state: AppState = { ...seed, movements: [refill, ...seed.movements] }
+    expect(ops.pettyBalance(state.movements)).toBe(500)
+    const fixed = apply(state, ops.saveFixedCost(state, { id: '', name: 'Luz', category: 'Luz', amount: 600, day: 10, active: true }))
+    const period = today.slice(0, 7)
+    expect(ops.payFixedCost(fixed.state, { fixedId: fixed.value.id, period, amount: 600, method: 'Caja chica', date: today }).ok).toBe(false)
+    const paid = apply(fixed.state, ops.payFixedCost(fixed.state, { fixedId: fixed.value.id, period, amount: 320, method: 'Caja chica', date: today }))
+    expect(paid.value.area).toBe('administrativo')
+    expect(ops.pettyBalance(paid.state.movements)).toBe(180)
+
+    const entries = balancedJournal(paid.state)
+    expect(balances(entries).find((item) => item.code === '1107')?.balance).toBe(180)
+
+    const before = ops.cashSummary(state.movements, today, 0)
+    const after = ops.cashSummary(paid.state.movements, today, 0)
+    expect(after.cashOut).toBe(before.cashOut)
+    expect(after.expense).toBe(before.expense)
+    expect(ops.defaultArea('Insumos de grooming')).toBe('servicio')
+    expect(ops.defaultArea('Publicidad')).toBe('venta')
   })
 })
 
@@ -167,6 +237,63 @@ describe('planilla', () => {
     expect(short.bono14).toBe(0)
     expect(laborLiability({ ...worker, hiredAt: undefined }).total).toBe(0)
   })
+
+  it('las compras con descuento en planilla bajan existencia y se descuentan una sola vez', () => {
+    const seed = { ...createSeed(), users: [...createSeed().users, worker] }
+    const product = seed.products!.find((item) => item.kind !== 'insumo' && item.stock > 2)!
+    const today = isoDate()
+    const lines = [{ productId: product.id, name: product.name, qty: 2, price: 50 }]
+    expect(ops.recordEmployeePurchase(seed, { employeeId: 'nadie', lines, discount: 0, method: ops.PAYROLL_DEDUCTION }).ok).toBe(false)
+    const bought = apply(seed, ops.recordEmployeePurchase(seed, { employeeId: worker.id, lines, discount: 10, method: ops.PAYROLL_DEDUCTION, date: today }))
+    expect(bought.value).toMatchObject({ employeeId: worker.id, total: 90, invoiced: false, clientName: 'Rosa' })
+    expect(stockOf(bought.state, product.id)).toBe(product.stock - 2)
+    expect(ops.employeeOwed(bought.state, worker.id)).toBe(90)
+    expect(ops.cashSummary(bought.state.movements, today, 0).expected).toBe(ops.cashSummary(seed.movements, today, 0).expected)
+    const journal = balancedJournal(bought.state)
+    expect(balances(journal).find((item) => item.code === '1106')?.balance).toBe(90)
+
+    const period = today.slice(0, 7)
+    const line = payrollLine(worker, bought.state.appointments, period, { extra: 0, deductions: 90, purchases: 90 })
+    expect(line.purchases).toBe(90)
+    const paid = apply(bought.state, ops.payPayroll(bought.state, { period, lines: [line], method: 'Transferencia', date: today }))
+    expect(ops.employeeOwed(paid.state, worker.id)).toBe(0)
+    expect(balances(balancedJournal(paid.state)).find((item) => item.code === '1106')?.balance ?? 0).toBe(0)
+  })
+
+  it('cada quien marca una entrada abierta por día y las metas cuentan ventas y servicios', () => {
+    const seed = { ...createSeed(), users: [...createSeed().users, { ...worker, salesGoal: 1000, servicesGoal: 10 }] }
+    const morning = new Date(2026, 10, 9, 8, 0)
+    const first = apply(seed, ops.clockIn(seed, worker.id, morning))
+    expect(ops.clockIn(first.state, worker.id, new Date(2026, 10, 9, 9, 0)).ok).toBe(false)
+    const out = apply(first.state, ops.clockOut(first.state, worker.id, new Date(2026, 10, 9, 16, 30)))
+    expect(ops.shiftHours(out.value)).toBe(8.5)
+    expect(ops.clockOut(out.state, worker.id, new Date(2026, 10, 9, 17, 0)).ok).toBe(false)
+    const summary = ops.attendanceOf(out.state.attendance, worker.id, '2026-11')
+    expect(summary).toMatchObject({ days: 1, hours: 8.5, open: 0 })
+
+    const user = seed.users.find((item) => item.id === worker.id)!
+    const sale: Sale = {
+      id: 's-meta',
+      number: 'VEN-0001',
+      date: '2026-11-03',
+      at: '',
+      channel: 'mostrador',
+      clientName: '',
+      phone: '',
+      lines: [],
+      discount: 0,
+      total: 400,
+      method: 'Efectivo',
+      status: 'pagada',
+      document: 'ING-1',
+      userId: worker.id,
+    }
+    const progress = goalProgress(user, { appointments: seed.appointments, sales: [sale] }, '2026-11')
+    expect(progress).toMatchObject({ sales: 400, salesGoal: 1000, servicesGoal: 10 })
+    expect(behindGoal(progress, '2026-11', '2026-11-30')).toContain('ventas')
+    expect(behindGoal({ ...progress, sales: 1000, services: 10 }, '2026-11', '2026-11-30')).toEqual([])
+    expect(behindGoal(progress, '2026-11', '2026-11-03')).not.toContain('ventas')
+  })
 })
 
 describe('corte de caja', () => {
@@ -182,6 +309,63 @@ describe('corte de caja', () => {
     expect(closed.value.difference).toBe(0)
     expect(ops.closeCash(closed.state, { date, opening: 500, counted: expected, note: '' }).ok).toBe(false)
     expect(ops.recordSale(closed.state, { clientName: '', phone: '', date, lines: [{ name: 'Baño', qty: 1, price: 100 }], discount: 0, method: 'Efectivo' }).ok).toBe(false)
+  })
+
+  const cash = (date: string, amount: number, extra: Partial<Movement> = {}): Movement => ({
+    id: `m-${date}-${amount}-${extra.saleId ?? ''}`,
+    type: 'ingreso',
+    date,
+    concept: 'Cobro',
+    amount,
+    method: 'Efectivo',
+    notes: '',
+    document: '',
+    ...extra,
+  })
+  const quiet = (): AppState => ({ ...createSeed(), movements: [], cashCloses: [], deposits: [], settings: { ...createSeed().settings, cashFloat: 200 } })
+
+  it('acumula el efectivo de un corte al siguiente e incluye los días sin corte', () => {
+    let state: AppState = { ...quiet(), movements: [cash('2026-01-05', 100, { folio: 1 }), cash('2026-01-06', 50, { folio: 2 }), cash('2026-01-07', 30, { folio: 3 })] }
+    state = apply(state, ops.closeCash(state, { date: '2026-01-05', opening: 200, counted: 300, note: '' })).state
+    const second = apply(state, ops.closeCash(state, { date: '2026-01-07', opening: 0, counted: 380, note: '' }))
+    expect(second.value).toMatchObject({ from: '2026-01-06', opening: 300, expected: 380, difference: 0 })
+    expect(ops.closedOn(second.state, '2026-01-06')).toBe(true)
+    expect(ops.recordSale(second.state, { clientName: '', phone: '', date: '2026-01-06', lines: [{ name: 'Baño', qty: 1, price: 100 }], discount: 0, method: 'Efectivo' }).ok).toBe(false)
+  })
+
+  it('un depósito baja el efectivo esperado y queda fuera de los gastos', () => {
+    let state: AppState = { ...quiet(), movements: [cash('2026-01-05', 1000, { folio: 1 })] }
+    state = apply(state, ops.closeCash(state, { date: '2026-01-05', opening: 200, counted: 1200, note: '' })).state
+    expect(ops.recordDeposit(state, { date: '2026-01-05', amount: 900, bank: 'BI', reference: '1', note: '' }).ok).toBe(false)
+    expect(ops.recordDeposit(state, { date: '2026-01-06', amount: 900, bank: 'BI', reference: '', note: '' }).ok).toBe(false)
+    state = apply(state, ops.recordDeposit(state, { date: '2026-01-06', amount: 1000, bank: 'BI', reference: '77', note: '' })).state
+    expect(ops.cashOnHand(state, '2026-01-06')).toBe(200)
+    const close = apply(state, ops.closeCash(state, { date: '2026-01-06', opening: 0, counted: 200, note: '' })).value
+    expect(close).toMatchObject({ deposited: 1000, expected: 200, cashOut: 0 })
+    expect(ops.removeDeposit({ ...state, cashCloses: [close, ...state.cashCloses!] }, state.deposits![0].id).ok).toBe(false)
+  })
+
+  it('separa lo facturado de lo que no y resta las devoluciones', () => {
+    const split = ops.cashSplit([
+      cash('2026-01-05', 100, { folio: 1, invoiced: true }),
+      cash('2026-01-05', 60, { folio: 2 }),
+      cash('2026-01-05', 45, { saleId: 's1' }),
+      cash('2026-01-05', 80, { saleId: 's2', invoiced: true }),
+      cash('2026-01-05', 45, { saleId: 's1', type: 'egreso', reverses: 'x' }),
+      cash('2026-01-05', 500, { category: 'Aporte de capital' }),
+      cash('2026-01-05', 70, { saleId: 's3', method: 'Pedido' }),
+    ])
+    expect(split).toEqual({ facturado: { ventas: 80, servicios: 100 }, sinFactura: { ventas: 0, servicios: 60 } })
+  })
+
+  it('guarda la factura al cobrar una cita, una venta o un pedido', () => {
+    const seed = quiet()
+    const visit = { ...seed.appointments[0], status: 'completada' as const, cost: 150, date: isoDate() }
+    const charged = apply(seed, ops.chargeAppointment(seed, visit, 'Efectivo', true, true)).state
+    expect(charged.movements[0].invoiced).toBe(true)
+    const sold = apply(seed, ops.recordSale(seed, { clientName: '', phone: '', lines: [{ name: 'Baño', qty: 1, price: 90 }], discount: 0, method: 'Efectivo', invoiced: true }))
+    expect(sold.value.invoiced).toBe(true)
+    expect(sold.state.movements[0].invoiced).toBe(true)
   })
 })
 
@@ -235,5 +419,38 @@ describe('clientes', () => {
     expect(maria.pets.map((pet) => pet.name)).toContain('Nube')
     expect(maria.products).toBe(28)
     expect(maria.sales).toHaveLength(1)
+  })
+})
+
+describe('alertas', () => {
+  it('señala citas de hoy, cortes pendientes, WhatsApp, metas y tareas vencidas', () => {
+    const seed = createSeed()
+    const today = isoDate()
+    const yesterday = addDays(today, -1)
+    const admin = { ...seed.users[0], permissions: defaultsFor('Administrador') }
+    const rosa = { id: 'w1', name: 'Rosa', lastName: 'Méndez', username: 'rosa', password: '', role: 'Recepción' as const, active: true, employeeCode: '1001', servicesGoal: 40 }
+    const state: AppState = {
+      ...seed,
+      users: [admin, rosa],
+      appointments: [
+        { ...seed.appointments[0], id: 'a-hoy', date: today, status: 'pendiente', time: '10:00', petName: 'Nube' },
+        { ...seed.appointments[0], id: 'a-otra', date: yesterday, status: 'pendiente', time: '11:00', petName: 'Max' },
+      ],
+      movements: [
+        ...seed.movements,
+        { id: 'm-open', type: 'ingreso', date: yesterday, concept: 'Cobro', amount: 100, method: 'Efectivo', notes: '', document: 'ING-900' },
+      ],
+      cashCloses: (seed.cashCloses ?? []).filter((item) => item.date < yesterday),
+      conversations: seed.conversations.map((item, index) => ({ ...item, unread: index === 0 ? 2 : 0 })),
+      tasks: [{ id: 't1', title: 'Reponer shampoo', detail: '', priority: 'alta', status: 'pendiente', dueDate: yesterday, createdAt: yesterday }],
+      sales: [],
+    }
+    const alerts = buildAlerts(state, admin, today)
+    expect(alerts.map((item) => item.kind).sort()).toEqual(['caja', 'citas', 'metas', 'tareas', 'whatsapp'].sort())
+    expect(openCashDays(state, today)).toContain(yesterday)
+    expect(alertBadges(state, admin, today)['/admin']).toBe(1)
+    expect(alertBadges(state, admin, today)['/admin/corte']).toBeGreaterThan(0)
+    expect(alertBadges(state, admin, today)['/admin/whatsapp']).toBe(1)
+    expect(alertBadges(state, admin, today)['/admin/tareas']).toBe(1)
   })
 })

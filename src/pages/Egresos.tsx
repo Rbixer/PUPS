@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { METHODS } from '../catalog'
+import { EXPENSE_METHODS } from '../catalog'
 import { Constancia } from '../components/Constancia'
 import { Dialog, Field } from '../components/ui'
 import { formatName, isoDate, longDate, money, parseAmount } from '../format'
@@ -19,7 +19,7 @@ export function Egresos() {
     date: isoDate(),
     concept: '',
     amount: '',
-    method: 'Efectivo',
+    method: 'Caja chica',
     notes: '',
   })
 
@@ -99,7 +99,7 @@ export function Egresos() {
           setError('')
           setNotice(`Documento ${created.value.document} listo.`)
           setDoc(created.value)
-          setForm({ date: isoDate(), concept: '', amount: '', method: 'Efectivo', notes: '' })
+          setForm({ date: isoDate(), concept: '', amount: '', method: 'Caja chica', notes: '' })
         }}
       >
         <Field label="Fecha">
@@ -113,7 +113,7 @@ export function Egresos() {
         </Field>
         <Field label="Método">
           <select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>
-            {METHODS.map((method) => (
+            {EXPENSE_METHODS.map((method) => (
               <option key={method}>{method}</option>
             ))}
           </select>

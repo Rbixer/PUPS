@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { allows } from '../access'
 import { Field, StatusPill } from '../components/ui'
-import { daysBetween, digits, formatName, isoDate, longDate, money, show } from '../format'
+import { daysBetween, digits, formatName, isoDate, longDate, money, show, SITE_LIST_MAX } from '../format'
+import { BEHAVIOR_AREAS, hardAreas } from '../grooming'
 import { shrinkImage } from '../image'
 import { useStore } from '../store'
 import type { Appointment } from '../types'
@@ -88,7 +90,7 @@ function Directory({ files }: { files: PetFile[] }) {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Historial clínico</p>
+          <p className="eyebrow">Historial de grooming</p>
           <h1>Fichas</h1>
           <p className="lede">La mascota, su tutor y cada constancia, en una sola carpeta.</p>
         </div>
@@ -154,6 +156,11 @@ function Directory({ files }: { files: PetFile[] }) {
                 <span>{show(file.sex)}</span>
                 <span>{plan === 'premium' ? 'Premium' : 'Grooming'}</span>
                 {allergyOf(file.allergies) ? <span className="alert">Alergia</span> : null}
+                {hardAreas(file.visits.map((visit) => visit.report)).map((area) => (
+                  <span key={area.key} className="alert">
+                    Difícil: {area.label.toLowerCase()}
+                  </span>
+                ))}
               </div>
               <footer>
                 <StatusPill status={last.status} />
@@ -487,7 +494,7 @@ function Dossier({ file }: { file: PetFile }) {
 
           {last.report?.recommendations ? (
             <div className="mt-4">
-              <p className={LABEL}>Recomendaciones</p>
+              <p className={LABEL}>Observaciones o recomendaciones</p>
               <p className="mt-1.5 text-sm text-stone-700 dark:text-stone-300">{last.report.recommendations}</p>
             </div>
           ) : null}
@@ -506,6 +513,8 @@ function Dossier({ file }: { file: PetFile }) {
           </div>
         </section>
       </div>
+
+      <Behavior visits={file.visits} editUrl={agenda ? `/admin?constancia=${last.id}` : ''} />
 
       <section id="fotos" className={`${CARD} scroll-mt-24 p-5`}>
         <SectionHead tone="sky" icon="camera" title="Antes y después" text={`Cita #${last.folio} · ${longDate(last.date)} · también salen en la constancia`} />
@@ -561,9 +570,74 @@ function Dossier({ file }: { file: PetFile }) {
   )
 }
 
+function Behavior({ visits, editUrl }: { visits: Appointment[]; editUrl: string }) {
+  const areas = BEHAVIOR_AREAS.map((area) => {
+    const marked = visits.filter((visit) => visit.report?.behavior?.[area.key]?.value)
+    const latest = visits.find((visit) => {
+      const item = visit.report?.behavior?.[area.key]
+      return Boolean(item?.value || item?.note?.trim())
+    })
+    const item = latest?.report?.behavior?.[area.key]
+    return {
+      ...area,
+      latest,
+      value: item?.value ?? '',
+      note: item?.note?.trim() ?? '',
+      hard: marked.filter((visit) => visit.report?.behavior?.[area.key]?.value === 'si').length,
+      marked: marked.length,
+    }
+  })
+  const hard = hardAreas(visits.map((visit) => visit.report))
+  const anyHard = hard.length > 0
+  const text = areas.some((area) => area.latest)
+    ? anyHard
+      ? `Con dificultad en ${hard.map((area) => area.label.toLowerCase()).join(', ')}`
+      : 'Se deja trabajar en todas las áreas anotadas'
+    : 'Todavía no se anota; se llena en la constancia de cada visita'
+
+  return (
+    <section className={`${CARD} p-5`}>
+      <SectionHead tone={anyHard ? 'rose' : 'emerald'} icon="paw" title="Comportamiento" text={text}>
+        {editUrl ? (
+          <Link className="btn btn-ghost btn-sm" to={editUrl}>
+            Anotar en la constancia
+          </Link>
+        ) : null}
+      </SectionHead>
+      <ul className="m-0 mt-4 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4">
+        {areas.map((area) => (
+          <li key={area.key} className={SUBCARD}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-stone-900 dark:text-stone-100">{area.label}</p>
+              {area.value === 'si' ? (
+                <Badge tone="rose">Con dificultad</Badge>
+              ) : area.value === 'no' ? (
+                <Badge>Sin dificultad</Badge>
+              ) : (
+                <Badge tone="stone">Sin anotar</Badge>
+              )}
+            </div>
+            {area.note ? <p className="mt-2 text-sm text-stone-700 dark:text-stone-300">{area.note}</p> : null}
+            {area.latest ? (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                Cita #{area.latest.folio} · {longDate(area.latest.date)}
+                {area.hard && area.marked > 1 ? ` · dificultad en ${area.hard} de ${area.marked} visitas` : ''}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function VisitPhotos({ appointment }: { appointment: Appointment }) {
-  const { setVisitPhoto } = useStore()
+  const { state, currentUser, setVisitPhoto, updateSettings } = useStore()
   const [error, setError] = useState('')
+  const after = visitPhoto(appointment, 'despues')
+  const gallery = state.settings.gallery ?? []
+  const published = Boolean(after) && gallery.some((photo) => photo.src === after)
+  const canPublish = Boolean(after) && allows(currentUser, 'equipo')
 
   async function onFile(slot: 'antes' | 'despues', file?: File) {
     if (!file) return
@@ -597,6 +671,23 @@ function VisitPhotos({ appointment }: { appointment: Appointment }) {
           onClear={() => setVisitPhoto(appointment.id, 'despues', '')}
         />
       </div>
+      {canPublish ? (
+        <p className="compare-publish">
+          {published ? (
+            <span>Esta foto ya está en la galería del sitio.</span>
+          ) : gallery.length >= SITE_LIST_MAX ? (
+            <span>La galería del sitio ya tiene {SITE_LIST_MAX} fotos. Quita alguna en Equipo para publicar esta.</span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => updateSettings({ gallery: [...gallery, { src: after, caption: appointment.petName.trim().slice(0, 80) }] })}
+            >
+              Publicar la foto de después en el sitio
+            </button>
+          )}
+        </p>
+      ) : null}
       {error ? <p className="form-error">{error}</p> : null}
     </div>
   )

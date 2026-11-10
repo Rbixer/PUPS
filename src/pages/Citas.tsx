@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { COATS, METHODS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
 import { Constancia } from '../components/Constancia'
 import { DayBoard } from '../components/DayBoard'
-import { Dialog, Field, StatusPill } from '../components/ui'
+import { Dialog, Field, InvoiceChoice, StatusPill } from '../components/ui'
 import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, parseAmount, shiftMonth, show } from '../format'
 import { useStore, type ChargeNote, type Result } from '../store'
 import type { Appointment, AppointmentStatus } from '../types'
@@ -76,6 +76,7 @@ export function Citas() {
   const [sheetIntent, setSheetIntent] = useState<'form' | 'print'>('form')
   const [completeTarget, setCompleteTarget] = useState<Appointment | null>(null)
   const [payMethod, setPayMethod] = useState<(typeof METHODS)[number]>('Efectivo')
+  const [invoiced, setInvoiced] = useState(false)
   const [editing, setEditing] = useState<Appointment | 'new' | null>(null)
   const [draft, setDraft] = useState<Draft>(blankDraft())
   const [formError, setFormError] = useState('')
@@ -514,7 +515,7 @@ export function Citas() {
               }
               const charging = payload.status === 'completada' && (editing === 'new' || editing.status !== 'completada')
               const method = charging ? payMethod : undefined
-              const result = editing === 'new' ? addAppointment(payload, method) : updateAppointment(editing.id, payload, method)
+              const result = editing === 'new' ? addAppointment(payload, method, invoiced) : updateAppointment(editing.id, payload, method, invoiced)
               if (!result.ok) {
                 setFormError(result.error)
                 return
@@ -566,13 +567,16 @@ export function Citas() {
                 </select>
               </Field>
               {draft.status === 'completada' && (editing === 'new' || editing.status !== 'completada') ? (
-                <Field label="Medio de pago">
-                  <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
-                    {METHODS.map((method) => (
-                      <option key={method}>{method}</option>
-                    ))}
-                  </select>
-                </Field>
+                <>
+                  <Field label="Medio de pago">
+                    <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
+                      {METHODS.map((method) => (
+                        <option key={method}>{method}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <InvoiceChoice value={invoiced} onChange={setInvoiced} />
+                </>
               ) : null}
               <Field label="Sexo">
                 <select value={draft.sex} onChange={(event) => patch('sex', event.target.value)}>
@@ -635,7 +639,7 @@ export function Citas() {
             className="dialog"
             onSubmit={(event) => {
               event.preventDefault()
-              const result = updateAppointment(completeTarget.id, { status: 'completada' }, payMethod)
+              const result = updateAppointment(completeTarget.id, { status: 'completada' }, payMethod, invoiced)
               if (!result.ok) {
                 setCompleteError(result.error)
                 return
@@ -655,6 +659,7 @@ export function Citas() {
                 ))}
               </select>
             </Field>
+            <InvoiceChoice value={invoiced} onChange={setInvoiced} />
             {completeError ? <p className="form-error">{completeError}</p> : null}
             <div className="overlay-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setCompleteTarget(null)}>

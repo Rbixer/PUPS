@@ -10,6 +10,8 @@ import type {
   Appointment,
   AppState,
   CashClose,
+  Attendance,
+  CashDeposit,
   CatalogItem,
   ControlField,
   Conversation,
@@ -121,6 +123,8 @@ function anonymous(data?: PublicData | null): AppState {
     payrolls: [],
     tasks: [],
     cashCloses: [],
+    deposits: [],
+    attendance: [],
     products: data?.products ?? seed.products,
     settings: { ...seed.settings, ...(data?.settings ?? {}) },
     sessionUserId: null,
@@ -128,7 +132,7 @@ function anonymous(data?: PublicData | null): AppState {
   }
 }
 
-const MERGED = ['appointments', 'movements', 'leads', 'conversations', 'sales', 'stockMoves', 'suppliers', 'purchases', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses', 'products'] as const
+const MERGED = ['appointments', 'movements', 'leads', 'conversations', 'sales', 'stockMoves', 'suppliers', 'purchases', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses', 'deposits', 'attendance', 'products'] as const
 
 type Merged = (typeof MERGED)[number]
 
@@ -384,8 +388,8 @@ type Store = {
   bookAppointment: (input: Omit<Appointment, 'id' | 'folio' | 'status' | 'cost'>) => Promise<{ ok: true; folio: number } | { ok: false; error: string }>
   placeShopOrder: (input: { name: string; phone: string; lines: ShopLine[] }) => Promise<{ ok: true; document: string; total: number } | { ok: false; error: string }>
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<string | null>
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>, method?: string) => Result<Appointment>
-  updateAppointment: (id: string, patch: Partial<Appointment>, method?: string) => Result<ChargeNote | null>
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>, method?: string, invoiced?: boolean) => Result<Appointment>
+  updateAppointment: (id: string, patch: Partial<Appointment>, method?: string, invoiced?: boolean) => Result<ChargeNote | null>
   setVisitPhoto: (id: string, slot: 'antes' | 'despues', data: string) => boolean
   addUser: (user: Omit<User, 'id' | 'active' | 'password'> & { password: string }) => Promise<string | null>
   updateUser: (
@@ -408,7 +412,7 @@ type Store = {
   addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Result<Movement>
   saveProduct: (product: CatalogItem) => string | null
   recordSale: (input: Omit<ops.SaleInput, 'userId'>) => Result<Sale>
-  settleOrder: (movementId: string, method: string) => Result<Movement>
+  settleOrder: (movementId: string, method: string, invoiced?: boolean) => Result<Movement>
   voidSale: (saleId: string, reason: string) => Result<Sale>
   adjustStock: (input: { productId: string; qty: number; kind: 'ajuste' | 'consumo'; note: string }) => Result<StockMove>
   saveSupplier: (supplier: Supplier) => Result<Supplier>
@@ -417,13 +421,20 @@ type Store = {
   payPayable: (input: { payableId: string; amount: number; method: string; date: string }) => Result<Movement>
   saveFixedCost: (item: FixedCost) => Result<FixedCost>
   payFixedCost: (input: { fixedId: string; period: string; amount: number; method: string; date: string; withTax?: boolean }) => Result<Movement>
-  updateWorker: (id: string, patch: Pick<User, 'commissionRate' | 'bonus' | 'hiredAt' | 'salary'>) => Result<User>
+  updateWorker: (id: string, patch: ops.WorkerPatch) => Result<User>
   payPayroll: (input: { period: string; lines: PayrollLine[]; method: string; date: string }) => Result<PayrollRun>
   voidPayroll: (id: string) => Result<null>
   saveTask: (task: Omit<Task, 'createdAt'> & { createdAt?: string }) => Result<Task>
   setTaskStatus: (id: string, status: TaskStatus) => Result<Task>
   removeTask: (id: string) => Result<null>
   closeCash: (input: { date: string; opening: number; counted: number; note: string }) => Result<CashClose>
+  recordDeposit: (input: { date: string; amount: number; bank: string; reference: string; note: string }) => Result<CashDeposit>
+  removeDeposit: (id: string) => Result<null>
+  recordEmployeePurchase: (input: Omit<Parameters<typeof ops.recordEmployeePurchase>[1], 'userId'>) => Result<Sale>
+  clockIn: () => Result<Attendance>
+  clockOut: () => Result<Attendance>
+  saveAttendance: (record: Attendance) => Result<Attendance>
+  removeAttendance: (id: string) => Result<null>
   setTaxRegime: (regime: Settings['taxRegime']) => void
   updateSettings: (patch: Partial<Settings>) => void
   ensureThread: (phone: string, name: string, petName: string) => string | null
@@ -773,7 +784,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = await postPublic('/api/public/lead', lead)
         return result.ok ? null : result.error
       },
-      addAppointment: (appointment, method) =>
+      addAppointment: (appointment, method, invoiced) =>
         run('citas', (current) => {
           const employeeCode = (appointment.employeeCode || currentUser?.employeeCode || '').trim()
           const next: Appointment = {
@@ -784,11 +795,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             employeeCode: employeeCode || undefined,
             employeeId: employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined,
           }
-          const charged = ops.chargeAppointment({ ...current, appointments: [next, ...current.appointments] }, next, method, can('caja'))
+          const charged = ops.chargeAppointment({ ...current, appointments: [next, ...current.appointments] }, next, method, can('caja'), invoiced)
           if (!charged.ok) return charged
           return { ok: true, value: next, patch: { ...charged.patch, appointments: [next, ...current.appointments] } }
         }),
-      updateAppointment: (id, patch, method) =>
+      updateAppointment: (id, patch, method, invoiced) =>
         run('citas', (current) => {
           const previous = current.appointments.find((item) => item.id === id)
           if (!previous) return { ok: false, error: 'Esa cita ya no existe.' }
@@ -806,7 +817,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             folio: previous.folio,
             phone: nextPatch.phone !== undefined ? normalizePhone(nextPatch.phone) : previous.phone,
           }
-          const charged = ops.chargeAppointment(current, next, method, can('caja'))
+          const charged = ops.chargeAppointment(current, next, method, can('caja'), invoiced)
           if (!charged.ok) return charged
           return {
             ok: true,
@@ -821,10 +832,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const index = slot === 'antes' ? 0 : 2
           let report = previous.report
           if (report) {
-            const photos = ['', '', '']
-            report.photos?.forEach((photo, photoIndex) => {
-              if (photoIndex < 3) photos[photoIndex] = photo
-            })
+            const photos = Array.from({ length: 4 }, (_, photoIndex) => report?.photos?.[photoIndex] ?? '')
             photos[index] = data
             report = { ...report, photos }
           }
@@ -906,6 +914,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!concept || !Number.isFinite(movement.amount) || movement.amount <= 0) return { ok: false, error: 'Concepto y un monto mayor a cero son obligatorios.' }
           if (!movement.method || movement.method === 'Pedido') return { ok: false, error: 'Elige el medio de pago.' }
           if (ops.closedOn(current, movement.date)) return { ok: false, error: 'La caja de ese día ya se cerró.' }
+          const short = movement.type === 'egreso' ? ops.pettyShort(current.movements, movement.method, movement.amount) : null
+          if (short) return { ok: false, error: short }
           const document = movement.document?.trim() || ops.nextDocument(current, movement.type)
           const next: Movement = { ...movement, id: newId(), document, concept, notes: movement.notes.trim(), amount: ops.round2(movement.amount) }
           return { ok: true, value: next, patch: { movements: [next, ...current.movements] } }
@@ -916,7 +926,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return result.ok ? null : result.error
       },
       recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
-      settleOrder: (movementId, method) => run('caja', (current) => ops.settleOrder(current, movementId, method)),
+      settleOrder: (movementId, method, invoiced) => run('caja', (current) => ops.settleOrder(current, movementId, method, undefined, invoiced)),
       voidSale: (saleId, reason) => run('caja', (current) => ops.voidSale(current, saleId, reason)),
       adjustStock: (input) => run('compras', (current) => ops.adjustStock(current, input)),
       saveSupplier: (supplier) => run('compras', (current) => ops.saveSupplier(current, supplier)),
@@ -939,6 +949,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return ops.removeTask(current, id)
         }),
       closeCash: (input) => run('caja', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
+      recordDeposit: (input) => run('caja', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
+      removeDeposit: (id) => run('caja', (current) => ops.removeDeposit(current, id)),
+      recordEmployeePurchase: (input) => run('caja', (current) => ops.recordEmployeePurchase(current, { ...input, userId: currentUser?.id })),
+      clockIn: () => run(null, (current) => ops.clockIn(current, currentUser?.id ?? '')),
+      clockOut: () => run(null, (current) => ops.clockOut(current, currentUser?.id ?? '')),
+      saveAttendance: (record) => run('planilla', (current) => ops.saveAttendance(current, record)),
+      removeAttendance: (id) =>
+        run('planilla', (current) => ({ ok: true, value: null, patch: { attendance: (current.attendance ?? []).filter((item) => item.id !== id) } })),
       setTaxRegime: (regime) => {
         run('contabilidad', (current) => ({ ok: true, value: null, patch: { settings: ops.changeRegime(current.settings, regime) } }))
       },

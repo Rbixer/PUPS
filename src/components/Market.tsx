@@ -18,7 +18,9 @@ export function Market({ featured }: { featured?: number }) {
   const [sending, setSending] = useState(false)
 
   const catalog = shelfOf(state.products)
-  const matching = visibleCatalog(state.products).filter((item) => category === 'Todo' || item.category === category)
+  const matching = visibleCatalog(state.products)
+    .filter((item) => category === 'Todo' || item.category === category)
+    .sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0))
   const trimmed = featured !== undefined && category === 'Todo' && !expanded && hash !== '#tienda' && matching.length > featured
   const visible = trimmed ? matching.slice(0, featured) : matching
   const lines = useMemo(

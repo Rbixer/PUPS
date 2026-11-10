@@ -3,12 +3,12 @@ import fs from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { allows } from '../src/access'
-import { SERVICE_NAMES } from '../src/catalog'
+import { BOOKABLE_SERVICES } from '../src/catalog'
 import { isoDate, newId, normalizePhone, publicSiteContent } from '../src/format'
-import { nextFolio, placeOrder, withCounters } from '../src/ops'
+import { closedOn, nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
-import type { Appointment, AppState, Lead, Movement, Permission, User } from '../src/types'
+import type { Appointment, AppState, Attendance, Lead, Movement, Permission, User } from '../src/types'
 import { BOOKING_SLOTS, slotPassed, slotTaken, visitMinutes } from '../src/visit'
 
 type Session = { userId: string; expires: number; remember: boolean }
@@ -42,13 +42,14 @@ const GUARDED: [keyof AppState, Permission[]][] = [
   ['suppliers', ['compras']],
   ['fixedCosts', ['compras']],
   ['cashCloses', ['caja']],
+  ['deposits', ['caja']],
   ['tasks', ['tareas']],
   ['conversations', ['whatsapp']],
   ['controlRows', ['equipo']],
   ['leads', ['equipo']],
 ]
 
-const LISTS = GUARDED.map(([key]) => key)
+const LISTS: (keyof AppState)[] = [...GUARDED.map(([key]) => key), 'attendance']
 const COUNTER_JUMP = 1000
 const MAX_LINE_QTY = 20
 const MAX_DAILY_BOOKINGS = 2
@@ -194,7 +195,34 @@ export function viewFor(user: User, state: AppState): AppState {
     ...(pay ? {} : { payrolls: [] }),
     ...(buy ? {} : { purchases: [], suppliers: [], fixedCosts: [] }),
     ...(buy || pay ? {} : { payables: [] }),
+    ...(pay ? {} : { attendance: (base.attendance ?? []).filter((item) => item.userId === user.id) }),
   }
+}
+
+/**
+ * Quien no lleva planilla solo marca su propia entrada y salida, con la hora del servidor; un registro por día
+ * abierto a la vez. Los registros de los demás y las correcciones quedan como estaban.
+ */
+function limitAttendance(user: User, current: AppState, incoming: Attendance[] | undefined, now = new Date()): Attendance[] {
+  const before = current.attendance ?? []
+  const known = byId(before)
+  const stamp = now.toISOString()
+  const today = isoDate(now)
+  const result = [...before]
+  for (const item of incoming ?? []) {
+    if (item.userId !== user.id || typeof item.id !== 'string') continue
+    const previous = known.get(item.id)
+    if (!previous) {
+      // El día lo pone el equipo (hora de Guatemala) si no se aleja más de un día del reloj del servidor.
+      const near = /^\d{4}-\d{2}-\d{2}$/.test(item.date) && Math.abs(Date.parse(item.date) - Date.parse(today)) <= 86_400_000
+      const date = near ? item.date : today
+      if (!user.active || result.some((other) => other.userId === user.id && other.date === date && !other.outAt)) continue
+      result.unshift({ id: item.id, userId: user.id, date, inAt: stamp })
+    } else if (previous.userId === user.id && !previous.outAt && item.outAt) {
+      result[result.indexOf(previous)] = { ...previous, outAt: stamp }
+    }
+  }
+  return result
 }
 
 function same(left: unknown, right: unknown) {
@@ -228,9 +256,8 @@ function validShape(incoming: AppState) {
 
 /** Un día con corte de caja queda congelado: sus movimientos cobrados no se agregan, cambian ni borran. */
 function lockClosedDays(current: AppState, incoming: Movement[]) {
-  const closed = new Set((current.cashCloses ?? []).map((item) => item.date))
-  if (closed.size === 0) return incoming
-  const frozen = (item: Movement) => closed.has(item.date) && item.method !== 'Pedido'
+  if ((current.cashCloses ?? []).length === 0) return incoming
+  const frozen = (item: Movement) => closedOn(current, item.date) && item.method !== 'Pedido'
   const before = byId(current.movements)
   const result = incoming.flatMap((item) => {
     const previous = before.get(item.id)
@@ -460,7 +487,15 @@ export function createApi(dataDir = path.resolve('data')) {
       users = current.users.map((item) => {
         const next = payroll ? incoming.users.find((candidate) => candidate.id === item.id) : undefined
         if (!next) return item
-        return { ...item, commissionRate: next.commissionRate, bonus: next.bonus, hiredAt: next.hiredAt, salary: next.salary }
+        return {
+          ...item,
+          commissionRate: next.commissionRate,
+          bonus: next.bonus,
+          hiredAt: next.hiredAt,
+          salary: next.salary,
+          salesGoal: next.salesGoal,
+          servicesGoal: next.servicesGoal,
+        }
       })
     }
     const settings = team
@@ -481,6 +516,7 @@ export function createApi(dataDir = path.resolve('data')) {
       merged.movements = limitCashier(current, merged.movements)
     }
     merged.movements = lockClosedDays(current, merged.movements)
+    if (!team && !allows(user, 'planilla')) merged.attendance = limitAttendance(user, current, incoming.attendance)
     if (!allows(user, 'costos')) {
       const before = byId(current.appointments)
       merged.appointments = merged.appointments.map((item) => {
@@ -585,7 +621,7 @@ export function createApi(dataDir = path.resolve('data')) {
     const date = text(body.date, 10)
     const time = text(body.time, 5)
     if (!clientName || !phone || !petName) throw new HttpError(400, 'Cliente, teléfono y mascota son obligatorios.')
-    if (!SERVICE_NAMES.includes(service)) throw new HttpError(400, 'Elige un servicio de la lista.')
+    if (!BOOKABLE_SERVICES.includes(service)) throw new HttpError(400, 'Elige un servicio de la lista.')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !BOOKING_SLOTS.includes(time)) throw new HttpError(400, 'Elige fecha y horario.')
     if (slotPassed(date, time)) throw new HttpError(400, 'Ese horario ya pasó. Elige otro.')
     const state = readState()

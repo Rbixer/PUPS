@@ -12,6 +12,7 @@ export const ACCOUNTS: { code: string; name: string; type: AccountType }[] = [
   { code: '1104', name: 'Inventario', type: 'activo' },
   { code: '1105', name: 'IVA crédito fiscal', type: 'activo' },
   { code: '1106', name: 'Anticipos a empleados', type: 'activo' },
+  { code: '1107', name: 'Caja chica', type: 'activo' },
   { code: '2101', name: 'Cuentas por pagar', type: 'pasivo' },
   { code: '2102', name: 'IGSS por pagar', type: 'pasivo' },
   { code: '2103', name: 'Prestaciones laborales por pagar', type: 'pasivo' },
@@ -45,7 +46,10 @@ const CATEGORY_ACCOUNT: Record<string, string> = {
   Alquiler: '6201',
   Luz: '6202',
   Agua: '6202',
+  Internet: '6202',
+  'Teléfono móvil': '6202',
   'Teléfono e internet': '6202',
+  'Reposición de caja chica': '1107',
   'Insumos de grooming': '6203',
   Mantenimiento: '6204',
   Publicidad: '6205',
@@ -80,6 +84,8 @@ export function categoryAccount(category?: string) {
 export function methodAccount(method: string) {
   if (method === 'Tarjeta' || method === 'Transferencia') return '1102'
   if (method === 'Pedido') return '1103'
+  if (method === 'Caja chica') return '1107'
+  if (method === 'Descuento en planilla') return '1106'
   return '1101'
 }
 

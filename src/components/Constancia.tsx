@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog, Field } from './ui'
 import { SEXES } from '../catalog'
 import { formatName, longDate, money } from '../format'
-import { EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_LABELS, readReport } from '../grooming'
+import { BEHAVIOR_AREAS, EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_SLOTS, readReport } from '../grooming'
 import { shrinkImage } from '../image'
-import type { Appointment, CheckItem, GroomingPackage, GroomingReport, Mark } from '../types'
+import type { Appointment, BehaviorArea, CheckItem, GroomingPackage, GroomingReport, Mark } from '../types'
 import { applyPlan, premiumGaps, priceFor, type PlanId } from '../visit'
 
 type Draft = {
@@ -112,6 +112,15 @@ export function Constancia({
         },
       },
     }))
+  }
+
+  function setBehavior(key: BehaviorArea, patch: Partial<CheckItem>) {
+    touch()
+    setDraft((current) => {
+      const behavior = current.report.behavior ?? {}
+      const item = behavior[key] ?? { value: '', note: '' }
+      return { ...current, report: { ...current.report, behavior: { ...behavior, [key]: { ...item, ...patch } } } }
+    })
   }
 
   function setIngreso(key: string, patch: Partial<CheckItem>) {
@@ -247,8 +256,8 @@ export function Constancia({
           <section className="report-block photo-block">
             <h3>Fotografías</h3>
             <div className="photo-grid">
-              {PHOTO_LABELS.map((label, index) => (
-                <div key={label} className="photo-slot">
+              {PHOTO_SLOTS.map(({ label, index }) => (
+                <div key={index} className="photo-slot">
                   <span>{label}</span>
                   {report.photos[index] ? <img src={report.photos[index]} alt="" /> : <span className="photo-empty">Sin foto</span>}
                   <label className="photo-shoot">
@@ -431,12 +440,34 @@ export function Constancia({
           </section>
 
           <section className="report-block">
-            <h3>Recomendaciones</h3>
+            <h3>Comportamiento</h3>
+            <p className="hint">Cómo se dejó trabajar en cada área. Queda en su ficha para la próxima visita; no sale impreso.</p>
+            <div className="check-sheet">
+              <div className="check-head">
+                <span>Área</span>
+                <span>Dificultad</span>
+                <span>Cómo se portó</span>
+              </div>
+              {BEHAVIOR_AREAS.map((area) => (
+                <YesNo
+                  key={area.key}
+                  label={area.label}
+                  item={report.behavior?.[area.key]}
+                  placeholder="Ej. se pone nervioso con la secadora"
+                  choices={['Con dificultad', 'Sin dificultad']}
+                  onChange={(patch) => setBehavior(area.key, patch)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="report-block">
+            <h3>Observaciones o recomendaciones</h3>
             <textarea
               rows={4}
               value={report.recommendations}
               onChange={(event) => patchReport({ recommendations: event.target.value })}
-              placeholder="Qué debe cuidar en casa"
+              placeholder="Lo que notamos y qué debe cuidar en casa"
             />
           </section>
 
@@ -505,16 +536,16 @@ export function Constancia({
             </div>
             {report.recommendations.trim() ? (
               <div className="sheet-reco">
-                <h3>Recomendaciones</h3>
+                <h3>Observaciones o recomendaciones</h3>
                 <p className="sheet-note">{report.recommendations.trim()}</p>
               </div>
             ) : null}
           </div>
           {report.photos.some(Boolean) ? (
             <div className="sheet-photos">
-              {PHOTO_LABELS.map((label, index) =>
+              {PHOTO_SLOTS.map(({ label, index }) =>
                 report.photos[index] ? (
-                  <figure key={label}>
+                  <figure key={index}>
                     <img src={report.photos[index]} alt="" />
                     <figcaption>{label}</figcaption>
                   </figure>
@@ -541,22 +572,34 @@ export function Constancia({
   )
 }
 
-function YesNo({ label, item, onChange }: { label: string; item?: CheckItem; onChange: (patch: Partial<CheckItem>) => void }) {
+function YesNo({
+  label,
+  item,
+  placeholder = 'Ubicación u otro',
+  choices = ['Sí', 'No'],
+  onChange,
+}: {
+  label: string
+  item?: CheckItem
+  placeholder?: string
+  choices?: [string, string]
+  onChange: (patch: Partial<CheckItem>) => void
+}) {
   const value = item?.value ?? ''
   return (
     <div className="yesno">
       <span>{label}</span>
       <div className="choice-row">
         <button type="button" aria-pressed={value === 'si'} onClick={() => onChange({ value: value === 'si' ? '' : 'si' })}>
-          Sí
+          {choices[0]}
         </button>
         <button type="button" aria-pressed={value === 'no'} onClick={() => onChange({ value: value === 'no' ? '' : 'no' })}>
-          No
+          {choices[1]}
         </button>
       </div>
       <input
         value={item?.note ?? ''}
-        placeholder="Ubicación u otro"
+        placeholder={placeholder}
         onChange={(event) => onChange({ note: event.target.value })}
       />
     </div>

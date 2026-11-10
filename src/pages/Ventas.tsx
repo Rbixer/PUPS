@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { METHODS as PAY_METHODS } from '../catalog'
-import { amountOf, Dialog, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
+import { amountOf, Dialog, Field, Flash, InvoiceChoice, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { round2 } from '../ops'
 import { SHOP_CATEGORY_NAMES, shelfOf } from '../shop'
@@ -48,6 +48,7 @@ function Register() {
   const [service, setService] = useState({ name: '', price: '' })
   const [discount, setDiscount] = useState('')
   const [method, setMethod] = useState<string>('Efectivo')
+  const [invoiced, setInvoiced] = useState(false)
   const [received, setReceived] = useState('')
   const [error, setError] = useState('')
   const [ticket, setTicket] = useState<Sale | null>(null)
@@ -108,6 +109,7 @@ function Register() {
       lines: cart.map((line) => ({ productId: line.productId, name: line.name, qty: line.qty, price: line.price })),
       discount: off,
       method,
+      invoiced,
     })
     if (!result.ok) {
       setError(result.error)
@@ -223,6 +225,7 @@ function Register() {
                 <input className="num" inputMode="decimal" value={received} onChange={(event) => setReceived(event.target.value)} />
               </Field>
             ) : null}
+            <InvoiceChoice value={invoiced} onChange={setInvoiced} />
           </div>
           <dl>
             <div>
@@ -503,6 +506,7 @@ function Pending() {
   const { state, settleOrder, voidSale } = useStore()
   const orders = state.movements.filter((item) => item.type === 'ingreso' && item.method === 'Pedido')
   const [methods, setMethods] = useState<Record<string, string>>({})
+  const [invoices, setInvoices] = useState<Record<string, boolean>>({})
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
@@ -556,6 +560,14 @@ function Pending() {
                           <option key={item}>{item}</option>
                         ))}
                       </select>
+                      <label className="check-line">
+                        <input
+                          type="checkbox"
+                          checked={invoices[order.id] ?? false}
+                          onChange={(event) => setInvoices({ ...invoices, [order.id]: event.target.checked })}
+                        />
+                        Con factura
+                      </label>
                     </td>
                     <td>
                       <div className="row-actions">
@@ -563,7 +575,7 @@ function Pending() {
                           type="button"
                           className="btn btn-primary btn-sm"
                           onClick={() => {
-                            const result = settleOrder(order.id, method)
+                            const result = settleOrder(order.id, method, invoices[order.id] ?? false)
                             if (!result.ok) {
                               setError(result.error)
                               setNotice('')

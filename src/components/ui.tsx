@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { parseAmount } from '../format'
 import type { AppointmentStatus } from '../types'
 
@@ -58,6 +58,24 @@ export function Metrics({ items }: { items: { label: string; value: ReactNode; d
           {item.detail ? <small>{item.detail}</small> : null}
         </article>
       ))}
+    </div>
+  )
+}
+
+/** Se elige al cobrar; el corte separa lo facturado de lo que no. */
+export function InvoiceChoice({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  const id = useId()
+  return (
+    <div className="field invoice-choice">
+      <span id={id}>Comprobante</span>
+      <div className="choice-row" role="group" aria-labelledby={id}>
+        <button type="button" aria-pressed={value} onClick={() => onChange(true)}>
+          Con factura
+        </button>
+        <button type="button" aria-pressed={!value} onClick={() => onChange(false)}>
+          Sin factura
+        </button>
+      </div>
     </div>
   )
 }

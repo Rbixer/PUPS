@@ -3,7 +3,9 @@ import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
 import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteContent, safeLink } from '../src/format'
+import { emptyReport, hardAreas, readReport } from '../src/grooming'
 import { buildMonthReport } from '../src/report'
+import type { Mark } from '../src/types'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, demoCatalog } from '../src/shop'
 import { planOf, priceFor, slotTaken } from '../src/visit'
@@ -106,6 +108,19 @@ describe('tarifas y agenda', () => {
   })
 })
 
+describe('constancia', () => {
+  it('conserva las fotos viejas en su lugar y suma la segunda de durante al final', () => {
+    const old = { ...emptyReport(), photos: ['antes', 'durante', 'despues'] }
+    expect(readReport(old).photos).toEqual(['antes', 'durante', 'despues', ''])
+  })
+
+  it('toma el comportamiento de la visita más reciente que marcó cada área', () => {
+    const report = (bano: Mark, unas: Mark) => ({ ...emptyReport(), behavior: { bano: { value: bano, note: '' }, unas: { value: unas, note: '' } } })
+    const hard = hardAreas([report('no', ''), report('si', 'si'), undefined])
+    expect(hard.map((area) => area.key)).toEqual(['unas'])
+  })
+})
+
 describe('permisos', () => {
   it('el administrador lo puede todo y recepción no administra el equipo', () => {
     const admin = { role: 'Administrador' as const, permissions: undefined, active: true }
@@ -120,7 +135,7 @@ describe('permisos', () => {
     const custom = { role: 'Recepción' as const, permissions: ['whatsapp' as const], active: true }
     expect(resolvePermissions(custom)).toEqual(['whatsapp'])
     expect(homeFor(custom)).toBe('/admin/whatsapp')
-    expect(homeFor({ ...custom, permissions: [] })).toBe('/admin/sin-acceso')
+    expect(homeFor({ ...custom, permissions: [] })).toBe('/admin/asistencia')
     expect(defaultsFor('Administrador').length).toBeGreaterThan(defaultsFor('Recepción').length)
   })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { COATS, SERVICE_NAMES, SEXES, SIZES } from '../catalog'
+import { BOOKABLE_SERVICES, COATS, SEXES, SIZES } from '../catalog'
 import { Field } from '../components/ui'
 import { addDays, isoDate, longDate, whatsappUrl } from '../format'
 import { useStore } from '../store'
@@ -9,7 +9,7 @@ import { BOOKING_SLOTS as SLOTS, slotPassed, slotTaken } from '../visit'
 export function Reservar() {
   const [params] = useSearchParams()
   const requested = params.get('servicio') ?? ''
-  const initialService = SERVICE_NAMES.includes(requested) ? requested : 'Baño y corte'
+  const initialService = BOOKABLE_SERVICES.includes(requested) ? requested : 'Baño y corte'
   const { state, bookAppointment } = useStore()
   const [folio, setFolio] = useState<number | null>(null)
   const [confirm, setConfirm] = useState('')
@@ -67,9 +67,12 @@ export function Reservar() {
           <p className="banner" role="status" ref={banner}>
             Tu cita #{folio} quedó agendada. Guarda el número de folio.{' '}
             {confirm ? (
-              <a href={confirm} target="_blank" rel="noreferrer">
-                Escribirnos por WhatsApp
-              </a>
+              <>
+                Te llevamos a WhatsApp para confirmarla con nosotros…{' '}
+                <a href={confirm} rel="noreferrer">
+                  Abrir WhatsApp
+                </a>
+              </>
             ) : null}
           </p>
         ) : null}
@@ -108,14 +111,21 @@ export function Reservar() {
           setError('')
           setFolio(created.folio)
           const shop = state.settings.whatsapp.trim()
-          setConfirm(
-            shop
-              ? whatsappUrl(
-                  shop,
-                  `Hola, soy ${form.clientName.trim()}. Agendé a ${form.petName.trim()} para ${longDate(form.date)} a las ${form.time}. Folio #${created.folio}.`,
-                )
-              : '',
-          )
+          const link = shop
+            ? whatsappUrl(
+                shop,
+                [
+                  `Hola PUP'S, soy ${form.clientName.trim()}. Acabo de agendar en línea:`,
+                  `Folio #${created.folio}`,
+                  `Mascota: ${form.petName.trim()}${form.breed.trim() ? ` (${form.breed.trim()}, ${form.size.toLowerCase()})` : ` (${form.size.toLowerCase()})`}`,
+                  `Servicio: ${form.service}`,
+                  `Cuándo: ${longDate(form.date)} a las ${form.time}`,
+                  'Quedo pendiente de su confirmación.',
+                ].join('\n'),
+              )
+            : ''
+          setConfirm(link)
+          if (link) window.setTimeout(() => window.location.assign(link), 1800)
           setForm((current) => ({ ...current, clientName: '', phone: '', petName: '', breed: '', allergies: '' }))
         }}
       >
@@ -180,7 +190,7 @@ export function Reservar() {
             <div className="book-grid">
               <Field label="Servicio">
                 <select value={form.service} onChange={(event) => set('service', event.target.value)}>
-                  {SERVICE_NAMES.map((service) => (
+                  {BOOKABLE_SERVICES.map((service) => (
                     <option key={service}>{service}</option>
                   ))}
                 </select>
@@ -243,7 +253,10 @@ export function Reservar() {
           <button type="submit" className="btn btn-primary" disabled={chosenTaken || sending || free.length === 0}>
             {sending ? 'Agendando…' : 'Confirmar cita'}
           </button>
-          <p className="hint">El costo final depende del tamaño y del estado del pelaje; te lo confirmamos al recibir a tu mascota.</p>
+          <p className="hint">
+            {state.settings.whatsapp.trim() ? 'Al confirmar te llevamos a WhatsApp con los datos de la cita. ' : ''}El precio depende del tamaño y del estado del
+            pelaje; te lo confirmamos al recibir a tu mascota.
+          </p>
         </aside>
       </form>
     </section>

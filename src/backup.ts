@@ -23,7 +23,7 @@ export function parseBackup(raw: string, current: Current): BackupResult {
     Array.isArray(parsed.appointments) &&
     Array.isArray(parsed.movements)
   if (!valid) return { error: NOT_BACKUP }
-  const lists = ['conversations', 'leads', 'controlRows', 'products', 'sales', 'purchases', 'suppliers', 'stockMoves', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses'] as const
+  const lists = ['conversations', 'leads', 'controlRows', 'products', 'sales', 'purchases', 'suppliers', 'stockMoves', 'payables', 'fixedCosts', 'payrolls', 'tasks', 'cashCloses', 'deposits', 'attendance'] as const
   if (lists.some((key) => parsed[key] !== undefined && !Array.isArray(parsed[key]))) return { error: NOT_BACKUP }
   const text = (value: unknown) => typeof value === 'string'
   if (!parsed.users.every((user) => user && text(user.id) && text(user.username) && text(user.name))) {

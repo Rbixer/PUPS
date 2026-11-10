@@ -106,6 +106,25 @@ export function monthCells(iso: string) {
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index))
 }
 
+/** Hora local de una marca guardada en ISO, como 8:05 a. m. */
+export function clockTime(stamp: string) {
+  return new Date(stamp).toLocaleTimeString('es-GT', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** HH:MM local de una marca ISO, para un campo de hora. */
+export function timeInput(stamp: string | undefined) {
+  if (!stamp) return ''
+  const date = new Date(stamp)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+export function hoursLabel(hours: number) {
+  const minutes = Math.round(hours * 60)
+  const whole = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return whole && rest ? `${whole} h ${rest} min` : whole ? `${whole} h` : `${rest} min`
+}
+
 export function todayLabel() {
   return new Date().toLocaleDateString('es-GT', {
     weekday: 'long',
@@ -141,7 +160,7 @@ export function newId() {
 }
 
 export function whatsappUrl(phone: string, text: string) {
-  return `https://wa.me/${digits(phone)}?text=${encodeURIComponent(text)}`
+  return `https://wa.me/${digits(normalizePhone(phone))}?text=${encodeURIComponent(text)}`
 }
 
 export function mapUrl(address: string) {

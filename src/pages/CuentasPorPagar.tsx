@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { METHODS as PAY_METHODS } from '../catalog'
+import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, daysBetween, isoDate, longDate, money } from '../format'
 import { EXPENSE_CATEGORIES, payableBalance, round2 } from '../ops'

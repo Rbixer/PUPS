@@ -1,4 +1,4 @@
-import type { CheckItem, GroomingPackage, GroomingReport } from './types'
+import type { BehaviorArea, CheckItem, GroomingPackage, GroomingReport } from './types'
 
 export const GROOMING_PACKAGES: { id: GroomingPackage; label: string }[] = [
   { id: 'premium', label: 'Premium' },
@@ -55,7 +55,23 @@ export const EGRESO_GROUPS: { title: string; items: { key: string; label: string
 ]
 
 export const EGRESO_ITEMS = EGRESO_GROUPS.flatMap((group) => group.items)
-export const PHOTO_LABELS = ['Antes', 'Durante', 'Después'] as const
+
+/** La posición en `photos` no cambia nunca: 0 antes, 1 durante, 2 después; la segunda de durante se agregó al final. */
+export const PHOTO_SLOTS = [
+  { index: 0, label: 'Antes' },
+  { index: 1, label: 'Durante' },
+  { index: 3, label: 'Durante' },
+  { index: 2, label: 'Después' },
+] as const
+const PHOTO_COUNT = 4
+
+/** Áreas del grooming donde se anota si el perrito se deja trabajar o no. */
+export const BEHAVIOR_AREAS: { key: BehaviorArea; label: string }[] = [
+  { key: 'bano', label: 'Baño' },
+  { key: 'secado', label: 'Secado' },
+  { key: 'corte', label: 'Corte' },
+  { key: 'unas', label: 'Uñas' },
+]
 
 const blank = (): CheckItem => ({ value: '', note: '' })
 
@@ -64,6 +80,8 @@ export function emptyReport(): GroomingReport {
   for (const item of INGRESO_ITEMS) ingreso[item.key] = blank()
   const egreso: Record<string, CheckItem> = {}
   for (const item of EGRESO_ITEMS) egreso[item.key] = blank()
+  const behavior = {} as Record<BehaviorArea, CheckItem>
+  for (const item of BEHAVIOR_AREAS) behavior[item.key] = blank()
   return {
     plan: 'grooming',
     packageId: 'estandar',
@@ -73,8 +91,9 @@ export function emptyReport(): GroomingReport {
     castrated: '',
     ingreso,
     egreso,
+    behavior,
     recommendations: '',
-    photos: ['', '', ''],
+    photos: Array.from({ length: PHOTO_COUNT }, () => ''),
   }
 }
 
@@ -87,6 +106,12 @@ export function readReport(report?: GroomingReport): GroomingReport {
     packageId: packageOf(report),
     ingreso: { ...base.ingreso, ...report.ingreso },
     egreso: { ...base.egreso, ...report.egreso },
-    photos: PHOTO_LABELS.map((_, index) => report.photos?.[index] ?? ''),
+    behavior: { ...base.behavior!, ...report.behavior },
+    photos: Array.from({ length: PHOTO_COUNT }, (_, index) => report.photos?.[index] ?? ''),
   }
+}
+
+/** Áreas donde la última visita que las marcó dice que tuvo dificultad. `reports` va de la más reciente a la más vieja. */
+export function hardAreas(reports: (GroomingReport | undefined)[]) {
+  return BEHAVIOR_AREAS.filter((area) => reports.find((report) => report?.behavior?.[area.key]?.value)?.behavior?.[area.key]?.value === 'si')
 }

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
-import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
-import { round2 } from '../ops'
+import { count, hoursLabel, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
+import { attendanceOf, employeeOwed, round2, type WorkerPatch } from '../ops'
 import { LEGAL_BONUS, PAYROLL_RATES, averageCommission, laborLiability, payrollLine, payrollTotals, workersOf, type PayrollAdjust } from '../payroll'
 import { useStore } from '../store'
 import type { User } from '../types'
@@ -29,7 +29,7 @@ export function Planilla() {
         onChange={setTab}
         tabs={[
           { id: 'pago', label: 'Pago del mes' },
-          { id: 'equipo', label: 'Salarios y comisiones' },
+          { id: 'equipo', label: 'Salarios, comisiones y metas' },
           { id: 'pasivo', label: 'Pasivo laboral' },
           { id: 'historial', label: 'Historial' },
         ]}
@@ -42,17 +42,22 @@ export function Planilla() {
 function Run() {
   const { state, payPayroll } = useStore()
   const [period, setPeriod] = useState(() => isoDate().slice(0, 7))
-  const [adjust, setAdjust] = useState<Record<string, { extra: string; deductions: string }>>({})
+  const [adjust, setAdjust] = useState<Record<string, { extra: string; deductions?: string }>>({})
   const [method, setMethod] = useState('Transferencia')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const workers = workersOf(state.users)
   const paid = (state.payrolls ?? []).find((item) => item.period === period)
-  const adjustOf = (id: string): PayrollAdjust => ({ extra: amountOf(adjust[id]?.extra ?? '') || 0, deductions: amountOf(adjust[id]?.deductions ?? '') || 0 })
+  const owed = Object.fromEntries(workers.map((user) => [user.id, employeeOwed(state, user.id)]))
+  const deductionText = (id: string) => adjust[id]?.deductions ?? (owed[id] ? String(owed[id]) : '')
+  const adjustOf = (id: string): PayrollAdjust => {
+    const deductions = amountOf(deductionText(id)) || 0
+    return { extra: amountOf(adjust[id]?.extra ?? '') || 0, deductions, purchases: Math.min(owed[id] ?? 0, deductions) }
+  }
   const lines = paid ? paid.lines : workers.map((user) => payrollLine(user, state.appointments, period, adjustOf(user.id)))
   const totals = payrollTotals(lines)
   const setField = (id: string, key: 'extra' | 'deductions', value: string) =>
-    setAdjust((current) => ({ ...current, [id]: { ...(current[id] ?? { extra: '', deductions: '' }), [key]: value } }))
+    setAdjust((current) => ({ ...current, [id]: { extra: current[id]?.extra ?? '', deductions: deductionText(id), [key]: value } }))
 
   return (
     <div className="biz-stack">
@@ -101,6 +106,7 @@ function Run() {
               <thead>
                 <tr>
                   <th>Trabajador</th>
+                  <th className="num">Asistencia</th>
                   <th className="num">Salario</th>
                   <th className="num">Comisión</th>
                   <th className="num">Bonif.</th>
@@ -118,6 +124,11 @@ function Run() {
                       <small>
                         {line.code} · {count(line.services, 'servicio', 'servicios')} por {money(line.servicesBase)} al {line.commissionRate} %
                       </small>
+                      {line.purchases ? <small>Incluye {money(line.purchases)} de compras en tienda</small> : null}
+                    </td>
+                    <td className="num">
+                      {count(attendanceOf(state.attendance, line.userId, period).days, 'día', 'días')}
+                      <small>{hoursLabel(attendanceOf(state.attendance, line.userId, period).hours)}</small>
                     </td>
                     <td className="num">{money(line.salary)}</td>
                     <td className="num">{money(line.commission)}</td>
@@ -130,7 +141,7 @@ function Run() {
                       {paid ? (
                         money(line.deductions)
                       ) : (
-                        <input inputMode="decimal" value={adjust[line.userId]?.deductions ?? ''} onChange={(event) => setField(line.userId, 'deductions', event.target.value)} aria-label={`Descuentos de ${line.name}`} placeholder="0" />
+                        <input inputMode="decimal" value={deductionText(line.userId)} onChange={(event) => setField(line.userId, 'deductions', event.target.value)} aria-label={`Descuentos de ${line.name}`} placeholder="0" />
                       )}
                     </td>
                     <td className="num">
@@ -142,6 +153,7 @@ function Run() {
               <tfoot>
                 <tr>
                   <td>Total</td>
+                  <td />
                   <td className="num">{money(totals.salary)}</td>
                   <td className="num">{money(totals.commission)}</td>
                   <td className="num">{money(totals.bonus)}</td>
@@ -221,7 +233,7 @@ function Workers() {
       <div className="team-board">
         {workers.map((user) => (
           <WorkerCard
-            key={`${user.id}-${user.salary}-${user.commissionRate}-${user.bonus}-${user.hiredAt}`}
+            key={`${user.id}-${user.salary}-${user.commissionRate}-${user.bonus}-${user.hiredAt}-${user.salesGoal}-${user.servicesGoal}`}
             user={user}
             onSave={(patch) => {
               const result = updateWorker(user.id, patch)
@@ -240,12 +252,14 @@ function Workers() {
   )
 }
 
-function WorkerCard({ user, onSave }: { user: User; onSave: (patch: Pick<User, 'commissionRate' | 'bonus' | 'hiredAt' | 'salary'>) => void }) {
+function WorkerCard({ user, onSave }: { user: User; onSave: (patch: WorkerPatch) => void }) {
   const [form, setForm] = useState({
     salary: user.salary !== undefined ? String(user.salary) : '',
     commissionRate: user.commissionRate !== undefined ? String(user.commissionRate) : '',
     bonus: user.bonus !== undefined ? String(user.bonus) : String(LEGAL_BONUS),
     hiredAt: user.hiredAt ?? '',
+    salesGoal: user.salesGoal ? String(user.salesGoal) : '',
+    servicesGoal: user.servicesGoal ? String(user.servicesGoal) : '',
   })
   return (
     <form
@@ -257,6 +271,8 @@ function WorkerCard({ user, onSave }: { user: User; onSave: (patch: Pick<User, '
           commissionRate: form.commissionRate.trim() ? amountOf(form.commissionRate) : undefined,
           bonus: form.bonus.trim() ? amountOf(form.bonus) : undefined,
           hiredAt: form.hiredAt || undefined,
+          salesGoal: form.salesGoal.trim() ? amountOf(form.salesGoal) : undefined,
+          servicesGoal: form.servicesGoal.trim() ? Math.floor(amountOf(form.servicesGoal)) : undefined,
         })
       }}
     >
@@ -275,6 +291,12 @@ function WorkerCard({ user, onSave }: { user: User; onSave: (patch: Pick<User, '
         </Field>
         <Field label="Fecha de ingreso">
           <input type="date" value={form.hiredAt} max={isoDate()} onChange={(event) => setForm({ ...form, hiredAt: event.target.value })} />
+        </Field>
+        <Field label="Meta de ventas al mes (Q)">
+          <input className="num" inputMode="decimal" value={form.salesGoal} onChange={(event) => setForm({ ...form, salesGoal: event.target.value })} placeholder="Sin meta" />
+        </Field>
+        <Field label="Meta de servicios al mes">
+          <input className="num" inputMode="numeric" value={form.servicesGoal} onChange={(event) => setForm({ ...form, servicesGoal: event.target.value })} placeholder="Sin meta" />
         </Field>
       </div>
       <button type="submit" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }}>

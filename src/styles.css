@@ -193,6 +193,7 @@ p { margin: 0; }
 .price-card li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-weight: 600; }
 .price-card small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.8rem; font-weight: 400; }
 .price-card b { flex: none; color: var(--accent); }
+.price-card li > a { flex: none; color: var(--accent); font-size: 0.86rem; font-weight: 700; }
 .price-note { color: var(--muted); font-size: 0.82rem; }
 .price-note a { color: var(--accent); }
 
@@ -1020,7 +1021,7 @@ body:has(.install-banner) .wa-float { display: none; }
   cursor: pointer;
 }
 .choice-row button[aria-pressed='true'] { background: var(--accent); color: white; border-color: var(--accent); }
-.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.photo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .photo-slot {
   display: grid;
   gap: 6px;
@@ -1260,6 +1261,7 @@ body:has(.install-banner) .wa-float { display: none; }
 }
 .compare-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .compare-actions .btn input { display: none; }
+.compare-publish { margin-top: 10px; color: var(--muted); font-size: 0.86rem; }
 
 .cart-bar { display: none; }
 
@@ -1399,7 +1401,8 @@ body:has(.nav.open) { overflow: hidden; }
   .section { padding: 56px 20px; }
   .nav { padding-inline: 20px; }
   .overlay { align-items: start; }
-  .drawer-grid, .sheet-facts, .service-row, .photo-grid, .sheet-photos { grid-template-columns: 1fr; }
+  .drawer-grid, .sheet-facts, .service-row, .sheet-photos { grid-template-columns: 1fr; }
+  .photo-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-height: 720px) {
   .overlay { align-items: start; }
@@ -1699,6 +1702,9 @@ body:has(.nav.open) { overflow: hidden; }
 .site .visit-card h2 { font-size: clamp(1.3rem, 2.4vw, 1.8rem); }
 .site .visit-hours { margin-top: 6px; color: var(--muted); }
 .site .footer-social { display: flex; flex-wrap: wrap; gap: 14px; }
+.site .service-cards .pillar h3 { margin-top: 2px; }
+.site .services-page .section.gallery { padding-top: 0; }
+.site .services-page .cta-band { margin-top: 8px; }
 @media (max-width: 860px) {
   .site .faq { grid-template-columns: 1fr; }
   .site .faq .section-head { position: static; }
@@ -2594,7 +2600,9 @@ body:has(.nav.open) { overflow: hidden; }
   .constancia-sheet .sheet-note { min-height: 0; margin: 4px 0 0; font-size: 11px; }
   .constancia-sheet .sheet-photos {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
     gap: 10px;
     margin: 0;
     break-inside: avoid;

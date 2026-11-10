@@ -3,7 +3,7 @@ import { Metrics } from '../components/ui'
 import { CONTROL_COLUMNS, CONTROL_GOAL, columnValue, controlFilename, controlGroups, controlSheet, type ControlColumn, type ControlLine } from '../control'
 import { count, isoDate, money, parseAmount } from '../format'
 import { buildJournal, incomeStatement } from '../ledger'
-import { payableBalance, round2 } from '../ops'
+import { payableBalance, PETTY_REFILL, round2 } from '../ops'
 import { useStore } from '../store'
 import type { ControlField } from '../types'
 
@@ -12,7 +12,7 @@ export function ControlGeneral() {
   const [year, setYear] = useState(() => new Date().getFullYear())
   const entries = useMemo(() => buildJournal(state), [state])
   const result = incomeStatement(entries, `${year}-01-01`, `${year}-12-31`)
-  const yearEgresos = state.movements.filter((item) => item.type === 'egreso' && item.date.startsWith(String(year)))
+  const yearEgresos = state.movements.filter((item) => item.type === 'egreso' && item.category !== PETTY_REFILL && item.date.startsWith(String(year)))
   const fixedSpent = round2(yearEgresos.filter((item) => item.fixedId).reduce((sum, item) => sum + item.amount, 0))
   const generated = round2(yearEgresos.filter((item) => !item.fixedId).reduce((sum, item) => sum + item.amount, 0))
   const open = (state.payables ?? []).filter((item) => payableBalance(item) > 0)

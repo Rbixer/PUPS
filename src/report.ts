@@ -1,5 +1,6 @@
 import type { Cell, Worksheet } from 'exceljs'
 import { formatName, isoDate, monthTitle } from './format'
+import { PETTY_REFILL } from './ops'
 import type { AppState, Appointment, Movement } from './types'
 
 export type Tone = 'up' | 'down' | 'flat'
@@ -97,12 +98,13 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
   const previous = state.appointments.filter((item) => inMonth(item.date, prior))
   const done = appointments.filter((item) => item.status === 'completada')
   const prevDone = previous.filter((item) => item.status === 'completada')
+  const counted = (item: Movement) => item.method !== 'Pedido' && item.category !== PETTY_REFILL
   const movements = state.movements
-    .filter((item) => inMonth(item.date, key) && item.method !== 'Pedido')
+    .filter((item) => inMonth(item.date, key) && counted(item))
     .sort((a, b) => a.date.localeCompare(b.date) || a.document.localeCompare(b.document))
   const ingresos = movements.filter((item) => item.type === 'ingreso')
   const egresos = movements.filter((item) => item.type === 'egreso')
-  const prevMoves = state.movements.filter((item) => inMonth(item.date, prior) && item.method !== 'Pedido')
+  const prevMoves = state.movements.filter((item) => inMonth(item.date, prior) && counted(item))
   const sales = sum(done, 'cost')
   const income = sum(ingresos, 'amount')
   const expense = sum(egresos, 'amount')

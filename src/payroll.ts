@@ -1,6 +1,6 @@
 import { daysBetween, isoDate, parseIso } from './format'
 import { round2 } from './ops'
-import type { Appointment, PayrollLine, User } from './types'
+import type { AppState, Appointment, PayrollLine, User } from './types'
 
 /** Porcentajes de ley en Guatemala. Conviene confirmarlos con el contador cada año. */
 export const PAYROLL_RATES = {
@@ -15,13 +15,14 @@ export const PAYROLL_RATES = {
 
 export const LEGAL_BONUS = 250
 
-export type PayrollAdjust = { extra: number; deductions: number }
+/** `purchases` es lo que se descuenta por compras del trabajador; ya va incluido en `deductions`. */
+export type PayrollAdjust = { extra: number; deductions: number; purchases?: number }
 
 export function workersOf(users: User[]) {
   return users.filter((item) => item.active && item.employeeCode)
 }
 
-function servicesFor(user: User, appointments: Appointment[], period: string) {
+export function servicesFor(user: User, appointments: Appointment[], period: string) {
   return appointments.filter(
     (item) =>
       item.status === 'completada' &&
@@ -65,6 +66,7 @@ export function payrollLine(user: User, appointments: Appointment[], period: str
     bonus,
     extra,
     deductions,
+    ...(adjust.purchases ? { purchases: round2(Math.min(Math.max(0, adjust.purchases), deductions)) } : {}),
     igss,
     net: round2(insurable + bonus - igss - deductions),
     employerIgss: round2(insurable * PAYROLL_RATES.igssPatronal),
@@ -73,6 +75,32 @@ export function payrollLine(user: User, appointments: Appointment[], period: str
     vacaciones: round2(ordinary * PAYROLL_RATES.vacaciones),
     indemnizacion: round2(ordinary * PAYROLL_RATES.indemnizacion),
   }
+}
+
+export type GoalProgress = { sales: number; salesGoal: number; services: number; servicesGoal: number }
+
+/** Avance del mes contra las metas que fijó el administrador. Las ventas son las de mostrador que cobró el trabajador. */
+export function goalProgress(user: User, state: Pick<AppState, 'appointments' | 'sales'>, period: string): GoalProgress {
+  const sales = (state.sales ?? [])
+    .filter((item) => item.userId === user.id && item.status !== 'anulada' && !item.employeeId && item.date.startsWith(period))
+    .reduce((sum, item) => sum + item.total, 0)
+  return {
+    sales: round2(sales),
+    salesGoal: user.salesGoal ?? 0,
+    services: servicesFor(user, state.appointments, period).length,
+    servicesGoal: user.servicesGoal ?? 0,
+  }
+}
+
+/** Metas que no se alcanzan al ritmo del mes: lo hecho contra lo esperado a la fecha. */
+export function behindGoal(progress: GoalProgress, period: string, today = isoDate()) {
+  const [year, month] = period.split('-').map(Number)
+  const length = new Date(year, month, 0).getDate()
+  const share = period < today.slice(0, 7) ? 1 : period > today.slice(0, 7) ? 0 : Number(today.slice(8, 10)) / length
+  const behind: ('ventas' | 'servicios')[] = []
+  if (progress.salesGoal > 0 && progress.sales < progress.salesGoal * share) behind.push('ventas')
+  if (progress.servicesGoal > 0 && progress.services < Math.floor(progress.servicesGoal * share)) behind.push('servicios')
+  return behind
 }
 
 export function payrollTotals(lines: PayrollLine[]) {

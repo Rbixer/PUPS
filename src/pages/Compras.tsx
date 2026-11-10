@@ -1,16 +1,41 @@
 import { useState } from 'react'
-import { METHODS as PAY_METHODS } from '../catalog'
+import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, isoDate, longDate, money } from '../format'
-import { payableBalance, round2 } from '../ops'
-import { shelfOf } from '../shop'
+import { payableBalance, purchaseSplit, round2 } from '../ops'
+import { shelfOf, SHOP_CATEGORY_NAMES } from '../shop'
 import { useStore } from '../store'
-import type { Supplier } from '../types'
+import type { ProductUse, Purchase, ShopCategoryName, Supplier } from '../types'
 
 
-type Draft = { free: boolean; productId: string; description: string; qty: string; cost: string }
+type Draft = {
+  free: boolean
+  /** Producto que todavía no existe: se crea al registrar la compra. */
+  fresh: boolean
+  productId: string
+  description: string
+  qty: string
+  cost: string
+  use: ProductUse
+  unit: string
+  price: string
+  category: ShopCategoryName
+}
 
-const blankLine = (): Draft => ({ free: false, productId: '', description: '', qty: '1', cost: '' })
+const blankLine = (): Draft => ({
+  free: false,
+  fresh: false,
+  productId: '',
+  description: '',
+  qty: '1',
+  cost: '',
+  use: 'venta',
+  unit: 'pieza',
+  price: '',
+  category: SHOP_CATEGORY_NAMES[0],
+})
+
+const USE_LABEL: Record<ProductUse, string> = { venta: 'Para venta', insumo: 'Uso en servicio' }
 const blankSupplier = (): Supplier => ({ id: '', name: '', nit: '', phone: '', email: '', contact: '', notes: '' })
 
 export function Compras() {
@@ -20,21 +45,24 @@ export function Compras() {
   const purchases = state.purchases ?? []
   const thisMonth = purchases.filter((item) => item.date.startsWith(month))
   const credit = (state.payables ?? []).filter((item) => item.purchaseId).reduce((sum, item) => sum + payableBalance(item), 0)
+  const split = purchaseSplit(thisMonth, state.products)
   return (
     <section className="stack">
       <header className="page-head">
         <div>
           <p className="eyebrow">Compras y gastos</p>
           <h1>Compras</h1>
-          <p className="lede">Registra lo que entra de cada proveedor. La existencia sube y el costo se promedia; al crédito queda en facturas por pagar.</p>
+          <p className="lede">
+            Registra lo que entra de cada proveedor. Cada producto sube su existencia en inventario, separado en lo que es para venta y lo que se usa en los servicios.
+          </p>
         </div>
       </header>
       <Metrics
         items={[
           { label: 'Compras del mes', value: money(round2(thisMonth.reduce((sum, item) => sum + item.total, 0))), detail: count(thisMonth.length, 'documento', 'documentos') },
-          { label: 'Al crédito pendiente', value: money(round2(credit)), tone: credit > 0 ? 'hot' : undefined },
-          { label: 'Proveedores', value: (state.suppliers ?? []).length },
-          { label: 'Compras registradas', value: purchases.length },
+          { label: 'Para venta', value: money(split.venta), tone: 'ok', detail: 'Producto de la tienda' },
+          { label: 'Uso en servicio', value: money(split.insumo), detail: split.gasto ? `${money(split.gasto)} sin inventario` : 'Insumos de grooming' },
+          { label: 'Al crédito pendiente', value: money(round2(credit)), tone: credit > 0 ? 'hot' : undefined, detail: count((state.suppliers ?? []).length, 'proveedor', 'proveedores') },
         ]}
       />
       <Tabs
@@ -100,12 +128,15 @@ function NewPurchase({ onNeedSupplier }: { onNeedSupplier: () => void }) {
           method: form.method,
           dueDate: form.dueDate,
           notes: form.notes,
-          lines: lines.filter((line) => line.productId || line.description.trim() || line.cost.trim()).map((line) => ({
-            productId: line.free ? undefined : line.productId || undefined,
-            description: line.productId ? products.find((item) => item.id === line.productId)?.name ?? '' : line.description,
-            qty: amountOf(line.qty) || 0,
-            cost: amountOf(line.cost),
-          })),
+          lines: lines
+            .filter((line) => line.productId || line.description.trim() || line.cost.trim())
+            .map((line) => ({
+              productId: line.free || line.fresh ? undefined : line.productId || undefined,
+              description: line.productId && !line.free && !line.fresh ? (products.find((item) => item.id === line.productId)?.name ?? '') : line.description,
+              qty: amountOf(line.qty) || 0,
+              cost: amountOf(line.cost),
+              ...(line.fresh ? { create: { kind: line.use, unit: line.unit, price: line.use === 'venta' ? amountOf(line.price) : 0, category: line.category } } : {}),
+            })),
         })
         if (!result.ok) {
           setError(result.error)
@@ -170,32 +201,43 @@ function NewPurchase({ onNeedSupplier }: { onNeedSupplier: () => void }) {
           <div key={index} className="line">
             <Field label={index === 0 ? 'Producto o descripción' : ' '}>
               <select
-                value={line.free ? '__libre' : line.productId}
+                value={line.free ? '__libre' : line.fresh ? '__nuevo' : line.productId}
                 onChange={(event) => {
                   const value = event.target.value
-                  if (value === '__libre') setLine(index, { free: true, productId: '' })
+                  if (value === '__libre') setLine(index, { free: true, fresh: false, productId: '' })
+                  else if (value === '__nuevo') setLine(index, { free: false, fresh: true, productId: '' })
                   else {
                     const item = products.find((product) => product.id === value)
-                    setLine(index, { free: false, productId: value, description: '', cost: line.cost || (item?.cost ? String(item.cost) : '') })
+                    setLine(index, { free: false, fresh: false, productId: value, description: '', cost: line.cost || (item?.cost ? String(item.cost) : '') })
                   }
                 }}
               >
                 <option value="">Elige un producto…</option>
-                {products.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {`${item.name}${item.kind === 'insumo' ? ' (insumo)' : ''} · hay ${item.stock}`}
-                  </option>
+                {(['venta', 'insumo'] as const).map((use) => (
+                  <optgroup key={use} label={USE_LABEL[use]}>
+                    {products
+                      .filter((item) => (item.kind ?? 'venta') === use)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {`${item.name} · hay ${item.stock}`}
+                        </option>
+                      ))}
+                  </optgroup>
                 ))}
+                <option value="__nuevo">+ Producto nuevo…</option>
                 <option value="__libre">Otro gasto de compra (sin inventario)</option>
               </select>
-              {line.free ? (
+              {line.free || line.fresh ? (
                 <input
                   style={{ marginTop: 6 }}
                   value={line.description}
                   onChange={(event) => setLine(index, { description: event.target.value })}
-                  placeholder="Descripción"
-                  aria-label="Descripción"
+                  placeholder={line.fresh ? 'Nombre del producto' : 'Descripción'}
+                  aria-label={line.fresh ? 'Nombre del producto' : 'Descripción'}
                 />
+              ) : null}
+              {line.productId && !line.free && !line.fresh ? (
+                <small className="line-use">{USE_LABEL[products.find((item) => item.id === line.productId)?.kind ?? 'venta']}</small>
               ) : null}
             </Field>
             <Field label={index === 0 ? 'Cant.' : ' '}>
@@ -207,6 +249,39 @@ function NewPurchase({ onNeedSupplier }: { onNeedSupplier: () => void }) {
             <button type="button" className="icon-btn" aria-label="Quitar línea" onClick={() => setLines((current) => (current.length > 1 ? current.filter((_, at) => at !== index) : [blankLine()]))}>
               ×
             </button>
+            {line.fresh ? (
+              <div className="line-new">
+                <div className="choice-row" role="group" aria-label="Uso del producto">
+                  {(['venta', 'insumo'] as const).map((use) => (
+                    <button key={use} type="button" aria-pressed={line.use === use} onClick={() => setLine(index, { use })}>
+                      {USE_LABEL[use]}
+                    </button>
+                  ))}
+                </div>
+                <Field label="Unidad">
+                  <input value={line.unit} onChange={(event) => setLine(index, { unit: event.target.value })} placeholder="pieza, galón, 500 ml…" />
+                </Field>
+                {line.use === 'venta' ? (
+                  <>
+                    <Field label="Categoría">
+                      <select value={line.category} onChange={(event) => setLine(index, { category: event.target.value as ShopCategoryName })}>
+                        {SHOP_CATEGORY_NAMES.map((item) => (
+                          <option key={item}>{item}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Precio de venta (Q)">
+                      <input className="num" inputMode="decimal" value={line.price} onChange={(event) => setLine(index, { price: event.target.value })} />
+                    </Field>
+                  </>
+                ) : null}
+                <p className="hint">
+                  {line.use === 'venta'
+                    ? 'Se agrega al inventario de la tienda. Sale en la página en línea cuando le pongas foto en Tienda.'
+                    : 'Se agrega a los insumos de grooming. No sale en la tienda.'}
+                </p>
+              </div>
+            ) : null}
           </div>
         ))}
         <button type="button" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }} onClick={() => setLines((current) => [...current, blankLine()])}>
@@ -226,6 +301,18 @@ function NewPurchase({ onNeedSupplier }: { onNeedSupplier: () => void }) {
       </div>
       <Flash error={error} notice={notice} />
     </form>
+  )
+}
+
+function PurchaseUse({ purchase }: { purchase: Purchase }) {
+  const { state } = useStore()
+  const split = purchaseSplit([purchase], state.products)
+  return (
+    <span className="tag-row">
+      {split.venta ? <Tag tone="ok">Venta {money(split.venta)}</Tag> : null}
+      {split.insumo ? <Tag tone="info">Servicio {money(split.insumo)}</Tag> : null}
+      {split.gasto ? <Tag tone="mute">Sin inventario {money(split.gasto)}</Tag> : null}
+    </span>
   )
 }
 
@@ -263,6 +350,7 @@ function History() {
                   <td>{item.supplierName}</td>
                   <td>
                     <small>{item.lines.map((line) => `${line.qty}× ${line.description} (${money(line.cost)})`).join(', ')}</small>
+                    <PurchaseUse purchase={item} />
                   </td>
                   <td className="num">{money(item.total)}</td>
                   <td>

@@ -123,7 +123,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     cost: 21,
     minStock: 5,
     name: 'Toallitas de oídos',
-    detail: 'Limpieza suave. No sustituye la revisión de la clínica.',
+    detail: 'Limpieza suave de oídos entre un baño y otro.',
     category: 'Cuidado',
     price: 42,
     unit: '50 unidades',

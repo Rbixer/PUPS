@@ -36,7 +36,9 @@ export function Inventario() {
     return !needle || `${item.name} ${item.sku ?? ''} ${item.category}`.toLowerCase().includes(needle)
   })
   const current = products.find((item) => item.id === picked) ?? null
-  const value = round2(products.reduce((sum, item) => sum + Math.max(0, item.stock) * (item.cost ?? 0), 0))
+  const valueOf = (items: CatalogItem[]) => round2(items.reduce((sum, item) => sum + Math.max(0, item.stock) * (item.cost ?? 0), 0))
+  const value = valueOf(products)
+  const supplies = valueOf(products.filter((item) => item.kind === 'insumo'))
   const retail = round2(products.filter((item) => item.kind !== 'insumo').reduce((sum, item) => sum + Math.max(0, item.stock) * item.price, 0))
   const lows = products.filter(low)
   const noCost = products.filter((item) => item.cost === undefined).length
@@ -52,7 +54,11 @@ export function Inventario() {
       </header>
       <Metrics
         items={[
-          { label: 'Valor al costo', value: money(value), detail: noCost ? `${noCost} sin costo cargado` : 'Todos con costo' },
+          {
+            label: 'Valor al costo',
+            value: money(value),
+            detail: `Venta ${money(round2(value - supplies))} · servicio ${money(supplies)}${noCost ? ` · ${noCost} sin costo` : ''}`,
+          },
           { label: 'Valor a precio de venta', value: money(retail), tone: 'ok' },
           { label: 'Bajo mínimo', value: lows.length, tone: lows.length ? 'bad' : undefined, detail: lows.slice(0, 3).map((item) => item.name).join(', ') || 'Todo en orden' },
           { label: 'Productos', value: products.length, detail: count(products.filter((item) => item.kind === 'insumo').length, 'insumo', 'insumos') },
@@ -67,7 +73,7 @@ export function Inventario() {
             { id: 'todo', label: 'Todo' },
             { id: 'bajo', label: 'Bajo mínimo', count: lows.length },
             { id: 'venta', label: 'Para venta' },
-            { id: 'insumo', label: 'Insumos' },
+            { id: 'insumo', label: 'Uso en servicio' },
           ]}
         />
         <input type="search" className="filters-search-input" placeholder="Buscar" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar en inventario" style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', minWidth: 200 }} />
@@ -95,8 +101,9 @@ export function Inventario() {
                         {item.name}
                       </button>
                       <small>
-                        {item.kind === 'insumo' ? 'Insumo' : item.category} · {item.unit}
+                        {item.kind === 'insumo' ? 'Uso en servicio' : `Para venta · ${item.category}`} · {item.unit}
                         {item.sku ? ` · ${item.sku}` : ''}
+                        {item.kind !== 'insumo' && item.active === false ? ' · no sale en la tienda en línea' : ''}
                       </small>
                     </td>
                     <td className="num">{item.stock}</td>

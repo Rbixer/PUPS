@@ -1,59 +1,58 @@
 import { Link } from 'react-router-dom'
-import { SERVICES } from '../catalog'
-import { money } from '../format'
-import { PLAN_MINUTES, TARIFF } from '../visit'
+import { ServiceCards } from '../components/ServiceCards'
+import { publicSiteContent } from '../format'
+import { useStore } from '../store'
+import { PLAN_MINUTES } from '../visit'
 
 export function Servicios() {
+  const { state } = useStore()
+  const { gallery } = publicSiteContent(state.settings)
   return (
-    <section className="section page">
-      <div className="section-head">
-        <p className="eyebrow">Servicios</p>
-        <h1 className="page-title">Grooming, veterinaria y pet shop.</h1>
-        <p className="lede">
-          El precio se confirma según el tamaño, el pelaje y el trabajo que necesite tu mascota.
-        </p>
-      </div>
-      <div className="service-list">
-        {SERVICES.map((service, index) => (
-          <article key={service.name} className="service-row">
-            <span className="num">{String(index + 1).padStart(2, '0')}</span>
-            <div>
-              <h3>{service.name}</h3>
-              <p>{service.detail}</p>
-            </div>
-            <Link className="btn btn-ghost btn-sm" to={`/reservar?servicio=${encodeURIComponent(service.name)}`}>
-              Reservar
+    <div className="services-page">
+      <section className="section page">
+        <div className="section-head">
+          <p className="eyebrow">Servicios</p>
+          <h1 className="page-title">Grooming y pet shop para tu peludo.</h1>
+          <p className="lede">
+            El grooming son {PLAN_MINUTES.grooming} minutos: baño, cepillado, uñas y oídos. El premium son {PLAN_MINUTES.premium} minutos y suma
+            deslanado, dientes y glándulas. El precio se confirma al recibir a tu mascota, según su tamaño, su pelaje y el trabajo que necesite.
+          </p>
+        </div>
+        <ServiceCards />
+      </section>
+
+      {gallery.length > 0 ? (
+        <section className="section gallery" aria-labelledby="trabajos-title">
+          <div className="section-head">
+            <p className="eyebrow">Nuestros trabajos</p>
+            <h2 id="trabajos-title">Algunos peludos que pasaron por PUP'S.</h2>
+          </div>
+          <ul className="gallery-grid">
+            {gallery.map((photo) => (
+              <li key={photo.src}>
+                <figure>
+                  <img src={photo.src} alt={photo.caption || "Mascota después de su visita en PUP'S"} loading="lazy" decoding="async" />
+                  {photo.caption ? <figcaption>{photo.caption}</figcaption> : null}
+                </figure>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="cta-band">
+        <div className="cta-copy">
+          <p className="eyebrow">Tu próxima visita</p>
+          <h2>¿Listo para dejarlo impecable?</h2>
+          <p>Elige el servicio, el día y la hora. Te confirmamos por WhatsApp.</p>
+          <div className="hero-actions">
+            <Link to="/reservar" className="btn btn-primary">
+              Reservar ahora
             </Link>
-          </article>
-        ))}
-      </div>
-      <div className="section-head">
-        <p className="eyebrow">Tiempo y tarifa</p>
-        <h2>Grooming y Premium, según el tamaño.</h2>
-        <p className="lede">
-          Grooming son {PLAN_MINUTES.grooming} minutos: baño, cepillado, uñas y oídos. Premium son {PLAN_MINUTES.premium}{' '}
-          minutos y suma deslanado, dientes y glándulas, con foto de antes y de después. El pequeño de grooming queda en{' '}
-          {money(TARIFF.grooming.Pequeño)}; el resto es referencia y se confirma en la cita.
-        </p>
-      </div>
-      <table className="tariff">
-        <thead>
-          <tr>
-            <th>Tamaño</th>
-            <th>Grooming · {PLAN_MINUTES.grooming} min</th>
-            <th>Premium · {PLAN_MINUTES.premium} min</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.keys(TARIFF.grooming).map((size) => (
-            <tr key={size}>
-              <td>{size}</td>
-              <td className="num">{money(TARIFF.grooming[size])}</td>
-              <td className="num">{money(TARIFF.premium[size])}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+          </div>
+        </div>
+        <img className="cta-dog" src="/logo.png" alt="" width={342} height={345} loading="lazy" />
+      </section>
+    </div>
   )
 }

@@ -37,10 +37,13 @@ const CuentasPorPagar = page(() => import('./pages/CuentasPorPagar'), 'CuentasPo
 const Planilla = page(() => import('./pages/Planilla'), 'Planilla')
 const Contabilidad = page(() => import('./pages/Contabilidad'), 'Contabilidad')
 const Tareas = page(() => import('./pages/Tareas'), 'Tareas')
+const Asistencia = page(() => import('./pages/Asistencia'), 'Asistencia')
+const ComprasEmpleados = page(() => import('./pages/ComprasEmpleados'), 'ComprasEmpleados')
 
 const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
   { path: 'ventas', permission: 'caja', element: <Ventas /> },
   { path: 'corte', permission: 'caja', element: <CorteCaja /> },
+  { path: 'compras-empleados', permission: 'caja', element: <ComprasEmpleados /> },
   { path: 'clientes', permission: 'caja', element: <Clientes /> },
   { path: 'compras', permission: 'compras', element: <Compras /> },
   { path: 'inventario', permission: 'compras', element: <Inventario /> },
@@ -89,22 +92,6 @@ function StaffChrome() {
       <OfflineChip />
       <InstallBanner />
     </>
-  )
-}
-
-function SinAcceso() {
-  const { currentUser } = useStore()
-  if (currentUser && homeFor(currentUser) !== '/admin/sin-acceso') return <Navigate to={homeFor(currentUser)} replace />
-  return (
-    <section className="stack">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">Acceso</p>
-          <h1>Sin módulos</h1>
-        </div>
-      </header>
-      <p className="empty">Tu usuario no tiene módulos asignados. Un administrador puede marcarlos en Equipo.</p>
-    </section>
   )
 }
 
@@ -243,8 +230,7 @@ export function App() {
         {GUARDED.map((item) => (
           <Route key={item.path} path={item.path} element={<Guard permission={item.permission}>{item.element}</Guard>} />
         ))}
-        <Route path="sin-acceso" element={<SinAcceso />} />
-        <Route path="*" element={<AdminHome />} />
+        <Route path="asistencia" element={<Asistencia />} />        <Route path="*" element={<AdminHome />} />
       </Route>
     </Routes>
     </Suspense>

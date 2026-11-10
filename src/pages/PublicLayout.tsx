@@ -12,7 +12,7 @@ function businessData(address: string, whatsapp: string, social: string[]) {
     '@context': 'https://schema.org',
     '@type': 'PetStore',
     name: "PUP'S Pet Shop y Grooming",
-    description: 'Grooming, veterinaria y pet shop en Guatemala.',
+    description: 'Grooming y pet shop en Guatemala.',
     url: window.location.origin,
     image: `${window.location.origin}/og.jpg`,
     priceRange: 'Q',
@@ -158,7 +158,7 @@ export function PublicLayout() {
         <div className="footer-grid">
           <div>
             <Brand />
-            <p>Veterinaria, grooming y pet shop.</p>
+            <p>Grooming y pet shop.</p>
           </div>
           <div>
             <p className="eyebrow">Visítanos</p>

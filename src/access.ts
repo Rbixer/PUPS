@@ -48,7 +48,7 @@ export function allows(user: Pick<User, 'role' | 'permissions' | 'active'> | nul
 
 export function homeFor(user: Pick<User, 'role' | 'permissions' | 'active'>) {
   const permissions = resolvePermissions(user)
-  return DESTINATIONS.find((item) => permissions.includes(item.permission))?.to ?? '/admin/sin-acceso'
+  return DESTINATIONS.find((item) => permissions.includes(item.permission))?.to ?? '/admin/asistencia'
 }
 
 export function permissionLabel(id: Permission) {
