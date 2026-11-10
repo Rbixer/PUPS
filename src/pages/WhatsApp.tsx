@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Field } from '../components/ui'
-import { digits, formatName, whatsappUrl } from '../format'
+import { Field, Flash } from '../components/ui'
+import { digits, formatName } from '../format'
 import { useStore } from '../store'
+import type { WaDelivery } from '../types'
 
 function clock(iso: string) {
   return new Date(iso).toLocaleString('es-GT', {
@@ -13,18 +14,41 @@ function clock(iso: string) {
   })
 }
 
+const STATUS_LABEL: Record<WaDelivery, string> = {
+  pendiente: 'Pendiente',
+  enviado: 'Enviado',
+  entregado: 'Entregado',
+  leido: 'Leído',
+  fallido: 'Falló',
+  recibido: 'Recibido',
+}
+
 export function WhatsApp() {
-  const { state, updateSettings, ensureThread, sendMessage, markRead } = useStore()
+  const { state, updateSettings, ensureThread, sendMessage, waCloudStatus, markRead } = useStore()
   const [params, setParams] = useSearchParams()
   const [line, setLine] = useState(state.settings.whatsapp)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [savedLine, setSavedLine] = useState(false)
   const [lineTouched, setLineTouched] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [cloud, setCloud] = useState<{ configured: boolean; phoneNumberId: string; template: string } | null>(null)
 
   useEffect(() => {
     if (!lineTouched) setLine(state.settings.whatsapp)
   }, [state.settings.whatsapp, lineTouched])
+
+  useEffect(() => {
+    let alive = true
+    void waCloudStatus().then((status) => {
+      if (alive) setCloud(status)
+    })
+    return () => {
+      alive = false
+    }
+  }, [waCloudStatus])
 
   const threads = useMemo(
     () =>
@@ -56,7 +80,8 @@ export function WhatsApp() {
     if (active && active.unread > 0) markRead(active.id)
   }, [active, markRead])
 
-  const connected = digits(state.settings.whatsapp).length >= 8
+  const lineReady = digits(state.settings.whatsapp).length >= 8
+  const apiReady = Boolean(cloud?.configured)
 
   return (
     <section className="stack wa-page">
@@ -64,11 +89,32 @@ export function WhatsApp() {
         <div>
           <p className="eyebrow">Canal</p>
           <h1>WhatsApp</h1>
+          <p className="lede">El chat de la cuenta del negocio vive aquí. Los mensajes entran y salen por WhatsApp Cloud API.</p>
         </div>
-        <span className={connected ? 'pill pill-completada' : 'pill pill-pendiente'}>
-          {connected ? 'Línea lista' : 'Sin línea'}
-        </span>
+        <span className={apiReady ? 'pill pill-completada' : 'pill pill-pendiente'}>{apiReady ? 'API conectada' : 'API sin configurar'}</span>
       </header>
+
+      <aside className="wa-setup panel" aria-label="Configuración de WhatsApp">
+        <h2>Cómo activar la cuenta</h2>
+        <ol className="wa-steps">
+          <li>Crea Meta Business Manager y una app tipo Business con el producto WhatsApp.</li>
+          <li>Agrega el número del celular: Meta manda un SMS; al activarlo ese número deja la app normal.</li>
+          <li>
+            En el servidor configura <code>WA_TOKEN</code>, <code>WA_PHONE_NUMBER_ID</code>, <code>WA_VERIFY_TOKEN</code> y <code>WA_APP_SECRET</code>.
+          </li>
+          <li>
+            Webhook: <code>https://tu-dominio/api/whatsapp/webhook</code> con el campo <code>messages</code>.
+          </li>
+          <li>
+            Aprueba la plantilla <code>{cloud?.template ?? 'reserva_nueva'}</code> en español para reservas y mensajes fuera de 24 h.
+          </li>
+        </ol>
+        <p className="hint">
+          {apiReady
+            ? `Phone number ID ${cloud?.phoneNumberId}. Plantilla ${cloud?.template}.`
+            : 'Mientras la API no esté en el servidor, la bandeja no envía ni recibe mensajes reales.'}
+        </p>
+      </aside>
 
       <form
         className="wa-connect"
@@ -80,7 +126,7 @@ export function WhatsApp() {
           setSavedLine(digits(next).length >= 8)
         }}
       >
-        <Field label="Número de PUP'S">
+        <Field label="Número público de PUP'S">
           <input
             value={line}
             onChange={(event) => {
@@ -93,14 +139,16 @@ export function WhatsApp() {
           />
         </Field>
         <button type="submit" className="btn btn-primary">
-          Conectar línea
+          Guardar número
         </button>
         <p className="hint">
-          {savedLine
-            ? 'La línea quedó guardada y el sitio ya manda a los clientes a este número.'
-            : 'Este número aparece en el sitio para que los clientes escriban. Cada respuesta se abre en WhatsApp para enviarla y queda anotada en el hilo del cliente.'}
+          {savedLine || lineReady
+            ? 'Este número aparece en el sitio para que los clientes te escriban.'
+            : 'Guarda el mismo número que registraste en Meta para mostrarlo en la página pública.'}
         </p>
       </form>
+
+      <Flash error={error} notice={notice} />
 
       <div className="wa-shell">
         <aside className="wa-list" aria-label="Conversaciones">
@@ -138,9 +186,6 @@ export function WhatsApp() {
                   {active.phone}
                 </span>
               </div>
-              <a className="btn btn-wa btn-sm" href={whatsappUrl(active.phone, draft || 'Hola, te escribimos de PUP\'S.')} target="_blank" rel="noreferrer">
-                Abrir chat
-              </a>
             </header>
             <div className="wa-log">
               {active.messages.length === 0 ? <p className="empty">Este hilo todavía no tiene mensajes.</p> : null}
@@ -148,31 +193,44 @@ export function WhatsApp() {
                 <article key={message.id} className={message.direction === 'out' ? 'bubble out' : 'bubble in'}>
                   <p>{message.body}</p>
                   <time className="num">
-                    {clock(message.at)} · {message.direction === 'out' ? 'Abierto en WhatsApp' : 'Recibido'}
+                    {clock(message.at)} · {STATUS_LABEL[message.status] ?? message.status}
+                    {message.error ? ` · ${message.error}` : ''}
                   </time>
                 </article>
               ))}
             </div>
             <form
               className="wa-compose"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault()
-                if (!draft.trim()) return
-                window.open(whatsappUrl(active.phone, draft.trim()), '_blank', 'noopener,noreferrer')
-                sendMessage(active.id, draft)
+                if (!draft.trim() || sending) return
+                setSending(true)
+                setError('')
+                setNotice('')
+                const problem = await sendMessage(active.id, draft)
+                setSending(false)
+                if (problem) {
+                  setError(problem)
+                  return
+                }
                 setDraft('')
+                setNotice('Mensaje enviado.')
               }}
             >
               <textarea
                 value={draft}
                 rows={2}
-                placeholder="Escribe la respuesta"
+                placeholder={apiReady ? 'Escribe la respuesta' : 'Configura la API en el servidor para enviar'}
                 onChange={(event) => setDraft(event.target.value)}
+                disabled={!apiReady || sending}
               />
-              <button type="submit" className="btn btn-primary" disabled={!draft.trim()}>
-                Enviar por WhatsApp
+              <button type="submit" className="btn btn-primary" disabled={!apiReady || !draft.trim() || sending}>
+                {sending ? 'Enviando…' : 'Enviar'}
               </button>
             </form>
+            <p className="hint" style={{ margin: '0 14px 12px' }}>
+              Texto libre solo si el cliente escribió en las últimas 24 h. Fuera de esa ventana Meta exige una plantilla aprobada.
+            </p>
           </section>
         ) : (
           <p className="empty">Elige una conversación.</p>

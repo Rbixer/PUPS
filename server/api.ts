@@ -4,12 +4,21 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { allows } from '../src/access'
 import { BOOKABLE_SERVICES } from '../src/catalog'
-import { isoDate, newId, normalizePhone, publicSiteContent } from '../src/format'
+import { isoDate, longDate, newId, normalizePhone, publicSiteContent } from '../src/format'
 import { closedOn, nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
 import type { Appointment, AppState, Attendance, Lead, Movement, Permission, User } from '../src/types'
 import { BOOKING_SLOTS, slotPassed, slotTaken, visitMinutes } from '../src/visit'
+import {
+  applyWebhook,
+  dispatchOutbound,
+  findThread,
+  loadWaConfig,
+  validSignature,
+  verifyWebhook,
+  waStatus,
+} from './whatsapp'
 
 type Session = { userId: string; expires: number; remember: boolean }
 type Auth = { passwords: Record<string, string>; sessions: Record<string, Session> }
@@ -646,8 +655,26 @@ export function createApi(dataDir = path.resolve('data')) {
       status: 'pendiente',
       cost: 0,
     }
-    commit({ ...state, appointments: [appointment, ...state.appointments] }, state)
-    send(response, 200, { folio })
+    let next: AppState = { ...state, appointments: [appointment, ...state.appointments] }
+    const wa = loadWaConfig()
+    let notified = false
+    if (wa) {
+      const body = `Hola ${clientName}, recibimos tu reserva #${folio} para ${petName}: ${service} el ${longDate(date)} a las ${time}. Te confirmamos por este chat.`
+      const sent = await dispatchOutbound(wa, next, {
+        phone,
+        name: clientName,
+        petName,
+        body,
+        forceTemplate: true,
+        allowTemplate: true,
+        templateParams: [clientName, String(folio), petName, service, `${longDate(date)} ${time}`],
+      })
+      next = sent.state
+      notified = sent.result.ok
+      if (!sent.result.ok) console.error('[whatsapp] reserva', sent.result.error)
+    }
+    commit(next, state)
+    send(response, 200, { folio, whatsapp: notified })
   }
 
   async function order(request: IncomingMessage, response: ServerResponse) {
@@ -739,6 +766,64 @@ export function createApi(dataDir = path.resolve('data')) {
       return send(response, 200, viewFor(user, state))
     }
     if (at === '/api/state' && method === 'PUT') return putState(request, response)
+    if (at === '/api/whatsapp/status' && method === 'GET') {
+      requireUser(request)
+      return send(response, 200, waStatus(loadWaConfig()))
+    }
+    if (at === '/api/whatsapp/webhook' && method === 'GET') {
+      const config = loadWaConfig()
+      if (!config) return send(response, 503, { error: 'WhatsApp Cloud API no está configurada.' })
+      const challenge = verifyWebhook(config, url.searchParams)
+      if (!challenge) return send(response, 403, { error: 'Verificación rechazada.' })
+      response.statusCode = 200
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      response.setHeader('Cache-Control', 'no-store')
+      response.end(challenge)
+      return
+    }
+    if (at === '/api/whatsapp/webhook' && method === 'POST') {
+      const config = loadWaConfig()
+      if (!config) return send(response, 503, { error: 'WhatsApp Cloud API no está configurada.' })
+      const raw = await readBody(request, PUBLIC_LIMIT)
+      if (!validSignature(config, raw, request.headers['x-hub-signature-256'])) {
+        return send(response, 401, { error: 'Firma inválida.' })
+      }
+      let payload: unknown
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        throw new HttpError(400, 'La solicitud no es válida.')
+      }
+      const current = readState()
+      const merged = applyWebhook(current, payload as Parameters<typeof applyWebhook>[1])
+      if (merged !== current) commit(merged, current)
+      return send(response, 200, { ok: true })
+    }
+    if (at === '/api/whatsapp/send' && method === 'POST') {
+      const { user, state: current } = requireUser(request)
+      if (!allows(user, 'whatsapp')) throw new HttpError(403, 'No tienes permiso de WhatsApp.')
+      const config = loadWaConfig()
+      if (!config) throw new HttpError(503, 'WhatsApp Cloud API no está configurada en el servidor.')
+      const body = await readJsonBody<{ conversationId?: string; phone?: string; text?: string; template?: boolean }>(request, PUBLIC_LIMIT)
+      const textBody = text(body.text, 4000)
+      if (!textBody) throw new HttpError(400, 'Escribe el mensaje.')
+      const thread =
+        (body.conversationId ? current.conversations.find((item) => item.id === body.conversationId) : undefined) ??
+        (body.phone ? findThread(current.conversations, body.phone) : undefined)
+      const phone = thread?.phone || text(body.phone, 40)
+      if (!phone) throw new HttpError(400, 'Elige una conversación.')
+      const sent = await dispatchOutbound(config, current, {
+        phone,
+        name: thread?.name,
+        petName: thread?.petName,
+        body: textBody,
+        forceTemplate: body.template === true,
+        allowTemplate: body.template === true,
+      })
+      if (!sent.result.ok) throw new HttpError(400, sent.result.error)
+      const saved = commit(sent.state, current)
+      return send(response, 200, { mode: sent.result.mode, state: viewFor(user, saved) })
+    }
     send(response, 404, { error: 'No existe.' })
   }
 

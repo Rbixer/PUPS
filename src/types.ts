@@ -428,12 +428,18 @@ export type SitePhoto = { src: string; caption: string }
 
 export type WaDirection = 'in' | 'out'
 
+/** Estado de entrega según Cloud API. Los mensajes viejos pueden traer solo recibido/enviado. */
+export type WaDelivery = 'pendiente' | 'enviado' | 'entregado' | 'leido' | 'fallido' | 'recibido'
+
 export type WaMessage = {
   id: string
   direction: WaDirection
   body: string
   at: string
-  status: 'recibido' | 'enviado'
+  status: WaDelivery
+  /** Id que devolvió Meta; sirve para actualizar entregado/leído. */
+  externalId?: string
+  error?: string
 }
 
 export type Conversation = {
@@ -443,6 +449,8 @@ export type Conversation = {
   petName: string
   unread: number
   messages: WaMessage[]
+  /** Último mensaje entrante del cliente; habilita texto libre 24 h. */
+  lastInboundAt?: string
 }
 
 export type AppState = {

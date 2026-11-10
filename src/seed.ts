@@ -14,6 +14,7 @@ function demoThreads(): Conversation[] {
       name: 'María López',
       petName: 'Nube',
       unread: 1,
+      lastInboundAt: ago(18),
       messages: [
         {
           id: 'wa-nube-1',
@@ -30,6 +31,7 @@ function demoThreads(): Conversation[] {
       name: 'Andrea Paz',
       petName: 'Luna',
       unread: 0,
+      lastInboundAt: ago(95),
       messages: [
         {
           id: 'wa-luna-1',
@@ -53,6 +55,7 @@ function demoThreads(): Conversation[] {
       name: 'Anali Renteria',
       petName: 'Mujito',
       unread: 1,
+      lastInboundAt: ago(26),
       messages: [
         {
           id: 'wa-mujito-1',

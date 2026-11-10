@@ -30,7 +30,6 @@ import type {
   Task,
   TaskStatus,
   User,
-  WaMessage,
 } from './types'
 
 export type { ChargeNote } from './ops'
@@ -385,7 +384,9 @@ type Store = {
   login: (username: string, password: string, remember?: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
   logout: () => void
   changeOwnPassword: (current: string, next: string) => Promise<string | null>
-  bookAppointment: (input: Omit<Appointment, 'id' | 'folio' | 'status' | 'cost'>) => Promise<{ ok: true; folio: number } | { ok: false; error: string }>
+  bookAppointment: (
+    input: Omit<Appointment, 'id' | 'folio' | 'status' | 'cost'>,
+  ) => Promise<{ ok: true; folio: number; whatsapp?: boolean } | { ok: false; error: string }>
   placeShopOrder: (input: { name: string; phone: string; lines: ShopLine[] }) => Promise<{ ok: true; document: string; total: number } | { ok: false; error: string }>
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<string | null>
   addAppointment: (appointment: Omit<Appointment, 'id' | 'folio'>, method?: string, invoiced?: boolean) => Result<Appointment>
@@ -438,7 +439,8 @@ type Store = {
   setTaxRegime: (regime: Settings['taxRegime']) => void
   updateSettings: (patch: Partial<Settings>) => void
   ensureThread: (phone: string, name: string, petName: string) => string | null
-  sendMessage: (conversationId: string, body: string) => void
+  sendMessage: (conversationId: string, body: string, template?: boolean) => Promise<string | null>
+  waCloudStatus: () => Promise<{ configured: boolean; phoneNumberId: string; template: string } | null>
   markRead: (conversationId: string) => void
   resetDemo: () => void
   exportBackup: () => string | null
@@ -773,8 +775,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return problem
       },
       bookAppointment: async (input) => {
-        const result = await postPublic<{ folio: number }>('/api/public/booking', input)
-        return result.ok ? { ok: true, folio: result.value.folio } : result
+        const result = await postPublic<{ folio: number; whatsapp?: boolean }>('/api/public/booking', input)
+        return result.ok ? { ok: true, folio: result.value.folio, whatsapp: result.value.whatsapp } : result
       },
       placeShopOrder: async (input) => {
         const result = await postPublic<{ document: string; total: number }>('/api/public/order', input)
@@ -974,17 +976,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = run('whatsapp', (current) => ({ ok: true, value: next.id, patch: { conversations: [next, ...current.conversations] } }))
         return result.ok ? result.value : null
       },
-      sendMessage: (conversationId, body) => {
+      sendMessage: async (conversationId, body, template = false) => {
         const text = body.trim()
-        if (!text) return
-        const message: WaMessage = { id: newId(), direction: 'out', body: text, at: new Date().toISOString(), status: 'enviado' }
-        run('whatsapp', (current) => ({
-          ok: true,
-          value: null,
-          patch: {
-            conversations: current.conversations.map((item) => (item.id === conversationId ? { ...item, unread: 0, messages: [...item.messages, message] } : item)),
-          },
-        }))
+        if (!text) return 'Escribe el mensaje.'
+        if (!can('whatsapp')) return DENIED
+        try {
+          const response = await request('POST', '/api/whatsapp/send', { conversationId, text, template })
+          const data = (await response.json().catch(() => ({}))) as { error?: string; state?: AppState }
+          if (!response.ok) return data.error ?? 'No se pudo enviar por WhatsApp.'
+          if (data.state) {
+            server.current = data.state
+            pending.current = []
+            show(absorb(data.state, latest.current.sessionUserId))
+          }
+          return null
+        } catch {
+          return OFFLINE
+        }
+      },
+      waCloudStatus: async () => {
+        try {
+          const response = await request('GET', '/api/whatsapp/status')
+          if (!response.ok) return null
+          return (await response.json()) as { configured: boolean; phoneNumberId: string; template: string }
+        } catch {
+          return null
+        }
       },
       markRead: (conversationId) => {
         if (!state.conversations.some((item) => item.id === conversationId && item.unread > 0)) return

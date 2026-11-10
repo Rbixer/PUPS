@@ -1093,6 +1093,10 @@ body:has(.install-banner) .wa-float { display: none; }
 .sheet-photos img { width: 100%; height: 140px; object-fit: cover; border-radius: 12px; }
 .sheet-photos figcaption { margin-top: 4px; font-size: 0.78rem; color: #6d5844; }
 .wa-page { min-width: 0; }
+.wa-setup { display: grid; gap: 8px; padding: 16px 18px; }
+.wa-setup h2 { margin: 0; font-size: 1rem; }
+.wa-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; }
+.wa-steps code { font-size: 0.82rem; color: var(--ink); }
 .wa-connect {
   display: grid;
   grid-template-columns: minmax(180px, 280px) auto 1fr;

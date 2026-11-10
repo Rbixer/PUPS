@@ -19,7 +19,12 @@ async function call(method: string, at: string, body?: unknown, token?: string) 
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const raw = await response.text()
-  return { status: response.status, body: raw ? JSON.parse(raw) : null }
+  if (!raw) return { status: response.status, body: null }
+  try {
+    return { status: response.status, body: JSON.parse(raw) }
+  } catch {
+    return { status: response.status, body: raw }
+  }
 }
 
 async function login(username: string, password = 'pups2026') {
@@ -168,6 +173,32 @@ describe('servidor', () => {
     expect((await call('PUT', '/api/state', { base: full.revision, state: fixed }, admin.token)).status).toBe(200)
     const deskView = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
     expect(deskView.attendance?.map((item) => item.id)).toEqual(['asis-1'])
+  })
+
+  it('whatsapp cloud: status y webhook exigen configuración; con secretos verifica el challenge', async () => {
+    const admin = await login('admin')
+    const before = await call('GET', '/api/whatsapp/status', undefined, admin.token)
+    expect(before.status).toBe(200)
+    expect(before.body.configured).toBe(false)
+    expect((await call('GET', '/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=x&hub.challenge=1')).status).toBe(503)
+
+    process.env.WA_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '100'
+    process.env.WA_VERIFY_TOKEN = 'verify-me'
+    process.env.WA_APP_SECRET = 'secret'
+    try {
+      const ok = await call('GET', '/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=hola')
+      expect(ok.status).toBe(200)
+      expect(ok.body).toBe('hola')
+      const status = await call('GET', '/api/whatsapp/status', undefined, admin.token)
+      expect(status.body.configured).toBe(true)
+      expect((await call('POST', '/api/whatsapp/send', { conversationId: 'wa-nube', text: 'Hola' }, admin.token)).status).toBe(400)
+    } finally {
+      delete process.env.WA_TOKEN
+      delete process.env.WA_PHONE_NUMBER_ID
+      delete process.env.WA_VERIFY_TOKEN
+      delete process.env.WA_APP_SECRET
+    }
   })
 
   it('rechaza datos con forma inválida', async () => {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BOOKABLE_SERVICES, COATS, SEXES, SIZES } from '../catalog'
 import { Field } from '../components/ui'
-import { addDays, isoDate, longDate, whatsappUrl } from '../format'
+import { addDays, isoDate, longDate } from '../format'
 import { useStore } from '../store'
 import { BOOKING_SLOTS as SLOTS, slotPassed, slotTaken } from '../visit'
 
@@ -12,7 +12,7 @@ export function Reservar() {
   const initialService = BOOKABLE_SERVICES.includes(requested) ? requested : 'Baño y corte'
   const { state, bookAppointment } = useStore()
   const [folio, setFolio] = useState<number | null>(null)
-  const [confirm, setConfirm] = useState('')
+  const [notified, setNotified] = useState(false)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const banner = useRef<HTMLParagraphElement>(null)
@@ -34,7 +34,7 @@ export function Reservar() {
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [key]: value }))
     setFolio(null)
-    setConfirm('')
+    setNotified(false)
   }
 
   const free = useMemo(
@@ -65,15 +65,10 @@ export function Reservar() {
         </div>
         {folio ? (
           <p className="banner" role="status" ref={banner}>
-            Tu cita #{folio} quedó agendada. Guarda el número de folio.{' '}
-            {confirm ? (
-              <>
-                Te llevamos a WhatsApp para confirmarla con nosotros…{' '}
-                <a href={confirm} rel="noreferrer">
-                  Abrir WhatsApp
-                </a>
-              </>
-            ) : null}
+            Tu cita #{folio} quedó agendada. Guarda el número de folio.
+            {notified
+              ? ' Te escribimos por WhatsApp con la confirmación.'
+              : ' Pronto te confirmamos por WhatsApp o por teléfono.'}
           </p>
         ) : null}
       </header>
@@ -110,22 +105,7 @@ export function Reservar() {
           }
           setError('')
           setFolio(created.folio)
-          const shop = state.settings.whatsapp.trim()
-          const link = shop
-            ? whatsappUrl(
-                shop,
-                [
-                  `Hola PUP'S, soy ${form.clientName.trim()}. Acabo de agendar en línea:`,
-                  `Folio #${created.folio}`,
-                  `Mascota: ${form.petName.trim()}${form.breed.trim() ? ` (${form.breed.trim()}, ${form.size.toLowerCase()})` : ` (${form.size.toLowerCase()})`}`,
-                  `Servicio: ${form.service}`,
-                  `Cuándo: ${longDate(form.date)} a las ${form.time}`,
-                  'Quedo pendiente de su confirmación.',
-                ].join('\n'),
-              )
-            : ''
-          setConfirm(link)
-          if (link) window.setTimeout(() => window.location.assign(link), 1800)
+          setNotified(Boolean(created.whatsapp))
           setForm((current) => ({ ...current, clientName: '', phone: '', petName: '', breed: '', allergies: '' }))
         }}
       >
@@ -254,8 +234,7 @@ export function Reservar() {
             {sending ? 'Agendando…' : 'Confirmar cita'}
           </button>
           <p className="hint">
-            {state.settings.whatsapp.trim() ? 'Al confirmar te llevamos a WhatsApp con los datos de la cita. ' : ''}El precio depende del tamaño y del estado del
-            pelaje; te lo confirmamos al recibir a tu mascota.
+            El precio depende del tamaño y del estado del pelaje; te lo confirmamos al recibir a tu mascota. Te escribimos por WhatsApp cuando la API del negocio esté activa.
           </p>
         </aside>
       </form>
