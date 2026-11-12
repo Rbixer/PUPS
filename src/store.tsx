@@ -99,7 +99,7 @@ function anonymous(data?: PublicData | null): AppState {
     phone: '',
     sex: '',
     breed: '',
-    service: item.minutes >= 90 ? 'Premium' : item.minutes <= 30 ? 'Consulta veterinaria' : 'Baño y corte',
+    service: item.minutes >= 90 ? 'Premium' : item.minutes <= 30 ? 'Corte higiénico' : 'Baño y corte',
     size: '',
     coat: '',
     allergies: '',

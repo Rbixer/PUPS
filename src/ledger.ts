@@ -313,7 +313,12 @@ function movementEntries(movement: Movement, context: Context): Entry[] {
       goods = gross ? round2((movement.amount * productGross) / gross) : 0
       services = round2(movement.amount - goods)
     }
-    const tax = regimeOn(context.settings, movement.date) === 'general' ? round2(movement.amount - movement.amount / (1 + IVA_RATE)) : 0
+    /** Solo los cobros marcados como facturados generan IVA débito en el régimen general. */
+    const invoiced = Boolean(movement.invoiced ?? sale?.invoiced)
+    const tax =
+      regimeOn(context.settings, movement.date) === 'general' && invoiced
+        ? round2(movement.amount - movement.amount / (1 + IVA_RATE))
+        : 0
     const goodsTax = movement.amount ? round2((tax * goods) / movement.amount) : 0
     const result: Entry[] = [
       {

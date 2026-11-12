@@ -51,7 +51,7 @@ const FAQ: { q: string; a: string; link?: { to: string; label: string } }[] = [
   },
   {
     q: '¿Cómo reservo una cita?',
-    a: 'En línea: eliges el servicio, el día y la hora, y nos cuentas el nombre, la raza y el tamaño de tu mascota. Al enviar te damos un número de folio y te llevamos a WhatsApp para confirmarla con nosotros.',
+    a: 'En línea: eliges el servicio, el día y la hora, y nos cuentas el nombre, la raza y el tamaño de tu mascota. Al enviar te damos un número de folio y te escribimos por WhatsApp para confirmarla.',
     link: { to: '/reservar', label: 'Reservar ahora' },
   },
   {

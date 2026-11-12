@@ -197,7 +197,7 @@ describe('auditoría contable', () => {
 
   it('una venta anulada no deja IVA por pagar', () => {
     const seed: AppState = { ...createSeed(), settings: { ...createSeed().settings, taxRegime: 'general' }, movements: [], sales: [], stockMoves: [] }
-    const sold = apply(seed, ops.recordSale(seed, { clientName: 'Ana', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 1, price: 112 }], discount: 0, method: 'Efectivo' }))
+    const sold = apply(seed, ops.recordSale(seed, { clientName: 'Ana', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 1, price: 112 }], discount: 0, method: 'Efectivo', invoiced: true }))
     const voided = apply(sold.state, ops.voidSale(sold.state, sold.value.id, 'Error de cobro')).state
     const month = taxMonths(buildJournal(voided), voided.settings, Number(today.slice(0, 4))).find((item) => item.month === today.slice(0, 7))!
     expect(month.debitTax).toBe(0)

@@ -375,7 +375,7 @@ describe('contabilidad', () => {
     state = withSupplier(state).state
     const supplierId = state.suppliers![0].id
     state = apply(state, ops.recordPurchase(state, { date: isoDate(), supplierId, invoice: 'F-1', withTax: true, lines: [{ productId: 'collar', description: 'Collar', qty: 5, cost: 22.4 }, { description: 'Toallas', qty: 1, cost: 56 }], terms: 'credito', notes: '' })).state
-    state = apply(state, ops.recordSale(state, { clientName: 'Eva', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 3, price: 45 }, { name: 'Baño', qty: 1, price: 112 }], discount: 0, method: 'Tarjeta' })).state
+    state = apply(state, ops.recordSale(state, { clientName: 'Eva', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 3, price: 45 }, { name: 'Baño', qty: 1, price: 112 }], discount: 0, method: 'Tarjeta', invoiced: true })).state
     state = apply(state, ops.payPayable(state, { payableId: state.payables![0].id, amount: 100, method: 'Efectivo', date: isoDate() })).state
     state = apply(state, ops.adjustStock(state, { productId: 'collar', qty: 1, kind: 'consumo', note: 'Se rompió' })).state
     state = apply(state, ops.savePayable(state, { date: isoDate(), dueDate: isoDate(), supplierName: 'Empresa eléctrica', invoice: '', concept: 'Luz', category: 'Luz', amount: 300 })).state
@@ -408,6 +408,16 @@ describe('contabilidad', () => {
     const sale = entries.find((entry) => entry.concept.startsWith('Venta'))!
     const iva = sale.lines.find((line) => line.code === '2104')!.credit
     expect(iva).toBe(Math.round((247 - 247 / 1.12) * 100) / 100)
+  })
+
+  it('en régimen general solo cobra IVA a los cobros facturados', () => {
+    const seed: AppState = { ...createSeed(), settings: { ...createSeed().settings, taxRegime: 'general' }, movements: [], sales: [], stockMoves: [] }
+    const billed = apply(seed, ops.recordSale(seed, { clientName: 'Ana', phone: '', lines: [{ name: 'Baño', qty: 1, price: 112 }], discount: 0, method: 'Efectivo', invoiced: true }))
+    const plain = apply(billed.state, ops.recordSale(billed.state, { clientName: 'Luis', phone: '', lines: [{ name: 'Baño', qty: 1, price: 112 }], discount: 0, method: 'Efectivo', invoiced: false }))
+    const entries = buildJournal(plain.state)
+    const ivaOf = (name: string) => entries.find((entry) => entry.concept.includes(name))?.lines.find((line) => line.code === '2104')?.credit ?? 0
+    expect(ivaOf('Ana')).toBe(Math.round((112 - 112 / 1.12) * 100) / 100)
+    expect(ivaOf('Luis')).toBe(0)
   })
 })
 

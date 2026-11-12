@@ -72,6 +72,7 @@
     color: var(--ink);
   }
   html[data-theme="dark"] .admin .record:hover,
+  html[data-theme="dark"] .admin .slot:hover,
   html[data-theme="dark"] .admin .kpi:hover { background: rgba(92, 225, 230, 0.08); }
   html[data-theme="dark"] .admin .wa-thread,
   html[data-theme="dark"] .admin .wa-row.active,

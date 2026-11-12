@@ -2102,7 +2102,9 @@ body:has(.nav.open) { overflow: hidden; }
   background: var(--surface);
 }
 .admin .slot:last-child { border-bottom: 0; }
-.admin .slot:hover { background: #f7f8fb; }
+@media (hover: hover) {
+  .admin .slot:hover { background: #f7f8fb; }
+}
 .admin .slot time {
   display: grid;
   place-items: center;
