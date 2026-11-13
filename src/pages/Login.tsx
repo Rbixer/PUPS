@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
 import { DEMO_MODE } from '../env'
+import { MODULES_PATH } from '../modules'
 import { useStore } from '../store'
 import { usePanelTheme } from '../theme'
 
@@ -23,7 +24,7 @@ export function Login() {
   }, [])
 
   const requested = (location.state as { from?: string } | null)?.from
-  const destination = requested && requested.startsWith('/admin') ? requested : '/admin'
+  const destination = requested && requested.startsWith('/admin') ? requested : MODULES_PATH
 
   if (currentUser) return <Navigate to={destination} replace />
 

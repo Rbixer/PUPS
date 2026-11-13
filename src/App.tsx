@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { allows, homeFor } from './access'
+import { MODULES_PATH } from './modules'
 import { useStore } from './store'
 import { InstallBanner, OfflineChip } from './components/InstallBanner'
 import { NoEncontrada, PublicLayout } from './pages/PublicLayout'
@@ -39,6 +40,7 @@ const Contabilidad = page(() => import('./pages/Contabilidad'), 'Contabilidad')
 const Tareas = page(() => import('./pages/Tareas'), 'Tareas')
 const Asistencia = page(() => import('./pages/Asistencia'), 'Asistencia')
 const ComprasEmpleados = page(() => import('./pages/ComprasEmpleados'), 'ComprasEmpleados')
+const Modulos = page(() => import('./pages/Modulos'), 'Modulos')
 
 const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
   { path: 'ventas', permission: 'caja', element: <Ventas /> },
@@ -97,7 +99,7 @@ function StaffChrome() {
 
 function AdminHome() {
   const { currentUser } = useStore()
-  return <Navigate to={currentUser ? homeFor(currentUser) : '/login'} replace />
+  return <Navigate to={currentUser ? MODULES_PATH : '/login'} replace />
 }
 
 function PublicTo({ path }: { path: string }) {
@@ -230,7 +232,9 @@ export function App() {
         {GUARDED.map((item) => (
           <Route key={item.path} path={item.path} element={<Guard permission={item.permission}>{item.element}</Guard>} />
         ))}
-        <Route path="asistencia" element={<Asistencia />} />        <Route path="*" element={<AdminHome />} />
+        <Route path="asistencia" element={<Asistencia />} />
+        <Route path="modulos" element={<Modulos />} />
+        <Route path="*" element={<AdminHome />} />
       </Route>
     </Routes>
     </Suspense>
