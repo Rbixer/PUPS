@@ -4,6 +4,7 @@ import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, newId, normalizePhone } from './format'
 import * as ops from './ops'
+import { resolvePetCode, slotTaken } from './visit'
 import type { ChargeNote, Op } from './ops'
 import type { ShopLine } from './shop'
 import type {
@@ -432,6 +433,7 @@ type Store = {
   recordDeposit: (input: { date: string; amount: number; bank: string; reference: string; note: string }) => Result<CashDeposit>
   removeDeposit: (id: string) => Result<null>
   recordEmployeePurchase: (input: Omit<Parameters<typeof ops.recordEmployeePurchase>[1], 'userId'>) => Result<Sale>
+  settleEmployeeCredit: (saleId: string, method: string) => Result<Movement>
   clockIn: () => Result<Attendance>
   clockOut: () => Result<Attendance>
   saveAttendance: (record: Attendance) => Result<Attendance>
@@ -788,12 +790,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       addAppointment: (appointment, method, invoiced) =>
         run('citas', (current) => {
+          if (slotTaken(current.appointments, appointment.date, appointment.time, appointment.service)) {
+            return { ok: false, error: 'Ese horario ya tiene 3 citas. Elige otro.' }
+          }
           const employeeCode = (appointment.employeeCode || currentUser?.employeeCode || '').trim()
+          const phone = normalizePhone(appointment.phone)
+          const petCode = resolvePetCode(current.appointments, { ...appointment, phone })
           const next: Appointment = {
             ...appointment,
             id: newId(),
             folio: ops.nextFolio(current),
-            phone: normalizePhone(appointment.phone),
+            phone,
+            petCode,
             employeeCode: employeeCode || undefined,
             employeeId: employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined,
           }
@@ -819,6 +827,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             folio: previous.folio,
             phone: nextPatch.phone !== undefined ? normalizePhone(nextPatch.phone) : previous.phone,
           }
+          if (
+            (next.date !== previous.date || next.time !== previous.time || next.service !== previous.service) &&
+            slotTaken(current.appointments, next.date, next.time, next.service, next.id)
+          ) {
+            return { ok: false, error: 'Ese horario ya tiene 3 citas. Elige otro.' }
+          }
+          if (!next.petCode?.trim()) next.petCode = resolvePetCode(current.appointments.filter((item) => item.id !== id), next)
           const charged = ops.chargeAppointment(current, next, method, can('caja'), invoiced)
           if (!charged.ok) return charged
           return {
@@ -954,6 +969,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       recordDeposit: (input) => run('caja', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
       removeDeposit: (id) => run('caja', (current) => ops.removeDeposit(current, id)),
       recordEmployeePurchase: (input) => run('caja', (current) => ops.recordEmployeePurchase(current, { ...input, userId: currentUser?.id })),
+      settleEmployeeCredit: (saleId, method) => run('caja', (current) => ops.settleEmployeeCredit(current, saleId, method)),
       clockIn: () => run(null, (current) => ops.clockIn(current, currentUser?.id ?? '')),
       clockOut: () => run(null, (current) => ops.clockOut(current, currentUser?.id ?? '')),
       saveAttendance: (record) => run('planilla', (current) => ops.saveAttendance(current, record)),

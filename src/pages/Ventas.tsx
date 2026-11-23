@@ -3,7 +3,7 @@ import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Dialog, Field, Flash, InvoiceChoice, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { round2 } from '../ops'
-import { SHOP_CATEGORY_NAMES, shelfOf } from '../shop'
+import { categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
 import type { Sale } from '../types'
 
@@ -129,7 +129,7 @@ function Register() {
         <div className="pos-tools">
           <input type="search" placeholder="Buscar producto o código" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar producto" />
           <div className="tabs" role="tablist" aria-label="Categorías">
-            {['Todo', ...SHOP_CATEGORY_NAMES.filter((name) => name !== 'Insumos')].map((name) => (
+            {['Todo', ...categoryNames(state.settings)].map((name) => (
               <button key={name} type="button" role="tab" aria-selected={category === name} onClick={() => setCategory(name)}>
                 {name}
               </button>

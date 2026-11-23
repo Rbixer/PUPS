@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
-import { employeeOwed, PAYROLL_DEDUCTION, round2 } from '../ops'
+import { EMPLOYEE_CREDIT, employeeOwed, PAYROLL_DEDUCTION, round2 } from '../ops'
 import { workersOf } from '../payroll'
 import { shelfOf } from '../shop'
 import { useStore } from '../store'
@@ -19,7 +19,7 @@ export function ComprasEmpleados() {
           <p className="eyebrow">Ventas y caja</p>
           <h1>Compras de empleados</h1>
           <p className="lede">
-            Productos que se lleva el equipo. Se pagan al contado o se descuentan en la siguiente planilla; en los dos casos la existencia baja en ese momento.
+            Productos que se lleva el equipo. Se pagan al contado o quedan a crédito (sin descuento en planilla); en los dos casos la existencia baja en ese momento.
           </p>
         </div>
       </header>
@@ -39,7 +39,7 @@ function PurchaseForm() {
   const [employeeId, setEmployeeId] = useState('')
   const [lines, setLines] = useState<Line[]>([blankLine()])
   const [discount, setDiscount] = useState('')
-  const [payroll, setPayroll] = useState(false)
+  const [credit, setCredit] = useState(false)
   const [method, setMethod] = useState<string>('Efectivo')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -59,7 +59,8 @@ function PurchaseForm() {
         event.preventDefault()
         const result = recordEmployeePurchase({
           employeeId,
-          method: payroll ? PAYROLL_DEDUCTION : method,
+          method: credit ? EMPLOYEE_CREDIT : method,
+          credit,
           discount: amountOf(discount) || 0,
           lines: lines
             .filter((line) => line.productId)
@@ -77,8 +78,8 @@ function PurchaseForm() {
         }
         setError('')
         setNotice(
-          payroll
-            ? `${result.value.number}: ${money(result.value.total)} quedan por descontar a ${result.value.clientName} en la planilla.`
+          credit
+            ? `${result.value.number}: ${money(result.value.total)} quedan a crédito de ${result.value.clientName}.`
             : `${result.value.number}: ${result.value.clientName} pagó ${money(result.value.total)} en ${method.toLowerCase()}.`,
         )
         setLines([blankLine()])
@@ -134,7 +135,7 @@ function PurchaseForm() {
         <Field label="Descuento (Q)">
           <input className="num" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value)} placeholder="0" />
         </Field>
-        {payroll ? null : (
+        {credit ? null : (
           <Field label="Pagó con">
             <select value={method} onChange={(event) => setMethod(event.target.value)}>
               {METHODS.map((item) => (
@@ -145,16 +146,16 @@ function PurchaseForm() {
         )}
       </div>
       <div className="choice-row" role="group" aria-label="Forma de pago">
-        <button type="button" aria-pressed={!payroll} onClick={() => setPayroll(false)}>
-          Paga al contado
+        <button type="button" aria-pressed={!credit} onClick={() => setCredit(false)}>
+          Contado
         </button>
-        <button type="button" aria-pressed={payroll} onClick={() => setPayroll(true)}>
-          Descuento en planilla
+        <button type="button" aria-pressed={credit} onClick={() => setCredit(true)}>
+          Crédito
         </button>
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        {payroll
-          ? 'No entra dinero a caja ahora. El monto aparece en los descuentos de su próxima planilla.'
+        {credit
+          ? 'No entra dinero a caja ahora. Queda por cobrar al trabajador; no se descuenta de planilla.'
           : 'Entra a caja como venta sin factura, con el nombre del trabajador.'}
       </p>
       <div className="biz-row" style={{ justifyContent: 'space-between' }}>
@@ -171,15 +172,20 @@ function PurchaseForm() {
 }
 
 function Owed() {
-  const { state } = useStore()
+  const { state, settleEmployeeCredit } = useStore()
+  const [payMethod, setPayMethod] = useState('Efectivo')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const pending = (state.sales ?? []).filter((item) => item.employeeId && item.method === EMPLOYEE_CREDIT && item.status === 'por cobrar')
   const rows = workersOf(state.users)
     .map((user) => ({ user, owed: employeeOwed(state, user.id) }))
     .filter((row) => row.owed > 0)
+
   return (
     <article className="panel">
-      <h2>Por descontar en planilla</h2>
+      <h2>Por cobrar</h2>
       {rows.length === 0 ? (
-        <p className="empty">Nadie tiene compras pendientes de descontar.</p>
+        <p className="empty">Nadie tiene compras a crédito pendientes.</p>
       ) : (
         <ul className="owed-list">
           {rows.map(({ user, owed }) => (
@@ -193,7 +199,46 @@ function Owed() {
           ))}
         </ul>
       )}
-      <p className="hint">Se descuenta solo al pagar la planilla del mes; si el líquido no alcanza, el resto queda para la siguiente.</p>
+      {pending.length ? (
+        <div className="biz-stack" style={{ marginTop: 12 }}>
+          <Field label="Al cobrar usa">
+            <select value={payMethod} onChange={(event) => setPayMethod(event.target.value)}>
+              {METHODS.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </Field>
+          <ul className="owed-list">
+            {pending.map((sale) => (
+              <li key={sale.id}>
+                <span>
+                  {sale.number} · {sale.clientName}
+                  <small>{longDate(sale.date)} · {money(sale.total)}</small>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const result = settleEmployeeCredit(sale.id, payMethod)
+                    if (!result.ok) {
+                      setError(result.error)
+                      setNotice('')
+                      return
+                    }
+                    setError('')
+                    setNotice(`Se cobró ${sale.number} con ${payMethod.toLowerCase()}.`)
+                  }}
+                >
+                  Cobrar
+                </button>
+              </li>
+            ))}
+          </ul>
+          <Flash error={error} notice={notice} />
+        </div>
+      ) : (
+        <p className="hint">El crédito no se descuenta de planilla: se cobra aquí cuando el trabajador paga.</p>
+      )}
     </article>
   )
 }
@@ -203,7 +248,9 @@ function History() {
   const [cursor, setCursor] = useState(() => isoDate().slice(0, 7))
   const sales = (state.sales ?? []).filter((item) => item.employeeId && item.date.startsWith(cursor))
   const live = sales.filter((item) => item.status !== 'anulada')
+  const onCredit = live.filter((item) => item.method === EMPLOYEE_CREDIT)
   const onPayroll = live.filter((item) => item.method === PAYROLL_DEDUCTION)
+  const cash = live.filter((item) => item.method !== EMPLOYEE_CREDIT && item.method !== PAYROLL_DEDUCTION)
   const sum = (items: typeof sales) => money(round2(items.reduce((total, item) => total + item.total, 0)))
   return (
     <div className="biz-stack">
@@ -219,13 +266,15 @@ function History() {
       <Metrics
         items={[
           { label: 'Compras del mes', value: sum(live), tone: 'hot', detail: count(live.length, 'compra', 'compras') },
-          { label: 'Al contado', value: sum(live.filter((item) => item.method !== PAYROLL_DEDUCTION)) },
-          { label: 'Con descuento en planilla', value: sum(onPayroll), detail: count(onPayroll.length, 'compra', 'compras') },
+          { label: 'Al contado', value: sum(cash) },
+          { label: 'A crédito', value: sum(onCredit), detail: count(onCredit.length, 'compra', 'compras') },
         ]}
       />
       <div className="ledger">
         {sales.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Este mes no hay compras de empleados.</p>
+          <p className="empty" style={{ margin: 14 }}>
+            Este mes no hay compras de empleados.
+          </p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">
@@ -251,8 +300,10 @@ function History() {
                     <td>
                       {sale.status === 'anulada' ? (
                         <Tag tone="mute">Anulada</Tag>
+                      ) : sale.method === EMPLOYEE_CREDIT && sale.status === 'por cobrar' ? (
+                        <Tag tone="warn">Crédito</Tag>
                       ) : sale.method === PAYROLL_DEDUCTION ? (
-                        <Tag tone="warn">Planilla</Tag>
+                        <Tag tone="warn">Planilla (legado)</Tag>
                       ) : (
                         <Tag tone="ok">{sale.method}</Tag>
                       )}
@@ -264,7 +315,10 @@ function History() {
             </table>
           </div>
         )}
-        <p className="section-note">Para anular una compra usa Punto de venta › Historial; la existencia regresa y, si era por planilla, ya no se descuenta.</p>
+        <p className="section-note">
+          Para anular una compra usa Punto de venta › Historial; la existencia regresa
+          {onPayroll.length ? ' y, si era por planilla, ya no se descuenta' : ''}.
+        </p>
       </div>
     </div>
   )

@@ -7,7 +7,7 @@ import { Dialog, Field, InvoiceChoice, StatusPill } from '../components/ui'
 import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, parseAmount, shiftMonth, show } from '../format'
 import { useStore, type ChargeNote, type Result } from '../store'
 import type { Appointment, AppointmentStatus } from '../types'
-import { overlaps, petFiles, petKey, visitMinutes } from '../visit'
+import { overlaps, petFiles, petKey, SLOT_CAPACITY, visitMinutes } from '../visit'
 
 type Draft = {
   petName: string
@@ -24,6 +24,7 @@ type Draft = {
   allergies: string
   cost: string
   employeeCode: string
+  petCode: string
 }
 
 function blankDraft(): Draft {
@@ -42,6 +43,7 @@ function blankDraft(): Draft {
     allergies: '',
     cost: '',
     employeeCode: '',
+    petCode: '',
   }
 }
 
@@ -61,6 +63,7 @@ function fromAppointment(item: Appointment): Draft {
     allergies: item.allergies,
     cost: String(item.cost),
     employeeCode: item.employeeCode ?? '',
+    petCode: item.petCode ?? '',
   }
 }
 
@@ -424,20 +427,22 @@ export function Citas() {
                 <div>
                   <strong>
                     #{item.folio} · {formatName(item.petName)}
+                    {item.petCode ? ` · ${item.petCode}` : ''}
                   </strong>
                   <span>
                     {formatName(item.clientName)} · {show(item.service)} · {visitMinutes(item)} min
                     {item.employeeCode ? ` · ${item.employeeCode}` : ''}
                   </span>
-                  {state.appointments.some((other) => overlaps(item, other)) ? (
-                    <em className="clash">
-                      Se cruza con{' '}
-                      {state.appointments
-                        .filter((other) => overlaps(item, other))
-                        .map((other) => `${formatName(other.petName)} ${other.time}`)
-                        .join(', ')}
-                    </em>
-                  ) : null}
+                  {(() => {
+                    const peers = state.appointments.filter((other) => overlaps(item, other))
+                    if (peers.length === 0) return null
+                    return (
+                      <em className="clash">
+                        {peers.length + 1}/{SLOT_CAPACITY} en este horario ·{' '}
+                        {peers.map((other) => `${formatName(other.petName)} ${other.time}`).join(', ')}
+                      </em>
+                    )
+                  })()}
                 </div>
                 <StatusPill status={item.status} />
                 <b className="num">{money(item.cost)}</b>
@@ -512,6 +517,7 @@ export function Citas() {
                 allergies: draft.allergies.trim(),
                 cost: allows('costos') || editing === 'new' ? cost : editing.cost,
                 employeeCode: draft.employeeCode,
+                petCode: draft.petCode.trim() || undefined,
               }
               const charging = payload.status === 'completada' && (editing === 'new' || editing.status !== 'completada')
               const method = charging ? payMethod : undefined
@@ -536,6 +542,14 @@ export function Citas() {
             <div className="drawer-grid">
               <Field label="Mascota">
                 <input value={draft.petName} onChange={(event) => patch('petName', event.target.value)} required />
+              </Field>
+              <Field label="Código de mascota">
+                <input
+                  className="num"
+                  value={draft.petCode}
+                  onChange={(event) => patch('petCode', event.target.value)}
+                  placeholder={editing === 'new' ? 'Se asigna al guardar' : 'P-1001'}
+                />
               </Field>
               <Field label="Cliente">
                 <input value={draft.clientName} onChange={(event) => patch('clientName', event.target.value)} required />

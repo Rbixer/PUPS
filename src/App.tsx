@@ -41,6 +41,7 @@ const Tareas = page(() => import('./pages/Tareas'), 'Tareas')
 const Asistencia = page(() => import('./pages/Asistencia'), 'Asistencia')
 const ComprasEmpleados = page(() => import('./pages/ComprasEmpleados'), 'ComprasEmpleados')
 const Modulos = page(() => import('./pages/Modulos'), 'Modulos')
+const Conforme = page(() => import('./pages/Conforme'), 'Conforme')
 
 const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
   { path: 'ventas', permission: 'caja', element: <Ventas /> },
@@ -52,7 +53,6 @@ const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = 
   { path: 'gastos', permission: 'compras', element: <Gastos /> },
   { path: 'por-pagar', permission: 'compras', element: <CuentasPorPagar /> },
   { path: 'planilla', permission: 'planilla', element: <Planilla /> },
-  { path: 'contabilidad', permission: 'contabilidad', element: <Contabilidad /> },
   { path: 'tareas', permission: 'tareas', element: <Tareas /> },
 ]
 
@@ -82,6 +82,16 @@ function Guard({ permission, children }: { permission: Permission; children: Rea
   const { currentUser, booting } = useStore()
   if (!currentUser) return booting ? <Loading /> : <ToLogin />
   if (!allows(currentUser, permission)) return <Navigate to={homeFor(currentUser)} replace />
+  return children
+}
+
+/** Contabilidad es el hub de compras/gastos/planilla: entra quien tenga cualquiera de esos permisos. */
+function GuardContabilidad({ children }: { children: ReactNode }) {
+  const { currentUser, booting } = useStore()
+  if (!currentUser) return booting ? <Loading /> : <ToLogin />
+  if (!allows(currentUser, 'contabilidad') && !allows(currentUser, 'compras') && !allows(currentUser, 'planilla')) {
+    return <Navigate to={homeFor(currentUser)} replace />
+  }
   return children
 }
 
@@ -125,6 +135,7 @@ export function App() {
       <Route path="admin/reservar" element={<PublicTo path="/reservar" />} />
       <Route path="admin/contacto" element={<PublicTo path="/contacto" />} />
       <Route path="login" element={<Login />} />
+      <Route path="conforme/:token" element={<Conforme />} />
       <Route
         path="admin"
         element={
@@ -232,6 +243,14 @@ export function App() {
         {GUARDED.map((item) => (
           <Route key={item.path} path={item.path} element={<Guard permission={item.permission}>{item.element}</Guard>} />
         ))}
+        <Route
+          path="contabilidad"
+          element={
+            <GuardContabilidad>
+              <Contabilidad />
+            </GuardContabilidad>
+          }
+        />
         <Route path="asistencia" element={<Asistencia />} />
         <Route path="modulos" element={<Modulos />} />
         <Route path="*" element={<AdminHome />} />

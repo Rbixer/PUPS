@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog, Field } from './ui'
 import { SEXES } from '../catalog'
-import { formatName, longDate, money } from '../format'
+import { formatName, longDate, money, newId } from '../format'
 import { BEHAVIOR_AREAS, EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_SLOTS, readReport } from '../grooming'
 import { shrinkImage } from '../image'
 import type { Appointment, BehaviorArea, CheckItem, GroomingPackage, GroomingReport, Mark } from '../types'
@@ -140,6 +140,16 @@ export function Constancia({
   }
 
   function save() {
+    const ackToken = report.ackToken || newId().replace(/-/g, '').slice(0, 24)
+    const nextReport: GroomingReport = {
+      ...report,
+      address: report.address.trim(),
+      age: report.age.trim(),
+      weight: report.weight.trim(),
+      recommendations: report.recommendations.trim(),
+      savedAt: new Date().toISOString(),
+      ackToken,
+    }
     const problem = onSave({
       clientName: draft.clientName.trim(),
       phone: draft.phone.trim(),
@@ -147,20 +157,16 @@ export function Constancia({
       breed: draft.breed.trim(),
       sex: draft.sex,
       allergies: draft.allergies.trim(),
-      report: {
-        ...report,
-        address: report.address.trim(),
-        age: report.age.trim(),
-        weight: report.weight.trim(),
-        recommendations: report.recommendations.trim(),
-        savedAt: new Date().toISOString(),
-      },
+      report: nextReport,
       beforePhoto: report.photos[0] ?? '',
       afterPhoto: report.photos[2] ?? '',
     })
     setSaveError(problem ?? '')
     setSaved(!problem)
-    if (!problem) setDirty(false)
+    if (!problem) {
+      setDirty(false)
+      if (!report.ackToken) setDraft((current) => ({ ...current, report: { ...current.report, ackToken } }))
+    }
     return !problem
   }
 
@@ -179,13 +185,22 @@ export function Constancia({
   const encargadoLines = [draft.clientName.trim() ? formatName(draft.clientName) : '', draft.phone.trim(), report.address.trim()].filter(
     (line) => line.trim() !== '' && line !== '—',
   )
-  const petTitle = [draft.petName.trim() ? formatName(draft.petName) : '', draft.breed.trim() ? formatName(draft.breed) : '']
+  const petTitle = [
+    draft.petName.trim() ? formatName(draft.petName) : '',
+    appointment.petCode?.trim() || '',
+    draft.breed.trim() ? formatName(draft.breed) : '',
+  ]
     .filter((line) => line.trim() !== '' && line !== '—')
     .join(' · ')
   const petMeta = [draft.sex.trim(), markLabel(report.castrated), report.age.trim(), report.weight.trim()].filter((line) => line.trim() !== '').join(' · ')
   const allergy = draft.allergies.trim()
   const ingresoPicked = pickedItems(INGRESO_ITEMS, report.ingreso)
   const egresoPicked = pickedItems(EGRESO_ITEMS, report.egreso)
+  const ackToken = report.ackToken || ''
+  const conformeUrl = ackToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/conforme/${ackToken}` : ''
+  const qrSrc = conformeUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=8&data=${encodeURIComponent(conformeUrl)}`
+    : ''
 
   const sheet = (
     <div className={embedded ? 'constancia-page' : 'report-shell'}>
@@ -472,6 +487,11 @@ export function Constancia({
           </section>
 
           {saved ? <p className="banner">Constancia guardada. Ya se puede ver en Constancias.</p> : null}
+          {report.ackedAt ? (
+            <p className="banner">El cliente marcó Conforme el {longDate(report.ackedAt.slice(0, 10))}.</p>
+          ) : report.ackToken ? (
+            <p className="hint">Al imprimir sale el QR para que el cliente marque Conforme en su celular.</p>
+          ) : null}
           {saveError ? (
             <p className="form-error" role="alert">
               {saveError}
@@ -558,6 +578,22 @@ export function Constancia({
               <span>Revisé cómo llegó</span>
               <span>Recibí el egreso</span>
             </div>
+            {conformeUrl ? (
+              <div className="sheet-conforme">
+                {qrSrc ? <img src={qrSrc} alt="Código QR para marcar Conforme" width={100} height={100} /> : null}
+                <div>
+                  <strong>Conforme</strong>
+                  {report.ackedAt ? (
+                    <p>Registrado el {longDate(report.ackedAt.slice(0, 10))}.</p>
+                  ) : (
+                    <p>
+                      Escanea el código o abre{' '}
+                      <a href={conformeUrl}>{conformeUrl.replace(/^https?:\/\//, '')}</a> y toca Conforme.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <p className="sheet-foot">PUP'S · Pet Shop y Grooming · Constancia #{appointment.folio}</p>
           </footer>
         </article>

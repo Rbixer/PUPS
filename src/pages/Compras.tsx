@@ -3,7 +3,7 @@ import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, isoDate, longDate, money } from '../format'
 import { payableBalance, purchaseSplit, round2 } from '../ops'
-import { shelfOf, SHOP_CATEGORY_NAMES } from '../shop'
+import { BASE_CATEGORY_NAMES, categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
 import type { ProductUse, Purchase, ShopCategoryName, Supplier } from '../types'
 
@@ -32,7 +32,7 @@ const blankLine = (): Draft => ({
   use: 'venta',
   unit: 'pieza',
   price: '',
-  category: SHOP_CATEGORY_NAMES[0],
+  category: BASE_CATEGORY_NAMES[0],
 })
 
 const USE_LABEL: Record<ProductUse, string> = { venta: 'Para venta', insumo: 'Uso en servicio' }
@@ -265,7 +265,7 @@ function NewPurchase({ onNeedSupplier }: { onNeedSupplier: () => void }) {
                   <>
                     <Field label="Categoría">
                       <select value={line.category} onChange={(event) => setLine(index, { category: event.target.value as ShopCategoryName })}>
-                        {SHOP_CATEGORY_NAMES.map((item) => (
+                        {categoryNames(state.settings).map((item) => (
                           <option key={item}>{item}</option>
                         ))}
                       </select>

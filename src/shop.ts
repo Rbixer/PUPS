@@ -1,12 +1,43 @@
-import type { CatalogItem, ShopCategoryName } from './types'
+import type { CatalogItem, Settings, ShopCategoryName } from './types'
 
-export const SHOP_CATEGORIES = ['Todo', 'Shampoo', 'Accesorios', 'Cuidado', 'Snacks'] as const
-
-export type ShopCategory = (typeof SHOP_CATEGORIES)[number]
+/** Categorías fijas del inventario. */
+export const BASE_CATEGORY_NAMES = ['Accesorios', 'Alimento', 'Baño medicado', 'Consumible'] as const
 
 export type ShopProduct = CatalogItem
 
-export const SHOP_CATEGORY_NAMES: ShopCategoryName[] = ['Shampoo', 'Accesorios', 'Cuidado', 'Snacks']
+const LEGACY_CATEGORY: Record<string, ShopCategoryName> = {
+  Shampoo: 'Baño medicado',
+  Cuidado: 'Baño medicado',
+  Snacks: 'Alimento',
+  Insumos: 'Consumible',
+  Accesorios: 'Accesorios',
+}
+
+export function normalizeCategory(value: string | undefined): ShopCategoryName {
+  const name = (value ?? '').trim()
+  if (!name) return 'Consumible'
+  return LEGACY_CATEGORY[name] ?? name
+}
+
+/** Categorías base + las que agregó el negocio. */
+export function categoryNames(settings?: Pick<Settings, 'productCategories'> | null): ShopCategoryName[] {
+  const extras = (settings?.productCategories ?? []).map((item) => item.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  const list: ShopCategoryName[] = []
+  for (const name of [...BASE_CATEGORY_NAMES, ...extras]) {
+    if (seen.has(name)) continue
+    seen.add(name)
+    list.push(name)
+  }
+  return list
+}
+
+/** @deprecated Usa categoryNames(settings). Se mantiene para selects que aún no pasan settings. */
+export const SHOP_CATEGORY_NAMES: ShopCategoryName[] = [...BASE_CATEGORY_NAMES]
+
+export const SHOP_CATEGORIES = ['Todo', ...BASE_CATEGORY_NAMES] as const
+
+export type ShopCategory = (typeof SHOP_CATEGORIES)[number]
 
 /** Catálogo de demostración. No usa marcas comerciales. */
 export const SHOP_PRODUCTS: ShopProduct[] = [
@@ -16,7 +47,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Shampoo suave',
     detail: 'Para piel sensible. Baño frecuente sin resecar el manto.',
-    category: 'Shampoo',
+    category: 'Baño medicado',
     price: 85,
     unit: '250 ml',
     stock: 14,
@@ -28,7 +59,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Shampoo para manto claro',
     detail: 'Limpia sin teñir. Pensado para pelaje blanco o crema.',
-    category: 'Shampoo',
+    category: 'Baño medicado',
     price: 79,
     unit: '250 ml',
     stock: 9,
@@ -40,7 +71,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Acondicionador desenredante',
     detail: 'Después del baño. Suelta nudos en pelo largo.',
-    category: 'Shampoo',
+    category: 'Baño medicado',
     price: 72,
     unit: '250 ml',
     stock: 11,
@@ -88,7 +119,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Peine de púas',
     detail: 'Para nudos sueltos y el acabado después del corte.',
-    category: 'Cuidado',
+    category: 'Consumible',
     price: 38,
     unit: 'pieza',
     stock: 20,
@@ -100,7 +131,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Cepillo de carda',
     detail: 'Saca el pelo muerto en mantos largos.',
-    category: 'Cuidado',
+    category: 'Consumible',
     price: 62,
     unit: 'pieza',
     stock: 8,
@@ -112,7 +143,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Cortaúñas',
     detail: 'Para el corte de uñas entre visitas.',
-    category: 'Cuidado',
+    category: 'Consumible',
     price: 35,
     unit: 'pieza',
     stock: 15,
@@ -124,7 +155,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Toallitas de oídos',
     detail: 'Limpieza suave de oídos entre un baño y otro.',
-    category: 'Cuidado',
+    category: 'Consumible',
     price: 42,
     unit: '50 unidades',
     stock: 10,
@@ -136,7 +167,7 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
     minStock: 5,
     name: 'Snack de entrenamiento',
     detail: 'Trocitos suaves. Porción chica para la sesión.',
-    category: 'Snacks',
+    category: 'Alimento',
     price: 28,
     unit: '100 g',
     stock: 22,
@@ -145,12 +176,13 @@ export const SHOP_PRODUCTS: ShopProduct[] = [
 ]
 
 export function demoCatalog(): CatalogItem[] {
-  return SHOP_PRODUCTS.map((item) => ({ ...item, active: true }))
+  return SHOP_PRODUCTS.map((item) => ({ ...item, active: true, category: normalizeCategory(item.category) }))
 }
 
 /** Catálogo guardado. Solo un estado antiguo sin catálogo usa el de muestra; uno vacío se queda vacío. */
 export function shelfOf(products?: CatalogItem[]): CatalogItem[] {
-  return products ?? demoCatalog()
+  const list = products ?? demoCatalog()
+  return list.map((item) => ({ ...item, category: normalizeCategory(item.category) }))
 }
 
 export function visibleCatalog(products?: CatalogItem[]): CatalogItem[] {

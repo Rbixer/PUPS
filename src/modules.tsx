@@ -27,19 +27,16 @@ export const MODULE_GROUPS: ModuleGroup[] = [
       { to: '/admin/ingresos', label: 'Registrar ingreso', detail: 'Entradas de dinero fuera del punto de venta.', end: false, permission: 'caja' },
       { to: '/admin/egresos', label: 'Documento de egreso', detail: 'Constancia de salida de la mascota y salidas de caja.', end: false, permission: 'caja' },
       { to: '/admin/corte', label: 'Corte de caja', detail: 'Cierre acumulado y depósitos al banco.', end: false, permission: 'caja' },
-      { to: '/admin/compras-empleados', label: 'Compras de empleados', detail: 'Al contado o con descuento en planilla.', end: false, permission: 'caja' },
+      { to: '/admin/compras-empleados', label: 'Compras de empleados', detail: 'Al contado o a crédito (sin planilla).', end: false, permission: 'caja' },
       { to: '/admin/constancias', label: 'Constancias', detail: 'Constancias de visita guardadas.', end: false, permission: 'caja' },
     ],
   },
   {
     id: 'compras',
-    label: 'Compras y gastos',
+    label: 'Inventario',
     tone: '#7a5cc8',
     links: [
-      { to: '/admin/compras', label: 'Compras', detail: 'Compras a proveedores que alimentan el inventario.', end: false, permission: 'compras' },
       { to: '/admin/inventario', label: 'Inventario', detail: 'Existencias para venta e insumos de grooming.', end: false, permission: 'compras' },
-      { to: '/admin/gastos', label: 'Gastos', detail: 'Caja chica, rubros y pago de servicios.', end: false, permission: 'compras' },
-      { to: '/admin/por-pagar', label: 'Facturas por pagar', detail: 'Lo que se debe a proveedores.', end: false, permission: 'compras' },
     ],
   },
   {
@@ -47,8 +44,14 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     label: 'Finanzas',
     tone: '#2e9a6a',
     links: [
-      { to: '/admin/planilla', label: 'Planilla', detail: 'Pago, comisiones, metas y pasivo laboral.', end: false, permission: 'planilla' },
-      { to: '/admin/contabilidad', label: 'Contabilidad', detail: 'Libro diario, resultados, balance e impuestos.', end: false, permission: 'contabilidad' },
+      {
+        to: '/admin/contabilidad',
+        label: 'Contabilidad',
+        detail: 'Libro, gastos, planilla, facturas por pagar y compras.',
+        end: false,
+        /** Visible si tiene contabilidad, compras o planilla; el filtro real está en Modulos. */
+        permission: 'contabilidad',
+      },
       { to: '/admin/estadisticas', label: 'Estadísticas', detail: 'Cómo va el mes en números.', end: false, permission: 'estadisticas' },
       { to: '/admin/control', label: 'Control general', detail: 'Resumen anual de paquetes, ingresos y gastos.', end: false, permission: 'equipo' },
     ],
@@ -67,7 +70,25 @@ export const MODULE_GROUPS: ModuleGroup[] = [
 
 export const MODULES_PATH = '/admin/modulos'
 
-const ALL_LINKS = MODULE_GROUPS.flatMap((group) => group.links.map((link) => ({ ...link, group })))
+/** Módulos que viven dentro de Contabilidad (no salen en el lanzador principal). */
+export const ACCOUNTING_LINKS: ModuleLink[] = [
+  { to: '/admin/compras', label: 'Compras', detail: 'Compras a proveedores que alimentan el inventario.', end: false, permission: 'compras' },
+  { to: '/admin/gastos', label: 'Gastos', detail: 'Caja chica, rubros y pago de servicios.', end: false, permission: 'compras' },
+  { to: '/admin/por-pagar', label: 'Facturas por pagar', detail: 'Lo que se debe a proveedores.', end: false, permission: 'compras' },
+  { to: '/admin/planilla', label: 'Planilla', detail: 'Pago, comisiones, metas y pasivo laboral.', end: false, permission: 'planilla' },
+]
+
+const ACCOUNTING_GROUP: ModuleGroup = {
+  id: 'contabilidad-hub',
+  label: 'Contabilidad',
+  tone: '#2e9a6a',
+  links: ACCOUNTING_LINKS,
+}
+
+const ALL_LINKS = [
+  ...MODULE_GROUPS.flatMap((group) => group.links.map((link) => ({ ...link, group }))),
+  ...ACCOUNTING_LINKS.map((link) => ({ ...link, group: ACCOUNTING_GROUP })),
+]
 
 export function moduleAt(pathname: string) {
   return ALL_LINKS.find((link) => (link.end ? pathname === link.to : pathname.startsWith(link.to)))

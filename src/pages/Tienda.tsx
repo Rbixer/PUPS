@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Field } from '../components/ui'
 import { money, newId, parseAmount } from '../format'
 import { shrinkImage } from '../image'
-import { SHOP_CATEGORY_NAMES, shelfOf } from '../shop'
+import { categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
 import type { CatalogItem, ShopCategoryName } from '../types'
 
@@ -99,7 +99,7 @@ export function Tienda() {
           </Field>
           <Field label="Categoría">
             <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as ShopCategoryName })}>
-              {SHOP_CATEGORY_NAMES.map((item) => (
+              {categoryNames(state.settings).map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>

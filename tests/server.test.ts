@@ -214,12 +214,14 @@ describe('servidor', () => {
     expect(networkOf('::ffff:10.0.0.1')).toBe('10.0.0.1')
   })
 
-  it('la reserva pública rechaza horas pasadas y horarios ocupados', async () => {
+  it('la reserva pública rechaza horas pasadas y horarios con 3 citas', async () => {
     const booking = { clientName: 'Ana', phone: '55550000', petName: 'Toby', service: SERVICE_NAMES[0], date: addDays(isoDate(), 2), time: '10:00' }
     expect((await call('POST', '/api/public/booking', { ...booking, date: addDays(isoDate(), -1) })).status).toBe(400)
-    const first = await call('POST', '/api/public/booking', booking)
-    expect(first.status).toBe(200)
-    expect(first.body.folio).toBeGreaterThan(0)
-    expect((await call('POST', '/api/public/booking', booking)).status).toBe(409)
+    for (let i = 0; i < 3; i += 1) {
+      const result = await call('POST', '/api/public/booking', { ...booking, petName: `Toby${i}`, phone: `5555000${i}` })
+      expect(result.status).toBe(200)
+      expect(result.body.folio).toBeGreaterThan(0)
+    }
+    expect((await call('POST', '/api/public/booking', { ...booking, petName: 'TobyX', phone: '55550999' })).status).toBe(409)
   })
 })

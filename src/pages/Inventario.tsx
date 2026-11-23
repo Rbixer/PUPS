@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, longDate, money, newId } from '../format'
 import { round2 } from '../ops'
-import { shelfOf } from '../shop'
+import { categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
 import type { CatalogItem, StockKind } from '../types'
 
@@ -16,23 +16,25 @@ const KIND_LABEL: Record<StockKind, string> = {
   anulación: 'Anulación',
 }
 
-type Filter = 'todo' | 'bajo' | 'venta' | 'insumo'
+type Filter = 'todo' | 'bajo' | string
 
 function low(item: CatalogItem) {
   return item.stock <= (item.minStock ?? 0)
 }
 
 export function Inventario() {
-  const { state, allows } = useStore()
+  const { state, allows, updateSettings } = useStore()
   const products = shelfOf(state.products)
+  const categories = categoryNames(state.settings)
   const [filter, setFilter] = useState<Filter>('todo')
   const [picked, setPicked] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [newCategory, setNewCategory] = useState('')
+  const [categoryNotice, setCategoryNotice] = useState('')
   const needle = query.trim().toLowerCase()
   const visible = products.filter((item) => {
     if (filter === 'bajo' && !low(item)) return false
-    if (filter === 'venta' && item.kind === 'insumo') return false
-    if (filter === 'insumo' && item.kind !== 'insumo') return false
+    if (filter !== 'todo' && filter !== 'bajo' && item.category !== filter) return false
     return !needle || `${item.name} ${item.sku ?? ''} ${item.category}`.toLowerCase().includes(needle)
   })
   const current = products.find((item) => item.id === picked) ?? null
@@ -64,20 +66,47 @@ export function Inventario() {
           { label: 'Productos', value: products.length, detail: count(products.filter((item) => item.kind === 'insumo').length, 'insumo', 'insumos') },
         ]}
       />
-      <div className="biz-row" style={{ justifyContent: 'space-between' }}>
+      <div className="biz-row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <Tabs
           label="Filtro de inventario"
           value={filter}
           onChange={setFilter}
           tabs={[
-            { id: 'todo', label: 'Todo' },
+            { id: 'todo', label: 'Todos' },
+            ...categories.map((name) => ({ id: name, label: name, count: products.filter((item) => item.category === name).length })),
             { id: 'bajo', label: 'Bajo mínimo', count: lows.length },
-            { id: 'venta', label: 'Para venta' },
-            { id: 'insumo', label: 'Uso en servicio' },
           ]}
         />
         <input type="search" className="filters-search-input" placeholder="Buscar" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar en inventario" style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', minWidth: 200 }} />
       </div>
+      {allows('compras') ? (
+        <form
+          className="biz-row"
+          style={{ gap: 8, alignItems: 'end' }}
+          onSubmit={(event) => {
+            event.preventDefault()
+            const name = newCategory.trim()
+            if (!name) return
+            if (categories.some((item) => item.toLowerCase() === name.toLowerCase())) {
+              setCategoryNotice(`“${name}” ya está en la lista.`)
+              return
+            }
+            const extras = [...(state.settings.productCategories ?? []), name]
+            updateSettings({ productCategories: extras })
+            setNewCategory('')
+            setCategoryNotice(`Categoría “${name}” agregada.`)
+            setFilter(name)
+          }}
+        >
+          <Field label="Agregar categoría">
+            <input value={newCategory} onChange={(event) => setNewCategory(event.target.value)} placeholder="Ej. Juguetes" />
+          </Field>
+          <button type="submit" className="btn btn-ghost btn-sm">
+            Agregar
+          </button>
+          {categoryNotice ? <span className="hint">{categoryNotice}</span> : null}
+        </form>
+      ) : null}
 
       <div className="biz-split wide-left">
         <div className="ledger">
@@ -267,7 +296,7 @@ function NewSupply() {
           id: newId(),
           name: form.name,
           detail: '',
-          category: 'Insumos',
+          category: 'Consumible',
           price: 0,
           unit: form.unit,
           stock: amountOf(form.stock) || 0,

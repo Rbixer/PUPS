@@ -9,7 +9,7 @@ import { closedOn, nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
 import type { Appointment, AppState, Attendance, Lead, Movement, Permission, User } from '../src/types'
-import { BOOKING_SLOTS, slotPassed, slotTaken, visitMinutes } from '../src/visit'
+import { BOOKING_SLOTS, resolvePetCode, slotPassed, slotTaken, visitMinutes } from '../src/visit'
 import {
   applyWebhook,
   dispatchOutbound,
@@ -634,15 +634,16 @@ export function createApi(dataDir = path.resolve('data')) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !BOOKING_SLOTS.includes(time)) throw new HttpError(400, 'Elige fecha y horario.')
     if (slotPassed(date, time)) throw new HttpError(400, 'Ese horario ya pasó. Elige otro.')
     const state = readState()
-    if (slotTaken(state.appointments, date, time, service)) throw new HttpError(409, 'Esa hora ya está ocupada. Elige otro horario libre.')
+    if (slotTaken(state.appointments, date, time, service)) throw new HttpError(409, 'Ese horario ya tiene 3 citas. Elige otro.')
     const sameDay = state.appointments.filter((item) => item.date === date && item.status !== 'cancelada' && item.phone === normalizePhone(phone))
     if (sameDay.length >= MAX_DAILY_BOOKINGS) throw new HttpError(429, 'Ya tienes citas ese día. Escríbenos si necesitas otra.')
     const folio = nextFolio(state)
+    const normalizedPhone = normalizePhone(phone)
     const appointment: Appointment = {
       id: newId(),
       folio,
       clientName,
-      phone: normalizePhone(phone),
+      phone: normalizedPhone,
       petName,
       sex: text(body.sex, 20),
       breed: text(body.breed),
@@ -654,6 +655,7 @@ export function createApi(dataDir = path.resolve('data')) {
       allergies: text(body.allergies, 500),
       status: 'pendiente',
       cost: 0,
+      petCode: resolvePetCode(state.appointments, { petName, phone: normalizedPhone, clientName }),
     }
     let next: AppState = { ...state, appointments: [appointment, ...state.appointments] }
     const wa = loadWaConfig()
@@ -705,6 +707,50 @@ export function createApi(dataDir = path.resolve('data')) {
     send(response, 204)
   }
 
+  function findByAck(token: string) {
+    const clean = token.trim()
+    if (!clean || clean.length > 80) return null
+    return readState().appointments.find((item) => item.report?.ackToken === clean) ?? null
+  }
+
+  function conformeInfo(appointment: Appointment) {
+    return {
+      folio: appointment.folio,
+      petName: appointment.petName,
+      date: appointment.date,
+      ackedAt: appointment.report?.ackedAt,
+      petCode: appointment.petCode,
+    }
+  }
+
+  function getConforme(token: string, request: IncomingMessage, response: ServerResponse) {
+    limitPublic(request)
+    const appointment = findByAck(token)
+    if (!appointment?.report) throw new HttpError(404, 'No encontramos esa constancia.')
+    send(response, 200, conformeInfo(appointment))
+  }
+
+  function postConforme(token: string, request: IncomingMessage, response: ServerResponse) {
+    limitPublic(request)
+    const state = readState()
+    const clean = token.trim()
+    const index = state.appointments.findIndex((item) => item.report?.ackToken === clean)
+    if (index < 0 || !state.appointments[index].report) throw new HttpError(404, 'No encontramos esa constancia.')
+    const current = state.appointments[index]
+    const report = current.report!
+    if (report.ackedAt) {
+      send(response, 200, conformeInfo(current))
+      return
+    }
+    const next: Appointment = {
+      ...current,
+      report: { ...report, ackedAt: new Date().toISOString() },
+    }
+    const appointments = state.appointments.map((item, i) => (i === index ? next : item))
+    commit({ ...state, appointments }, state)
+    send(response, 200, conformeInfo(next))
+  }
+
   async function putState(request: IncomingMessage, response: ServerResponse) {
     const { user, state: current } = requireUser(request)
     const body = await readJsonBody<{ base?: number; state?: AppState }>(request, PRIVATE_LIMIT)
@@ -748,6 +794,8 @@ export function createApi(dataDir = path.resolve('data')) {
     if (at === '/api/public/booking' && method === 'POST') return book(request, response)
     if (at === '/api/public/order' && method === 'POST') return order(request, response)
     if (at === '/api/public/lead' && method === 'POST') return lead(request, response)
+    if (at.startsWith('/api/public/conforme/') && method === 'GET') return getConforme(decodeURIComponent(at.slice('/api/public/conforme/'.length)), request, response)
+    if (at.startsWith('/api/public/conforme/') && method === 'POST') return postConforme(decodeURIComponent(at.slice('/api/public/conforme/'.length)), request, response)
     if (at === '/api/login' && method === 'POST') return login(request, response)
     if (at === '/api/logout' && method === 'POST') {
       const found = authenticate(request)

@@ -308,7 +308,7 @@ function Deposits() {
   const since = sinceDeposit(state, today)
   const deposits = [...(state.deposits ?? [])].sort((a, b) => b.date.localeCompare(a.date) || b.at.localeCompare(a.at))
   const names = new Map(state.users.map((user) => [user.id, user.name]))
-  const [form, setForm] = useState({ date: today, amount: '', bank: '', reference: '', note: '' })
+  const [form, setForm] = useState({ date: today, amount: suggested ? String(suggested) : '', bank: '', reference: '', note: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -330,7 +330,7 @@ function Deposits() {
               <span>− {money(fund)}</span>
             </div>
             <div className="total">
-              <span>Para depositar</span>
+              <span>Total a depositar</span>
               <span>{money(suggested)}</span>
             </div>
           </div>
@@ -365,9 +365,14 @@ function Deposits() {
             }
             setError('')
             setNotice(`Depósito de ${money(result.value.amount)} registrado. El efectivo en caja bajó.`)
-            setForm({ date: today, amount: '', bank: form.bank, reference: '', note: '' })
+            const remaining = round2(Math.max(0, onHand - result.value.amount - fund))
+            setForm({ date: today, amount: remaining > 0 ? String(remaining) : '', bank: form.bank, reference: '', note: '' })
           }}
         >
+          <p className="deposit-total">
+            <span>Total a depositar ahora</span>
+            <strong className="num">{money(suggested)}</strong>
+          </p>
           <div className="form-pair">
             <Field label="Fecha">
               <input type="date" value={form.date} max={today} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
@@ -394,7 +399,7 @@ function Deposits() {
           </Field>
           <Flash error={error} notice={notice} />
           <button type="submit" className="btn btn-primary">
-            Registrar depósito
+            Registrar depósito de {money(amountOf(form.amount) || suggested)}
           </button>
         </form>
       </div>

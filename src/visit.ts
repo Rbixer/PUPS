@@ -62,8 +62,11 @@ export function slotPassed(date: string, time: string, now = new Date()) {
   return startMinute(time) <= now.getHours() * 60 + now.getMinutes()
 }
 
-export function slotTaken(appointments: Appointment[], date: string, time: string, service: string, ignoreId = 'probe') {
-  const probe: Appointment = {
+/** Máximo de citas que pueden compartir el mismo tramo de horario. */
+export const SLOT_CAPACITY = 3
+
+function slotProbe(date: string, time: string, service: string, ignoreId = 'probe'): Appointment {
+  return {
     id: ignoreId,
     folio: 0,
     petName: '',
@@ -80,7 +83,17 @@ export function slotTaken(appointments: Appointment[], date: string, time: strin
     allergies: '',
     cost: 0,
   }
-  return appointments.some((item) => overlaps(probe, item))
+}
+
+/** Cuántas citas se traslapan con ese horario (sin contar la que se está editando). */
+export function slotCount(appointments: Appointment[], date: string, time: string, service: string, ignoreId = 'probe') {
+  const probe = slotProbe(date, time, service, ignoreId)
+  return appointments.filter((item) => overlaps(probe, item)).length
+}
+
+/** True cuando el cupo del horario ya está lleno (3 citas). */
+export function slotTaken(appointments: Appointment[], date: string, time: string, service: string, ignoreId = 'probe') {
+  return slotCount(appointments, date, time, service, ignoreId) >= SLOT_CAPACITY
 }
 
 export function applyPlan(report: GroomingReport, plan: PlanId): GroomingReport {
@@ -121,7 +134,31 @@ export type PetFile = {
   allergies: string
   age: string
   weight: string
+  petCode?: string
   visits: Appointment[]
+}
+
+/** Siguiente código P-1001, P-1002… según los ya usados. */
+export function nextPetCode(appointments: Appointment[]) {
+  let max = 1000
+  for (const item of appointments) {
+    const match = /^P-(\d+)$/i.exec((item.petCode ?? '').trim())
+    if (match) max = Math.max(max, Number(match[1]))
+  }
+  return `P-${max + 1}`
+}
+
+/** Reusa el código de visitas previas de la misma mascota, o asigna uno nuevo. */
+export function resolvePetCode(
+  appointments: Appointment[],
+  pet: Pick<Appointment, 'petName' | 'phone' | 'clientName' | 'petCode'>,
+) {
+  const wanted = (pet.petCode ?? '').trim()
+  if (wanted) return wanted
+  const key = petKey(pet)
+  const previous = appointments.find((item) => petKey(item) === key && item.petCode?.trim())
+  if (previous?.petCode?.trim()) return previous.petCode.trim()
+  return nextPetCode(appointments)
 }
 
 export function petFiles(appointments: Appointment[]): PetFile[] {
@@ -147,6 +184,7 @@ export function petFiles(appointments: Appointment[]): PetFile[] {
         allergies: ordered.find((item) => item.allergies.trim())?.allergies ?? '',
         age: withReport?.report?.age ?? '',
         weight: ordered.find((item) => item.report?.weight)?.report?.weight ?? '',
+        petCode: ordered.find((item) => item.petCode?.trim())?.petCode,
         visits: ordered,
       }
     })

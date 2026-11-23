@@ -8,7 +8,7 @@ import { BackupReminder } from '../components/BackupReminder'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { Field } from '../components/ui'
 import { initials } from '../format'
-import { MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt } from '../modules'
+import { ACCOUNTING_LINKS, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt } from '../modules'
 import { applyTheme, readTheme, resolveTheme, saveTheme, usePanelTheme } from '../theme'
 import { useStore } from '../store'
 
@@ -126,7 +126,16 @@ export function AdminLayout() {
   const [dark, setDark] = useState(() => resolveTheme(readTheme()) === 'dark')
   usePanelTheme(true)
   const [palette, setPalette] = useState(false)
-  const links = MODULE_GROUPS.flatMap((group) => group.links).filter((link) => !link.permission || (currentUser ? allows(currentUser, link.permission) : false))
+  const links = [
+    ...MODULE_GROUPS.flatMap((group) => group.links),
+    ...ACCOUNTING_LINKS,
+  ].filter((link) => {
+    if (!link.permission) return true
+    if (!currentUser) return false
+    if (allows(currentUser, link.permission)) return true
+    if (link.to === '/admin/contabilidad') return allows(currentUser, 'compras') || allows(currentUser, 'planilla')
+    return false
+  })
   const current = moduleAt(location.pathname)
   const onLauncher = location.pathname === MODULES_PATH
   const pending = Object.values(badges).reduce((sum, value) => sum + value, 0)

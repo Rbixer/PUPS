@@ -146,8 +146,11 @@ function Directory({ files }: { files: PetFile[] }) {
                 <span className={`file-mark ${markOf(file.petName)}`}>{initials(file.petName)}</span>
               )}
               <div className="file-id">
-                <strong>{formatName(file.petName)}</strong>
-                <span>
+                <strong>
+                  {formatName(file.petName)}
+                  {file.petCode ? ` · ${file.petCode}` : ''}
+                </strong>
+                  <span>
                   {show(file.breed)} · {formatName(file.clientName)}
                 </span>
               </div>
@@ -349,7 +352,10 @@ function Dossier({ file }: { file: PetFile }) {
             <span className={`file-mark lg !m-0 size-14 shrink-0 sm:size-16 ${markOf(file.petName)}`}>{initials(file.petName)}</span>
           )}
           <div className="min-w-0">
-            <h1 className="truncate !text-2xl !font-extrabold sm:!text-3xl">{formatName(file.petName)}</h1>
+            <h1 className="truncate !text-2xl !font-extrabold sm:!text-3xl">
+              {formatName(file.petName)}
+              {file.petCode ? <span className="ml-2 text-lg font-semibold text-stone-500 dark:text-stone-400">{file.petCode}</span> : null}
+            </h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-stone-600 dark:text-stone-400">
               <span className="truncate">
                 Tutor: <b className="font-semibold text-stone-800 dark:text-stone-200">{formatName(file.clientName)}</b>

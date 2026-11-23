@@ -266,6 +266,11 @@
 }
 .modules-reset.armed { color: #e07a2f; font-weight: 600; }
 
+.accounting-hub {
+  margin: 0 0 8px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
 @media (max-width: 760px) {
   .modules { grid-template-columns: 1fr; gap: 12px; }
   .modules-page .page-head .modules-search { width: 100%; }

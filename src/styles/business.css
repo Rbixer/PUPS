@@ -266,6 +266,19 @@
 .carry small { margin-left: 6px; color: var(--muted); font-weight: 500; }
 .deposit-split { gap: 0; }
 .deposit-split > div > .statement + .statement { margin-top: 6px; }
+.deposit-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(14, 154, 167, 0.1);
+  border: 1px solid rgba(14, 154, 167, 0.28);
+  font-size: 0.92rem;
+}
+.deposit-total strong { font-size: 1.35rem; }
 
 @media (max-width: 1100px) {
   .pos, .biz-split, .biz-split.wide-left { grid-template-columns: 1fr; }

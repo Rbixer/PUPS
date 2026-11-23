@@ -1115,26 +1115,54 @@ export function removeDeposit(state: AppState, id: string): Op<null> {
   return { ok: true, value: null, patch: { deposits: (state.deposits ?? []).filter((item) => item.id !== id) } }
 }
 
-/** Forma de pago de una compra de trabajador que se cobra en la siguiente planilla. */
+/** Forma de pago de una compra de trabajador que se cobra en la siguiente planilla (legado). */
 export const PAYROLL_DEDUCTION = 'Descuento en planilla'
+/** Compra de empleado a crédito: baja inventario y queda por cobrar, sin planilla. */
+export const EMPLOYEE_CREDIT = 'Crédito empleado'
 
 export function fullName(user: Pick<User, 'name' | 'lastName'>) {
   return [user.name, user.lastName].filter(Boolean).join(' ')
 }
 
-/** Compras con descuento en planilla que todavía no se han descontado. */
+/** Crédito pendiente del trabajador más compras viejas aún no descontadas en planilla. */
 export function employeeOwed(state: Pick<AppState, 'sales' | 'payrolls'>, userId: string) {
+  const credit = (state.sales ?? [])
+    .filter((item) => item.employeeId === userId && item.method === EMPLOYEE_CREDIT && item.status === 'por cobrar')
+    .reduce((sum, item) => sum + item.total, 0)
   const bought = (state.sales ?? [])
     .filter((item) => item.employeeId === userId && item.method === PAYROLL_DEDUCTION && item.status !== 'anulada')
     .reduce((sum, item) => sum + item.total, 0)
   const paid = (state.payrolls ?? []).flatMap((run) => run.lines).filter((line) => line.userId === userId).reduce((sum, line) => sum + (line.purchases ?? 0), 0)
-  return round2(Math.max(0, bought - paid))
+  return round2(credit + Math.max(0, bought - paid))
 }
 
-export function recordEmployeePurchase(state: AppState, input: Omit<SaleInput, 'clientName' | 'phone' | 'invoiced'> & { employeeId: string }): Op<Sale> {
+export function recordEmployeePurchase(
+  state: AppState,
+  input: Omit<SaleInput, 'clientName' | 'phone' | 'invoiced'> & { employeeId: string; credit?: boolean },
+): Op<Sale> {
   const worker = state.users.find((item) => item.id === input.employeeId && item.active)
   if (!worker) return fail('Elige al trabajador.')
   if (input.lines.some((line) => !line.productId)) return fail('Las compras de trabajadores son solo de productos de la tienda.')
+  if (input.credit) {
+    const draft = recordSale(state, {
+      ...input,
+      method: 'Efectivo',
+      clientName: fullName(worker),
+      phone: worker.phone ?? '',
+      invoiced: false,
+    })
+    if (!draft.ok) return draft
+    const sale: Sale = { ...draft.value, employeeId: worker.id, method: EMPLOYEE_CREDIT, status: 'por cobrar' }
+    return {
+      ok: true,
+      value: sale,
+      patch: {
+        products: draft.patch.products,
+        stockMoves: draft.patch.stockMoves,
+        sales: [sale, ...(state.sales ?? [])],
+      },
+    }
+  }
   const result = recordSale(state, { ...input, clientName: fullName(worker), phone: worker.phone ?? '', invoiced: false })
   if (!result.ok) return result
   const sale: Sale = { ...result.value, employeeId: worker.id }
@@ -1144,7 +1172,40 @@ export function recordEmployeePurchase(state: AppState, input: Omit<SaleInput, '
     patch: {
       ...result.patch,
       sales: (result.patch.sales ?? []).map((item) => (item.id === sale.id ? sale : item)),
-      movements: (result.patch.movements ?? []).map((item) => (item.saleId === sale.id ? { ...item, concept: `Compra de trabajador ${sale.number} · ${sale.clientName}` } : item)),
+      movements: (result.patch.movements ?? []).map((item) =>
+        item.saleId === sale.id ? { ...item, concept: `Compra de trabajador ${sale.number} · ${sale.clientName}` } : item,
+      ),
+    },
+  }
+}
+
+/** Cobra una compra de empleado que estaba a crédito. */
+export function settleEmployeeCredit(state: AppState, saleId: string, method: string, date = isoDate()): Op<Movement> {
+  if (!method || method === 'Pedido' || method === EMPLOYEE_CREDIT || method === PAYROLL_DEDUCTION) return fail('Elige cómo pagó.')
+  if (closedOn(state, date)) return fail('La caja de ese día ya se cerró.')
+  const sale = (state.sales ?? []).find((item) => item.id === saleId)
+  if (!sale || !sale.employeeId || sale.method !== EMPLOYEE_CREDIT || sale.status !== 'por cobrar') {
+    return fail('Esa compra ya no está por cobrar.')
+  }
+  const movement: Movement = {
+    id: newId(),
+    type: 'ingreso',
+    date,
+    concept: `Cobro compra trabajador ${sale.number} · ${sale.clientName}`,
+    amount: sale.total,
+    method,
+    notes: lineSummary(sale.lines),
+    document: nextDocument(state, 'ingreso'),
+    category: 'Venta de mostrador',
+    saleId: sale.id,
+    invoiced: false,
+  }
+  return {
+    ok: true,
+    value: movement,
+    patch: {
+      movements: [movement, ...state.movements],
+      sales: (state.sales ?? []).map((item) => (item.id === sale.id ? { ...item, status: 'pagada' as const, method } : item)),
     },
   }
 }

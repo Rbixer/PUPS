@@ -6,9 +6,11 @@ import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteCon
 import { emptyReport, hardAreas, readReport } from '../src/grooming'
 import { buildMonthReport } from '../src/report'
 import type { Mark } from '../src/types'
+import { ACCOUNTING_LINKS, MODULE_GROUPS } from '../src/modules'
+import { EMPLOYEE_CREDIT, employeeOwed, recordEmployeePurchase, settleEmployeeCredit } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
-import { applyShopOrder, demoCatalog } from '../src/shop'
-import { planOf, priceFor, slotTaken } from '../src/visit'
+import { applyShopOrder, BASE_CATEGORY_NAMES, categoryNames, demoCatalog, normalizeCategory } from '../src/shop'
+import { nextPetCode, planOf, priceFor, resolvePetCode, SLOT_CAPACITY, slotCount, slotTaken } from '../src/visit'
 
 describe('formato', () => {
   it('normaliza teléfonos de Guatemala', () => {
@@ -98,13 +100,25 @@ describe('tarifas y agenda', () => {
     expect(planOf({ ...appointment, service: 'Baño y corte', report: undefined })).toBe('grooming')
   })
 
-  it('detecta horarios ocupados y respeta las citas canceladas', () => {
+  it('permite hasta 3 citas en el mismo horario y respeta las canceladas', () => {
     const base = createSeed().appointments[0]
-    const busy = { ...base, id: 'x1', date: '2030-01-10', time: '10:00', status: 'pendiente' as const, service: 'Baño y corte' }
-    expect(slotTaken([busy], '2030-01-10', '10:30', 'Baño y corte')).toBe(true)
-    expect(slotTaken([busy], '2030-01-10', '12:00', 'Baño y corte')).toBe(false)
-    expect(slotTaken([busy], '2030-01-11', '10:00', 'Baño y corte')).toBe(false)
-    expect(slotTaken([{ ...busy, status: 'cancelada' }], '2030-01-10', '10:00', 'Baño y corte')).toBe(false)
+    const at = (id: string, status: 'pendiente' | 'cancelada' = 'pendiente') => ({
+      ...base,
+      id,
+      date: '2030-01-10',
+      time: '10:00',
+      status,
+      service: 'Baño y corte' as const,
+    })
+    const one = [at('x1')]
+    const two = [at('x1'), at('x2')]
+    const three = [at('x1'), at('x2'), at('x3')]
+    expect(slotTaken(one, '2030-01-10', '10:30', 'Baño y corte')).toBe(false)
+    expect(slotTaken(two, '2030-01-10', '10:00', 'Baño y corte')).toBe(false)
+    expect(slotTaken(three, '2030-01-10', '10:00', 'Baño y corte')).toBe(true)
+    expect(slotTaken(three, '2030-01-10', '12:00', 'Baño y corte')).toBe(false)
+    expect(slotTaken(three, '2030-01-11', '10:00', 'Baño y corte')).toBe(false)
+    expect(slotTaken([at('x1', 'cancelada'), at('x2'), at('x3')], '2030-01-10', '10:00', 'Baño y corte')).toBe(false)
   })
 })
 
@@ -236,5 +250,101 @@ describe('tienda', () => {
     expect(applyShopOrder(products, [{ id: 'shampoo-suave', qty: 99 }]).ok).toBe(false)
     expect(applyShopOrder(products, [{ id: 'snack', qty: 1 }]).ok).toBe(false)
     expect(applyShopOrder(products, []).ok).toBe(false)
+  })
+
+  it('migra categorías viejas y admite extras en settings', () => {
+    expect(normalizeCategory('Shampoo')).toBe('Baño medicado')
+    expect(normalizeCategory('Cuidado')).toBe('Baño medicado')
+    expect(normalizeCategory('Snacks')).toBe('Alimento')
+    expect(BASE_CATEGORY_NAMES).toEqual(['Accesorios', 'Alimento', 'Baño medicado', 'Consumible'])
+    expect(categoryNames({ productCategories: ['Juguetes', 'Alimento'] })).toEqual([
+      ...BASE_CATEGORY_NAMES,
+      'Juguetes',
+    ])
+  })
+})
+
+describe('código de mascota', () => {
+  it('asigna P-1001 y reusa el código de la misma mascota', () => {
+    const seed = createSeed()
+    const base = seed.appointments[0]
+    expect(nextPetCode([])).toBe('P-1001')
+    expect(nextPetCode([{ ...base, petCode: 'P-1005' }])).toBe('P-1006')
+    const withCode = [{ ...base, petCode: 'P-1002' }]
+    expect(resolvePetCode(withCode, { petName: base.petName, phone: base.phone, clientName: base.clientName })).toBe('P-1002')
+    expect(resolvePetCode(withCode, { petName: 'Otra', phone: base.phone, clientName: base.clientName })).toBe('P-1003')
+    expect(resolvePetCode(withCode, { petName: 'X', phone: '1', clientName: 'Y', petCode: 'P-9999' })).toBe('P-9999')
+  })
+})
+
+describe('compras de empleado', () => {
+  it('el crédito baja inventario, no mueve caja y se cobra aparte', () => {
+    const state = createSeed()
+    const worker = state.users.find((item) => item.active)!
+    const product = state.products.find((item) => item.active && item.stock > 0)!
+    const beforeStock = product.stock
+    const beforeMoves = state.movements.length
+    const credit = recordEmployeePurchase(state, {
+      employeeId: worker.id,
+      credit: true,
+      method: 'Efectivo',
+      lines: [{ productId: product.id, name: product.name, qty: 1, price: product.price }],
+    })
+    expect(credit.ok).toBe(true)
+    if (!credit.ok) return
+    expect(credit.value.method).toBe(EMPLOYEE_CREDIT)
+    expect(credit.value.status).toBe('por cobrar')
+    expect(credit.patch.movements).toBeUndefined()
+    expect(credit.patch.products?.find((item) => item.id === product.id)?.stock).toBe(beforeStock - 1)
+    const owed = employeeOwed({ sales: credit.patch.sales, payrolls: state.payrolls }, worker.id)
+    expect(owed).toBe(credit.value.total)
+    const next = { ...state, ...credit.patch }
+    const settle = settleEmployeeCredit(next, credit.value.id, 'Efectivo')
+    expect(settle.ok).toBe(true)
+    if (!settle.ok) return
+    expect(settle.value.amount).toBe(credit.value.total)
+    expect(settle.patch.sales?.find((item) => item.id === credit.value.id)?.status).toBe('pagada')
+    expect(employeeOwed({ sales: settle.patch.sales, payrolls: state.payrolls }, worker.id)).toBe(0)
+    expect((settle.patch.movements ?? []).length).toBe(beforeMoves + 1)
+  })
+})
+
+describe('conforme', () => {
+  it('localiza la constancia por ackToken y guarda ackedAt solo una vez', () => {
+    const state = createSeed()
+    const appointment = state.appointments.find((item) => item.report) ?? state.appointments[0]
+    const token = 'tok-conforme-test'
+    const stamped = {
+      ...appointment,
+      report: { ...(appointment.report ?? emptyReport()), ackToken: token },
+    }
+    const withToken = { ...state, appointments: state.appointments.map((item) => (item.id === stamped.id ? stamped : item)) }
+    const found = withToken.appointments.find((item) => item.report?.ackToken === token)
+    expect(found?.id).toBe(stamped.id)
+    const ackedAt = '2030-01-10T12:00:00.000Z'
+    const once = {
+      ...stamped,
+      report: { ...stamped.report!, ackedAt },
+    }
+    expect(once.report.ackedAt).toBe(ackedAt)
+    expect(once.report.ackToken).toBe(token)
+  })
+})
+
+describe('módulos contables', () => {
+  it('saca compras, gastos, por pagar y planilla del lanzador y los deja en Contabilidad', () => {
+    const launcher = MODULE_GROUPS.flatMap((group) => group.links.map((link) => link.to))
+    expect(launcher).not.toContain('/admin/compras')
+    expect(launcher).not.toContain('/admin/gastos')
+    expect(launcher).not.toContain('/admin/por-pagar')
+    expect(launcher).not.toContain('/admin/planilla')
+    expect(launcher).toContain('/admin/inventario')
+    expect(launcher).toContain('/admin/contabilidad')
+    expect(ACCOUNTING_LINKS.map((link) => link.to)).toEqual([
+      '/admin/compras',
+      '/admin/gastos',
+      '/admin/por-pagar',
+      '/admin/planilla',
+    ])
   })
 })

@@ -42,6 +42,10 @@ export type GroomingReport = {
   recommendations: string
   /** 0 antes, 1 durante, 2 después, 3 segunda de durante. */
   photos: string[]
+  /** Token público para que el cliente marque Conforme. */
+  ackToken?: string
+  /** Cuándo el cliente marcó Conforme (ISO). */
+  ackedAt?: string
 }
 
 export type BehaviorArea = 'bano' | 'secado' | 'corte' | 'unas'
@@ -132,6 +136,8 @@ export type Appointment = {
   coat: string
   allergies: string
   cost: number
+  /** Código visible de la mascota (P-1001…) para no confundir homónimos. */
+  petCode?: string
   /** Trabajador que registró la cita. */
   employeeCode?: string
   employeeId?: string
@@ -172,7 +178,8 @@ export type Movement = {
 
 export type ExpenseArea = 'administrativo' | 'venta' | 'servicio'
 
-export type ShopCategoryName = 'Shampoo' | 'Accesorios' | 'Cuidado' | 'Snacks' | 'Insumos'
+/** Categorías de inventario/tienda. Las extras del negocio se guardan en settings.productCategories. */
+export type ShopCategoryName = string
 
 export type CatalogItem = {
   id: string
@@ -420,6 +427,8 @@ export type Settings = {
   reviews?: SiteReview[]
   /** Fotos de resultados para la galería del sitio. */
   gallery?: SitePhoto[]
+  /** Categorías de producto agregadas además de las base. */
+  productCategories?: string[]
 }
 
 export type SiteReview = { name: string; text: string }

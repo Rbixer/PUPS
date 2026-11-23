@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
+import { Link } from 'react-router-dom'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { accountName, balanceSheet, buildJournal, incomeStatement, taxMonths, type Balance } from '../ledger'
+import { ACCOUNTING_LINKS, ModuleIcon } from '../modules'
 import { round2 } from '../ops'
 import { useStore } from '../store'
 
@@ -56,6 +58,8 @@ export function Contabilidad() {
     }
   }
 
+  const hub = ACCOUNTING_LINKS.filter((link) => !link.permission || allows(link.permission))
+
   return (
     <section className="stack">
       <header className="page-head">
@@ -65,26 +69,54 @@ export function Contabilidad() {
           <p className="lede">Partidas automáticas desde ventas, cobros, compras, gastos, planilla e inventario. Listo para revisar con el contador.</p>
           {note ? <p className="excel-note">{note}</p> : null}
         </div>
-        <div className="export-row">
-          <label className="field">
-            <span>Régimen fiscal</span>
-            <select value={regime ?? ''} onChange={(event) => setTaxRegime((event.target.value || undefined) as typeof regime)}>
-              <option value="">Sin elegir</option>
-              <option value="general">General · IVA 12 %</option>
-              <option value="pequeno">Pequeño contribuyente · 5 %</option>
-            </select>
-            {since && since > '0000-01-01' ? <small>Vigente desde {longDate(since)}. Los meses anteriores conservan su régimen.</small> : null}
-          </label>
-          {allows('reportes') ? (
-            <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void onExcel()}>
-              {busy ? 'Preparando…' : 'Excel'}
-            </button>
-          ) : null}
-        </div>
+        {allows('contabilidad') ? (
+          <div className="export-row">
+            <label className="field">
+              <span>Régimen fiscal</span>
+              <select value={regime ?? ''} onChange={(event) => setTaxRegime((event.target.value || undefined) as typeof regime)}>
+                <option value="">Sin elegir</option>
+                <option value="general">General · IVA 12 %</option>
+                <option value="pequeno">Pequeño contribuyente · 5 %</option>
+              </select>
+              {since && since > '0000-01-01' ? <small>Vigente desde {longDate(since)}. Los meses anteriores conservan su régimen.</small> : null}
+            </label>
+            {allows('reportes') ? (
+              <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void onExcel()}>
+                {busy ? 'Preparando…' : 'Excel'}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
-      {!regime ? <p className="banner">Elige el régimen fiscal del negocio para que la contabilidad separe el IVA o calcule el impuesto del 5 %. Mientras tanto, los montos se muestran sin impuestos.</p> : null}
+      {hub.length ? (
+        <ul className="modules-grid accounting-hub">
+          {hub.map((link) => (
+            <li key={link.to}>
+              <Link className="module-card" to={link.to} style={{ '--tone': '#2e9a6a' } as CSSProperties}>
+                <span className="module-icon">
+                  <ModuleIcon to={link.to} size={22} />
+                </span>
+                <span className="module-text">
+                  <strong>{link.label}</strong>
+                  <small>{link.detail}</small>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
+      {allows('contabilidad') && !regime ? (
+        <p className="banner">Elige el régimen fiscal del negocio para que la contabilidad separe el IVA o calcule el impuesto del 5 %. Mientras tanto, los montos se muestran sin impuestos.</p>
+      ) : null}
+
+      {!allows('contabilidad') ? (
+        <p className="hint">Elige un módulo de arriba. El libro diario y los estados financieros requieren permiso de contabilidad.</p>
+      ) : null}
+
+      {allows('contabilidad') ? (
+      <>
       <div className="biz-row" style={{ justifyContent: 'space-between' }}>
         <Tabs
           label="Periodo"
@@ -332,6 +364,8 @@ export function Contabilidad() {
             arrastra al siguiente. Para que una factura de proveedor cuente como crédito, marca “Factura con IVA” al registrar el gasto.
           </p>
         </div>
+      ) : null}
+      </>
       ) : null}
     </section>
   )

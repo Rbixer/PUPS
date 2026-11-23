@@ -86,7 +86,7 @@ export function Reservar() {
             return
           }
           if (slotTaken(state.appointments, form.date, form.time, form.service)) {
-            setError('Esa hora ya está ocupada. Elige otro horario libre.')
+            setError('Ese horario ya tiene 3 citas. Elige otro.')
             return
           }
           setSending(true)
