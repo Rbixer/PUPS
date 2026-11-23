@@ -5,14 +5,22 @@ export type Permission =
   | 'fichas'
   | 'whatsapp'
   | 'caja'
+  | 'corte'
+  | 'movimientos'
   | 'costos'
+  | 'anular'
   | 'estadisticas'
   | 'reportes'
   | 'equipo'
   | 'compras'
+  | 'inventario'
+  | 'ajustar'
   | 'planilla'
   | 'contabilidad'
   | 'tareas'
+
+/** Versión del esquema de permisos guardado en el usuario (2 = granulares). */
+export const PERMISSIONS_VERSION = 2
 
 export type AppointmentStatus = 'pendiente' | 'completada' | 'cancelada'
 
@@ -60,6 +68,8 @@ export type User = {
   active: boolean
   /** Si falta, el rol aporta los permisos de siempre. */
   permissions?: Permission[]
+  /** 2 = permisos granulares guardados desde Usuarios; si falta, se expanden los legacy. */
+  permissionsVersion?: number
   /** Código fijo del trabajador. Se imprime en las citas que registra. */
   employeeCode?: string
   lastName?: string

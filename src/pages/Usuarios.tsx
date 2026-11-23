@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { defaultsFor, PERMISSIONS, permissionLabel, resolvePermissions } from '../access'
+import {
+  defaultsFor,
+  grantModuleAll,
+  PERMISSION_GROUPS,
+  permissionGroupChips,
+  resolvePermissions,
+  toggleAction,
+  toggleModule,
+} from '../access'
 import { saveBackupFile } from '../backup'
 import { SiteContent } from '../components/SiteContent'
 import { Field } from '../components/ui'
@@ -61,13 +69,8 @@ export function Usuarios() {
     setForm((current) => ({ ...current, role, permissions: defaultsFor(role) }))
   }
 
-  function togglePermission(id: Permission) {
-    setForm((current) => ({
-      ...current,
-      permissions: current.permissions.includes(id)
-        ? current.permissions.filter((item) => item !== id)
-        : [...current.permissions, id],
-    }))
+  function setPermissions(next: Permission[]) {
+    setForm((current) => ({ ...current, permissions: next }))
   }
 
   return (
@@ -77,7 +80,7 @@ export function Usuarios() {
           <p className="eyebrow">Equipo</p>
           <h1>Usuarios</h1>
           <p className="lede">
-            Cada persona entra con Administrador o Recepción, y los módulos se marcan uno por uno. Quien ya existía conserva lo que ese rol podía hacer.
+            Elige el rol y ajusta módulos y acciones sensibles. Administrador lo puede todo; Recepción arranca con lo del mostrador.
           </p>
         </div>
       </header>
@@ -98,7 +101,11 @@ export function Usuarios() {
                 {user.active ? user.role : 'Inactivo'}
               </span>
               <ul className="person-tags">
-                {permissions.length === 0 ? <li>Sin módulos</li> : permissions.map((id) => <li key={id}>{permissionLabel(id)}</li>)}
+                {permissions.length === 0 ? (
+                  <li>Sin módulos</li>
+                ) : (
+                  permissionGroupChips(permissions).map((label) => <li key={label}>{label}</li>)
+                )}
               </ul>
               <div className="person-actions">
                 <button
@@ -183,21 +190,8 @@ export function Usuarios() {
             </select>
           </Field>
         </div>
-        <p className="hint">Al cambiar el rol se marcan los permisos de ese rol. Puedes ajustarlos antes de guardar.</p>
-        <div className="permit-grid" role="group" aria-label="Módulos">
-          {PERMISSIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="permit"
-              aria-pressed={form.permissions.includes(item.id)}
-              onClick={() => togglePermission(item.id)}
-            >
-              <strong>{item.label}</strong>
-              <small>{item.detail}</small>
-            </button>
-          ))}
-        </div>
+        <p className="hint">Al cambiar el rol se marcan los del rol. Abre cada grupo para afinar acciones (anular, costos, corte…).</p>
+        <PermissionEditor value={form.permissions} locked={form.role === 'Administrador'} onChange={setPermissions} />
         {error ? <p className="form-error">{error}</p> : null}
         <div className="team-actions">
           {editingId ? (
@@ -328,5 +322,96 @@ export function Usuarios() {
         ) : null}
       </section>
     </section>
+  )
+}
+
+function PermissionEditor({
+  value,
+  locked,
+  onChange,
+}: {
+  value: Permission[]
+  locked: boolean
+  onChange: (next: Permission[]) => void
+}) {
+  const [open, setOpen] = useState<string[]>(['operacion', 'caja'])
+  return (
+    <div className="permit-accordion" role="group" aria-label="Módulos y acciones">
+      {PERMISSION_GROUPS.map((group) => {
+        const active = group.nodes.filter((node) => value.includes(node.id)).length
+        const total = group.nodes.length
+        const expanded = open.includes(group.id)
+        return (
+          <div key={group.id} className="permit-group">
+            <button
+              type="button"
+              className="permit-group-head"
+              aria-expanded={expanded}
+              onClick={() => setOpen((current) => (current.includes(group.id) ? current.filter((id) => id !== group.id) : [...current, group.id]))}
+            >
+              <strong>{group.label}</strong>
+              <span>
+                {active}/{total}
+              </span>
+            </button>
+            {expanded ? (
+              <ul className="permit-nodes">
+                {group.nodes.map((node) => {
+                  const on = value.includes(node.id)
+                  const actions = node.actions ?? []
+                  const actionOn = actions.filter((action) => value.includes(action.id)).length
+                  const allOn = on && actionOn === actions.length
+                  return (
+                    <li key={node.id} className="permit-node">
+                      <div className="permit-node-row">
+                        <button
+                          type="button"
+                          className="permit"
+                          disabled={locked}
+                          aria-pressed={on}
+                          onClick={() => onChange(toggleModule(value, node.id, !on))}
+                        >
+                          <strong>{node.label}</strong>
+                          <small>{node.detail}</small>
+                        </button>
+                        {actions.length ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={locked || allOn}
+                            onClick={() => onChange(grantModuleAll(value, node.id))}
+                          >
+                            Todo
+                          </button>
+                        ) : null}
+                      </div>
+                      {actions.length ? (
+                        <ul className="permit-actions">
+                          {actions.map((action) => (
+                            <li key={action.id}>
+                              <button
+                                type="button"
+                                className="permit permit-action"
+                                disabled={locked}
+                                aria-pressed={value.includes(action.id)}
+                                onClick={() => onChange(toggleAction(value, action.id, !value.includes(action.id)))}
+                              >
+                                <strong>{action.label}</strong>
+                                <small>{action.detail}</small>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+        )
+      })}
+      {locked ? <p className="hint">Administrador siempre tiene todos los permisos.</p> : null}
+    </div>
   )
 }

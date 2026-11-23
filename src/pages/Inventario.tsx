@@ -79,7 +79,7 @@ export function Inventario() {
         />
         <input type="search" className="filters-search-input" placeholder="Buscar" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar en inventario" style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', minWidth: 200 }} />
       </div>
-      {allows('compras') ? (
+      {allows('inventario') ? (
         <form
           className="biz-row"
           style={{ gap: 8, alignItems: 'end' }}
@@ -117,8 +117,8 @@ export function Inventario() {
                   <th>Producto</th>
                   <th className="num">Existencia</th>
                   <th className="num">Mínimo</th>
-                  <th className="num">Costo</th>
-                  <th className="num">Valor</th>
+                  {allows('ajustar') ? <th className="num">Costo</th> : null}
+                  {allows('ajustar') ? <th className="num">Valor</th> : null}
                   <th>Estado</th>
                 </tr>
               </thead>
@@ -137,8 +137,8 @@ export function Inventario() {
                     </td>
                     <td className="num">{item.stock}</td>
                     <td className="num">{item.minStock ?? '—'}</td>
-                    <td className="num">{item.cost !== undefined ? money(item.cost) : '—'}</td>
-                    <td className="num">{item.cost !== undefined ? money(Math.max(0, item.stock) * item.cost) : '—'}</td>
+                    {allows('ajustar') ? <td className="num">{item.cost !== undefined ? money(item.cost) : '—'}</td> : null}
+                    {allows('ajustar') ? <td className="num">{item.cost !== undefined ? money(Math.max(0, item.stock) * item.cost) : '—'}</td> : null}
                     <td>{item.stock <= 0 ? <Tag tone="bad">Agotado</Tag> : low(item) ? <Tag tone="warn">Reponer</Tag> : <Tag tone="ok">Bien</Tag>}</td>
                   </tr>
                 ))}
@@ -148,8 +148,8 @@ export function Inventario() {
           {visible.length === 0 ? <p className="empty" style={{ margin: 14 }}>Sin productos con ese filtro.</p> : null}
         </div>
         <div className="biz-stack">
-          {current ? <Kardex key={current.id} item={current} canAdjust={allows('compras')} /> : <p className="empty">Elige un producto para ver su kárdex y ajustar existencia.</p>}
-          {allows('compras') ? <NewSupply /> : null}
+          {current ? <Kardex key={current.id} item={current} canAdjust={allows('ajustar')} /> : <p className="empty">Elige un producto para ver su kárdex y ajustar existencia.</p>}
+          {allows('inventario') ? <NewSupply /> : null}
         </div>
       </div>
     </section>

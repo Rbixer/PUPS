@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { allows, defaultsFor, homeFor, resolvePermissions } from '../src/access'
+import { allows, defaultsFor, expandLegacyPermissions, homeFor, PERMISSIONS_VERSION, resolvePermissions } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
 import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteContent, safeLink } from '../src/format'
@@ -146,11 +146,23 @@ describe('permisos', () => {
   })
 
   it('respeta permisos marcados uno por uno y manda a la primera pantalla permitida', () => {
-    const custom = { role: 'Recepción' as const, permissions: ['whatsapp' as const], active: true }
+    const custom = { role: 'Recepción' as const, permissions: ['whatsapp' as const], permissionsVersion: PERMISSIONS_VERSION, active: true }
     expect(resolvePermissions(custom)).toEqual(['whatsapp'])
     expect(homeFor(custom)).toBe('/admin/whatsapp')
     expect(homeFor({ ...custom, permissions: [] })).toBe('/admin/asistencia')
     expect(defaultsFor('Administrador').length).toBeGreaterThan(defaultsFor('Recepción').length)
+  })
+
+  it('expande caja y compras legacy y no lo hace con versión 2', () => {
+    const legacy = { role: 'Recepción' as const, permissions: ['caja' as const, 'compras' as const], active: true }
+    const resolved = resolvePermissions(legacy)
+    expect(resolved).toEqual(expect.arrayContaining(['caja', 'corte', 'movimientos', 'anular', 'compras', 'inventario', 'ajustar']))
+    expect(expandLegacyPermissions(['caja'])).toEqual(expect.arrayContaining(['caja', 'corte', 'movimientos', 'anular']))
+    const v2 = { ...legacy, permissions: ['caja' as const], permissionsVersion: PERMISSIONS_VERSION }
+    expect(resolvePermissions(v2)).toEqual(['caja'])
+    expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'corte')).toBe(false)
+    expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'movimientos')).toBe(true)
+    expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'anular')).toBe(false)
   })
 })
 

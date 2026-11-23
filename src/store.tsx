@@ -7,30 +7,31 @@ import * as ops from './ops'
 import { resolvePetCode, slotTaken } from './visit'
 import type { ChargeNote, Op } from './ops'
 import type { ShopLine } from './shop'
-import type {
-  Appointment,
-  AppState,
-  CashClose,
-  Attendance,
-  CashDeposit,
-  CatalogItem,
-  ControlField,
-  Conversation,
-  FixedCost,
-  Lead,
-  Movement,
-  Payable,
-  PayrollLine,
-  PayrollRun,
-  Permission,
-  Purchase,
-  Sale,
-  Settings,
-  StockMove,
-  Supplier,
-  Task,
-  TaskStatus,
-  User,
+import {
+  PERMISSIONS_VERSION,
+  type Appointment,
+  type AppState,
+  type CashClose,
+  type Attendance,
+  type CashDeposit,
+  type CatalogItem,
+  type ControlField,
+  type Conversation,
+  type FixedCost,
+  type Lead,
+  type Movement,
+  type Payable,
+  type PayrollLine,
+  type PayrollRun,
+  type Permission,
+  type Purchase,
+  type Sale,
+  type Settings,
+  type StockMove,
+  type Supplier,
+  type Task,
+  type TaskStatus,
+  type User,
 } from './types'
 
 export type { ChargeNote } from './ops'
@@ -866,7 +867,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const id = newId()
         const result = run('equipo', (current) => {
           if (current.users.some((item) => item.username.toLowerCase() === username.toLowerCase())) return { ok: false, error: 'Ese usuario ya existe.' }
-          const next: User = { ...rest, id, name, username, active: true }
+          const next: User = {
+            ...rest,
+            id,
+            name,
+            username,
+            active: true,
+            permissionsVersion: rest.permissions ? PERMISSIONS_VERSION : rest.permissionsVersion,
+          }
           return { ok: true, value: next, patch: { users: [...current.users, next] } }
         })
         if (!result.ok) return result.error
@@ -892,6 +900,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             username,
             role: patch.role,
             permissions: patch.permissions,
+            permissionsVersion: patch.permissions ? PERMISSIONS_VERSION : target.permissionsVersion,
           }
           const users = current.users.map((item) => (item.id === id ? next : item))
           if (!teamCheck(users)) return { ok: false, error: 'Debe quedar un administrador activo con acceso a Equipo.' }
@@ -926,7 +935,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return result.ok ? null : result.error
       },
       addMovement: (movement) =>
-        run('caja', (current) => {
+        run('movimientos', (current) => {
           const concept = movement.concept.trim()
           if (!concept || !Number.isFinite(movement.amount) || movement.amount <= 0) return { ok: false, error: 'Concepto y un monto mayor a cero son obligatorios.' }
           if (!movement.method || movement.method === 'Pedido') return { ok: false, error: 'Elige el medio de pago.' }
@@ -938,14 +947,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ok: true, value: next, patch: { movements: [next, ...current.movements] } }
         }),
       saveProduct: (product) => {
-        if (!can('caja') && !can('compras')) return DENIED
-        const result = run(null, (current) => ops.saveProduct(current, product, can('compras')))
+        if (!can('caja') && !can('compras') && !can('inventario')) return DENIED
+        const result = run(null, (current) => ops.saveProduct(current, product, can('ajustar')))
         return result.ok ? null : result.error
       },
       recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
       settleOrder: (movementId, method, invoiced) => run('caja', (current) => ops.settleOrder(current, movementId, method, undefined, invoiced)),
-      voidSale: (saleId, reason) => run('caja', (current) => ops.voidSale(current, saleId, reason)),
-      adjustStock: (input) => run('compras', (current) => ops.adjustStock(current, input)),
+      voidSale: (saleId, reason) => run('anular', (current) => ops.voidSale(current, saleId, reason)),
+      adjustStock: (input) => run('ajustar', (current) => ops.adjustStock(current, input)),
       saveSupplier: (supplier) => run('compras', (current) => ops.saveSupplier(current, supplier)),
       recordPurchase: (input) => run('compras', (current) => ops.recordPurchase(current, input)),
       savePayable: (input) => run('compras', (current) => ops.savePayable(current, input)),
@@ -965,9 +974,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           return ops.removeTask(current, id)
         }),
-      closeCash: (input) => run('caja', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
-      recordDeposit: (input) => run('caja', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
-      removeDeposit: (id) => run('caja', (current) => ops.removeDeposit(current, id)),
+      closeCash: (input) => run('corte', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
+      recordDeposit: (input) => run('corte', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
+      removeDeposit: (id) => run('corte', (current) => ops.removeDeposit(current, id)),
       recordEmployeePurchase: (input) => run('caja', (current) => ops.recordEmployeePurchase(current, { ...input, userId: currentUser?.id })),
       settleEmployeeCredit: (saleId, method) => run('caja', (current) => ops.settleEmployeeCredit(current, saleId, method)),
       clockIn: () => run(null, (current) => ops.clockIn(current, currentUser?.id ?? '')),

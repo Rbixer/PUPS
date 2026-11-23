@@ -338,7 +338,8 @@ function Ticket({ sale, onClose }: { sale: Sale; onClose: () => void }) {
 }
 
 function History() {
-  const { state, voidSale } = useStore()
+  const { state, voidSale, allows } = useStore()
+  const canVoid = allows('anular')
   const [cursor, setCursor] = useState(() => isoDate().slice(0, 7))
   const [voiding, setVoiding] = useState<string | null>(null)
   const [reason, setReason] = useState('')
@@ -433,7 +434,7 @@ function History() {
                         {sale.status === 'pagada' ? <Tag tone="ok">{sale.method}</Tag> : sale.status === 'por cobrar' ? <Tag tone="warn">Por cobrar</Tag> : <Tag tone="mute">Anulada</Tag>}
                       </td>
                       <td>
-                        {sale.status !== 'anulada' ? (
+                        {canVoid && sale.status !== 'anulada' ? (
                           voiding === sale.id ? (
                             <div className="row-actions">
                               <input style={{ textAlign: 'left', minWidth: 140 }} placeholder="Motivo" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo de anulación" />
@@ -503,7 +504,8 @@ function History() {
 }
 
 function Pending() {
-  const { state, settleOrder, voidSale } = useStore()
+  const { state, settleOrder, voidSale, allows } = useStore()
+  const canVoid = allows('anular')
   const orders = state.movements.filter((item) => item.type === 'ingreso' && item.method === 'Pedido')
   const [methods, setMethods] = useState<Record<string, string>>({})
   const [invoices, setInvoices] = useState<Record<string, boolean>>({})
@@ -587,7 +589,7 @@ function Pending() {
                         >
                           Marcar cobrado
                         </button>
-                        {order.saleId && cancelling !== order.id ? (
+                        {canVoid && order.saleId && cancelling !== order.id ? (
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
@@ -600,7 +602,7 @@ function Pending() {
                           </button>
                         ) : null}
                       </div>
-                      {order.saleId && cancelling === order.id ? (
+                      {canVoid && order.saleId && cancelling === order.id ? (
                         <div className="row-actions">
                           <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo" aria-label={`Motivo para cancelar ${order.document}`} autoFocus />
                           <button

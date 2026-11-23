@@ -214,6 +214,48 @@ describe('servidor', () => {
     expect(networkOf('::ffff:10.0.0.1')).toBe('10.0.0.1')
   })
 
+  it('sin anular no anula ventas y sin corte no cierra caja', async () => {
+    const admin = await login('admin')
+    const full = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const sale = {
+      id: 'ven-guard',
+      number: 'VEN-GUARD',
+      date: isoDate(),
+      at: '',
+      channel: 'mostrador' as const,
+      clientName: 'Prueba',
+      phone: '',
+      lines: [{ name: 'Shampoo', qty: 1, price: 10, cost: 0 }],
+      discount: 0,
+      total: 10,
+      method: 'Efectivo',
+      status: 'pagada' as const,
+      document: 'ING-GUARD',
+    }
+    const users = full.users.map((user) =>
+      user.username === 'recepcion'
+        ? {
+            ...user,
+            permissionsVersion: 2,
+            permissions: ['citas', 'fichas', 'whatsapp', 'caja', 'movimientos', 'tareas', 'estadisticas', 'reportes'] as AppState['users'][number]['permissions'],
+          }
+        : user,
+    )
+    expect((await call('PUT', '/api/state', { base: full.revision, state: { ...full, users, sales: [sale, ...(full.sales ?? [])] } }, admin.token)).status).toBe(200)
+    const desk = await login('recepcion', 'NuevaClave2026')
+    const seen = (await call('GET', '/api/state', undefined, desk.token)).body as AppState
+    expect(seen.sales?.some((item) => item.id === sale.id)).toBe(true)
+    const voided = {
+      ...seen,
+      sales: (seen.sales ?? []).map((item) => (item.id === sale.id ? { ...item, status: 'anulada' as const } : item)),
+      cashCloses: [{ id: 'corte-forzado', date: isoDate(), opening: 0, expected: 0, counted: 0, difference: 0, note: '', closedAt: '' }, ...(seen.cashCloses ?? [])],
+    }
+    expect((await call('PUT', '/api/state', { base: seen.revision, state: voided }, desk.token)).status).toBe(200)
+    const after = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    expect(after.sales?.find((item) => item.id === sale.id)?.status).toBe('pagada')
+    expect(after.cashCloses?.some((item) => item.id === 'corte-forzado')).toBe(false)
+  })
+
   it('la reserva pública rechaza horas pasadas y horarios con 3 citas', async () => {
     const booking = { clientName: 'Ana', phone: '55550000', petName: 'Toby', service: SERVICE_NAMES[0], date: addDays(isoDate(), 2), time: '10:00' }
     expect((await call('POST', '/api/public/booking', { ...booking, date: addDays(isoDate(), -1) })).status).toBe(400)

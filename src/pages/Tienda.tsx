@@ -35,7 +35,7 @@ export function Tienda() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const editing = products.some((item) => item.id === form.id)
-  const canCost = allows('compras')
+  const canCost = allows('ajustar')
 
   function edit(item: CatalogItem) {
     setForm(item)

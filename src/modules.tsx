@@ -24,9 +24,9 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     links: [
       { to: '/admin/ventas', label: 'Punto de venta', detail: 'Cobrar productos y servicios en mostrador.', end: false, permission: 'caja' },
       { to: '/admin/tienda', label: 'Tienda en línea', detail: 'Pedidos y productos del sitio.', end: false, permission: 'caja' },
-      { to: '/admin/ingresos', label: 'Registrar ingreso', detail: 'Entradas de dinero fuera del punto de venta.', end: false, permission: 'caja' },
-      { to: '/admin/egresos', label: 'Documento de egreso', detail: 'Constancia de salida de la mascota y salidas de caja.', end: false, permission: 'caja' },
-      { to: '/admin/corte', label: 'Corte de caja', detail: 'Cierre acumulado y depósitos al banco.', end: false, permission: 'caja' },
+      { to: '/admin/ingresos', label: 'Registrar ingreso', detail: 'Entradas de dinero fuera del punto de venta.', end: false, permission: 'movimientos' },
+      { to: '/admin/egresos', label: 'Documento de egreso', detail: 'Constancia de salida de la mascota y salidas de caja.', end: false, permission: 'movimientos' },
+      { to: '/admin/corte', label: 'Corte de caja', detail: 'Cierre acumulado y depósitos al banco.', end: false, permission: 'corte' },
       { to: '/admin/compras-empleados', label: 'Compras de empleados', detail: 'Al contado o a crédito (sin planilla).', end: false, permission: 'caja' },
       { to: '/admin/constancias', label: 'Constancias', detail: 'Constancias de visita guardadas.', end: false, permission: 'caja' },
     ],
@@ -36,7 +36,7 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     label: 'Inventario',
     tone: '#7a5cc8',
     links: [
-      { to: '/admin/inventario', label: 'Inventario', detail: 'Existencias para venta e insumos de grooming.', end: false, permission: 'compras' },
+      { to: '/admin/inventario', label: 'Inventario', detail: 'Existencias para venta e insumos de grooming.', end: false, permission: 'inventario' },
     ],
   },
   {

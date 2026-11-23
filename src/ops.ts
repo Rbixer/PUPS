@@ -506,7 +506,7 @@ export function saveProduct(state: AppState, product: CatalogItem, canCost = tru
   const products = shelfOf(state.products).map((item) => ({ ...item }))
   const previous = products.find((item) => item.id === product.id)
   if (previous && product.cost !== undefined && round2(product.cost) !== (previous.cost ?? undefined) && !canCost) {
-    return fail('Cambiar el costo necesita permiso de compras.')
+    return fail('Cambiar el costo necesita permiso para ajustar stock y costos.')
   }
   const next: CatalogItem = {
     ...product,

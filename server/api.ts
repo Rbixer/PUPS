@@ -41,17 +41,17 @@ const MEDIA_NAME = /^[0-9a-f]{32}\.(png|jpg|webp|gif)$/
 /** Quién puede cambiar cada colección. Si llega cambiada sin alguno de esos permisos, se conserva lo del servidor. */
 const GUARDED: [keyof AppState, Permission[]][] = [
   ['appointments', ['citas', 'fichas', 'caja']],
-  ['movements', ['caja', 'compras', 'planilla']],
-  ['sales', ['caja']],
-  ['products', ['caja', 'compras']],
-  ['stockMoves', ['caja', 'compras']],
+  ['movements', ['caja', 'movimientos', 'compras', 'planilla', 'anular']],
+  ['sales', ['caja', 'anular']],
+  ['products', ['caja', 'compras', 'inventario', 'ajustar']],
+  ['stockMoves', ['caja', 'compras', 'inventario', 'ajustar']],
   ['payrolls', ['planilla']],
   ['payables', ['compras', 'planilla']],
   ['purchases', ['compras']],
   ['suppliers', ['compras']],
   ['fixedCosts', ['compras']],
-  ['cashCloses', ['caja']],
-  ['deposits', ['caja']],
+  ['cashCloses', ['corte']],
+  ['deposits', ['corte']],
   ['tasks', ['tareas']],
   ['conversations', ['whatsapp']],
   ['controlRows', ['equipo']],
@@ -513,7 +513,7 @@ export function createApi(dataDir = path.resolve('data')) {
           ...current.settings,
           ...(allows(user, 'whatsapp') ? { whatsapp: incoming.settings?.whatsapp ?? current.settings.whatsapp } : {}),
           ...(allows(user, 'contabilidad') ? { taxRegime: incoming.settings?.taxRegime, taxHistory: incoming.settings?.taxHistory } : {}),
-          ...(allows(user, 'caja') ? { cashFloat: incoming.settings?.cashFloat } : {}),
+          ...(allows(user, 'caja') || allows(user, 'corte') ? { cashFloat: incoming.settings?.cashFloat } : {}),
         }
     const merged: AppState = { ...incoming, users, settings, sessionUserId: null }
     for (const [key, permissions] of GUARDED) {
@@ -533,12 +533,25 @@ export function createApi(dataDir = path.resolve('data')) {
         return previous && previous.cost > 0 && item.cost !== previous.cost ? { ...item, cost: previous.cost } : item
       })
     }
-    if (!allows(user, 'compras') && merged.products) {
-      const before = byId(current.products)
+    if (!allows(user, 'ajustar') && merged.products) {
+      const before = byId(current.products ?? [])
       merged.products = merged.products.map((item) => {
         const previous = before.get(item.id)
-        return previous && item.cost !== previous.cost && item.stock === previous.stock ? { ...item, cost: previous.cost } : item
+        return previous && item.cost !== previous.cost ? { ...item, cost: previous.cost } : item
       })
+    }
+    if (!allows(user, 'anular')) {
+      const before = byId(current.sales ?? [])
+      const triedVoid = (incoming.sales ?? []).some((item) => {
+        const previous = before.get(item.id)
+        return Boolean(previous && previous.status !== 'anulada' && item.status === 'anulada')
+      })
+      if (triedVoid) {
+        merged.sales = current.sales
+        merged.movements = current.movements
+        merged.products = current.products
+        merged.stockMoves = current.stockMoves
+      }
     }
     return merged
   }

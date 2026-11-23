@@ -45,11 +45,11 @@ const Conforme = page(() => import('./pages/Conforme'), 'Conforme')
 
 const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
   { path: 'ventas', permission: 'caja', element: <Ventas /> },
-  { path: 'corte', permission: 'caja', element: <CorteCaja /> },
+  { path: 'corte', permission: 'corte', element: <CorteCaja /> },
   { path: 'compras-empleados', permission: 'caja', element: <ComprasEmpleados /> },
   { path: 'clientes', permission: 'caja', element: <Clientes /> },
   { path: 'compras', permission: 'compras', element: <Compras /> },
-  { path: 'inventario', permission: 'compras', element: <Inventario /> },
+  { path: 'inventario', permission: 'inventario', element: <Inventario /> },
   { path: 'gastos', permission: 'compras', element: <Gastos /> },
   { path: 'por-pagar', permission: 'compras', element: <CuentasPorPagar /> },
   { path: 'planilla', permission: 'planilla', element: <Planilla /> },
@@ -219,7 +219,7 @@ export function App() {
         <Route
           path="ingresos"
           element={
-            <Guard permission="caja">
+            <Guard permission="movimientos">
               <Ingresos />
             </Guard>
           }
@@ -227,7 +227,7 @@ export function App() {
         <Route
           path="egresos"
           element={
-            <Guard permission="caja">
+            <Guard permission="movimientos">
               <Egresos />
             </Guard>
           }
