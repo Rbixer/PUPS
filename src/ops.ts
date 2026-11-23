@@ -1242,9 +1242,23 @@ export function saveAttendance(state: AppState, record: Attendance): Op<Attendan
   return { ok: true, value: next, patch: { attendance: exists ? list.map((item) => (item.id === next.id ? next : item)) : [next, ...list] } }
 }
 
+/** Horas de una jornada ordinaria; lo que pase de aquí es tiempo extra. */
+export const SHIFT_HOURS = 8
+
 export function shiftHours(record: Attendance) {
   if (!record.outAt) return 0
   return round2(Math.max(0, new Date(record.outAt).getTime() - new Date(record.inAt).getTime()) / 3_600_000)
+}
+
+/** Horas transcurridas de un turno (usa `now` si todavía no hay salida). */
+export function elapsedHours(record: Attendance, now = new Date()) {
+  if (record.outAt) return shiftHours(record)
+  return round2(Math.max(0, now.getTime() - new Date(record.inAt).getTime()) / 3_600_000)
+}
+
+/** Horas por encima de la jornada ordinaria (0 si aún no la supera). */
+export function overtimeHours(hours: number) {
+  return round2(Math.max(0, hours - SHIFT_HOURS))
 }
 
 /** Días con asistencia y horas trabajadas de un mes (AAAA-MM). `open` son días pasados que quedaron sin salida. */

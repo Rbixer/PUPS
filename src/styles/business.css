@@ -205,6 +205,13 @@
 .clock-card { display: grid; gap: 6px; justify-items: start; padding: 20px 22px; }
 .clock-card .eyebrow { margin: 0; text-transform: capitalize; }
 .clock-card .hint { margin: 0; }
+.clock-overtime {
+  margin: 0;
+  font-weight: 700;
+  color: #c45c1a;
+  font-size: 1.05rem;
+}
+html[data-theme='dark'] .clock-overtime { color: #f0a05a; }
 .clock-now { font-size: clamp(2.2rem, 5vw, 3rem); line-height: 1.05; font-weight: 750; letter-spacing: -0.02em; }
 .clock-btn { min-width: 200px; margin-top: 8px; padding-block: 14px; font-size: 1rem; }
 .section-title { margin: 8px 0 0; font-size: 1.1rem; }

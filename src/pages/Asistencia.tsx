@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { allows } from '../access'
 import { Field, Flash, Metrics, Tag } from '../components/ui'
 import { clockTime, count, hoursLabel, isoDate, longDate, money, monthTitle, newId, shiftMonth, timeInput, todayLabel, weekday } from '../format'
-import { attendanceOf, openShift, shiftHours } from '../ops'
+import { attendanceOf, elapsedHours, openShift, overtimeHours, SHIFT_HOURS, shiftHours } from '../ops'
 import { behindGoal, goalProgress, workersOf, type GoalProgress } from '../payroll'
 import { useStore } from '../store'
 import type { Attendance, User } from '../types'
@@ -11,6 +11,11 @@ const fullName = (user: Pick<User, 'name' | 'lastName'>) => [user.name, user.las
 
 /** Une la fecha del registro con una hora local HH:MM. */
 const stampOf = (date: string, time: string) => (time ? new Date(`${date}T${time}`).toISOString() : undefined)
+
+function overtimeLabel(hours: number) {
+  const extra = overtimeHours(hours)
+  return extra > 0 ? `Tiempo extra: ${hoursLabel(extra)}` : ''
+}
 
 export function Asistencia() {
   const { currentUser } = useStore()
@@ -46,15 +51,24 @@ function ClockCard() {
   if (!currentUser) return null
   const today = isoDate(now)
   const open = openShift(state.attendance, currentUser.id, today)
-  const worked = (state.attendance ?? []).filter((item) => item.userId === currentUser.id && item.date === today).reduce((sum, item) => sum + shiftHours(item), 0)
+  const todays = (state.attendance ?? []).filter((item) => item.userId === currentUser.id && item.date === today)
+  const worked = todays.reduce((sum, item) => sum + elapsedHours(item, now), 0)
+  const openHours = open ? elapsedHours(open, now) : 0
+  const extra = overtimeHours(worked)
+  const closed = !open && todays.some((item) => item.outAt)
+  const status = open
+    ? `Entraste a las ${clockTime(open.inAt)} · Llevas ${hoursLabel(openHours)}`
+    : closed
+      ? `Jornada finalizada · Hoy ${hoursLabel(worked)}`
+      : 'Todavía no marcas tu entrada de hoy.'
 
   return (
     <article className="ledger clock-card">
       <p className="eyebrow">{todayLabel()}</p>
       <strong className="clock-now num">{clockTime(now.toISOString())}</strong>
-      <p className="hint">
-        {open ? `Entraste a las ${clockTime(open.inAt)}` : worked > 0 ? `Hoy llevas ${hoursLabel(worked)} trabajadas.` : 'Todavía no marcas tu entrada de hoy.'}
-      </p>
+      <p className="hint">{status}</p>
+      {extra > 0 ? <p className="clock-overtime">Tiempo extra: {hoursLabel(extra)}</p> : null}
+      {open && openHours >= SHIFT_HOURS && extra === 0 ? <p className="hint">Ya cumpliste la jornada de {SHIFT_HOURS} h.</p> : null}
       <button
         type="button"
         className={`btn ${open ? 'btn-ghost' : 'btn-primary'} clock-btn`}
@@ -66,7 +80,14 @@ function ClockCard() {
             return
           }
           setError('')
-          setNotice(open ? `Salida marcada a las ${clockTime(result.value.outAt ?? '')}` : `Entrada marcada a las ${clockTime(result.value.inAt)}`)
+          if (!open) {
+            setNotice(`Entrada marcada a las ${clockTime(result.value.inAt)}`)
+            return
+          }
+          const hours = shiftHours(result.value)
+          const dayHours = todays.filter((item) => item.id !== result.value.id).reduce((sum, item) => sum + shiftHours(item), 0) + hours
+          const overtime = overtimeLabel(dayHours)
+          setNotice(`Jornada finalizada a las ${clockTime(result.value.outAt ?? '')}${overtime ? ` · ${overtime}` : ''}`)
         }}
       >
         {open ? 'Marcar salida' : 'Marcar entrada'}
@@ -143,19 +164,36 @@ function MyMonth() {
                   <th>Entrada</th>
                   <th>Salida</th>
                   <th className="num">Horas</th>
+                  <th>Extra</th>
                 </tr>
               </thead>
               <tbody>
-                {mine.records.map((item) => (
+                {mine.records.map((item) => {
+                  const hours = item.outAt ? shiftHours(item) : 0
+                  const extra = overtimeHours(hours)
+                  return (
                   <tr key={item.id}>
                     <td>
                       <strong>{weekday(item.date)}</strong> {longDate(item.date)}
                     </td>
                     <td>{clockTime(item.inAt)}</td>
-                    <td>{item.outAt ? clockTime(item.outAt) : item.date === isoDate() ? <Tag tone="ok">En curso</Tag> : <Tag tone="warn">Sin salida</Tag>}</td>
-                    <td className="num">{item.outAt ? hoursLabel(shiftHours(item)) : '—'}</td>
+                    <td>
+                      {item.outAt ? (
+                        <>
+                          {clockTime(item.outAt)}
+                          <small className="hint">Jornada finalizada</small>
+                        </>
+                      ) : item.date === isoDate() ? (
+                        <Tag tone="ok">En curso</Tag>
+                      ) : (
+                        <Tag tone="warn">Sin salida</Tag>
+                      )}
+                    </td>
+                    <td className="num">{item.outAt ? hoursLabel(hours) : '—'}</td>
+                    <td>{extra > 0 ? <Tag tone="warn">{hoursLabel(extra)}</Tag> : item.outAt ? '—' : ''}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -217,9 +255,19 @@ function Team() {
                     </td>
                     <td>
                       {open ? (
-                        <Tag tone="ok">Desde {clockTime(open.inAt)}</Tag>
+                        <span className="tag-row">
+                          <Tag tone="ok">Desde {clockTime(open.inAt)}</Tag>
+                          {overtimeHours(todays.reduce((sum, item) => sum + elapsedHours(item), 0)) > 0 ? (
+                            <Tag tone="warn">Tiempo extra</Tag>
+                          ) : null}
+                        </span>
                       ) : todays.length ? (
-                        <Tag tone="mute">Salió {clockTime(todays[0].outAt ?? todays[0].inAt)}</Tag>
+                        <span className="tag-row">
+                          <Tag tone="mute">Jornada finalizada</Tag>
+                          {overtimeHours(todays.reduce((sum, item) => sum + shiftHours(item), 0)) > 0 ? (
+                            <Tag tone="warn">Tiempo extra</Tag>
+                          ) : null}
+                        </span>
                       ) : (
                         <Tag tone="warn">Sin marcar</Tag>
                       )}
