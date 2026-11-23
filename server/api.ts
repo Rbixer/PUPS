@@ -11,6 +11,7 @@ import { visibleCatalog } from '../src/shop'
 import type { Appointment, AppState, Attendance, Lead, Movement, Permission, User } from '../src/types'
 import { BOOKING_SLOTS, resolvePetCode, slotPassed, slotTaken, visitMinutes } from '../src/visit'
 import {
+  appendOutbound,
   applyWebhook,
   dispatchOutbound,
   findThread,
@@ -633,6 +634,18 @@ export function createApi(dataDir = path.resolve('data')) {
     }
   }
 
+  /**
+   * Envía por WhatsApp y anota el mensaje sobre los datos más recientes. Mientras Meta responde pueden llegar otras
+   * escrituras; guardar el estado leído antes de esperar las pisaría.
+   */
+  async function notifyWhatsapp(config: NonNullable<ReturnType<typeof loadWaConfig>>, base: AppState, input: Parameters<typeof dispatchOutbound>[2]) {
+    const sent = await dispatchOutbound(config, base, input)
+    if (!sent.result.ok) return sent.result
+    const fresh = readState()
+    commit(appendOutbound(fresh, { phone: input.phone, name: input.name, petName: input.petName, body: input.body, externalId: sent.result.externalId }), fresh)
+    return sent.result
+  }
+
   async function book(request: IncomingMessage, response: ServerResponse) {
     limitPublic(request)
     const body = await readJsonBody<Record<string, unknown>>(request, PUBLIC_LIMIT)
@@ -670,12 +683,13 @@ export function createApi(dataDir = path.resolve('data')) {
       cost: 0,
       petCode: resolvePetCode(state.appointments, { petName, phone: normalizedPhone, clientName }),
     }
-    let next: AppState = { ...state, appointments: [appointment, ...state.appointments] }
+    // La reserva se guarda antes de hablar con Meta: mientras se espera la respuesta otra solicitud puede escribir.
+    const saved = commit({ ...state, appointments: [appointment, ...state.appointments] }, state)
     const wa = loadWaConfig()
     let notified = false
     if (wa) {
       const body = `Hola ${clientName}, recibimos tu reserva #${folio} para ${petName}: ${service} el ${longDate(date)} a las ${time}. Te confirmamos por este chat.`
-      const sent = await dispatchOutbound(wa, next, {
+      const result = await notifyWhatsapp(wa, saved, {
         phone,
         name: clientName,
         petName,
@@ -684,11 +698,9 @@ export function createApi(dataDir = path.resolve('data')) {
         allowTemplate: true,
         templateParams: [clientName, String(folio), petName, service, `${longDate(date)} ${time}`],
       })
-      next = sent.state
-      notified = sent.result.ok
-      if (!sent.result.ok) console.error('[whatsapp] reserva', sent.result.error)
+      notified = result.ok
+      if (!result.ok) console.error('[whatsapp] reserva', result.error)
     }
-    commit(next, state)
     send(response, 200, { folio, whatsapp: notified })
   }
 
@@ -873,7 +885,7 @@ export function createApi(dataDir = path.resolve('data')) {
         (body.phone ? findThread(current.conversations, body.phone) : undefined)
       const phone = thread?.phone || text(body.phone, 40)
       if (!phone) throw new HttpError(400, 'Elige una conversación.')
-      const sent = await dispatchOutbound(config, current, {
+      const sent = await notifyWhatsapp(config, current, {
         phone,
         name: thread?.name,
         petName: thread?.petName,
@@ -881,9 +893,8 @@ export function createApi(dataDir = path.resolve('data')) {
         forceTemplate: body.template === true,
         allowTemplate: body.template === true,
       })
-      if (!sent.result.ok) throw new HttpError(400, sent.result.error)
-      const saved = commit(sent.state, current)
-      return send(response, 200, { mode: sent.result.mode, state: viewFor(user, saved) })
+      if (!sent.ok) throw new HttpError(400, sent.error)
+      return send(response, 200, { mode: sent.mode, state: viewFor(user, readState()) })
     }
     send(response, 404, { error: 'No existe.' })
   }

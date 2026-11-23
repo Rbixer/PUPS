@@ -266,4 +266,43 @@ describe('servidor', () => {
     }
     expect((await call('POST', '/api/public/booking', { ...booking, petName: 'TobyX', phone: '55550999' })).status).toBe(409)
   })
+
+  it('con WhatsApp lento, dos reservas simultáneas se guardan las dos', async () => {
+    process.env.WA_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '100'
+    process.env.WA_VERIFY_TOKEN = 'verify-me'
+    process.env.WA_APP_SECRET = 'secret'
+    const original = globalThis.fetch
+    let sent = 0
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (String(input).startsWith('https://graph.facebook.com')) {
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        sent += 1
+        return new Response(JSON.stringify({ messages: [{ id: `wamid.${sent}` }] }), { status: 200 })
+      }
+      return original(input, init)
+    }) as typeof fetch
+    try {
+      const day = addDays(isoDate(), 3)
+      const booking = { clientName: 'Luz', service: SERVICE_NAMES[0], date: day, time: '11:00' }
+      const [first, second] = await Promise.all([
+        call('POST', '/api/public/booking', { ...booking, petName: 'Rocky', phone: '55551111' }),
+        call('POST', '/api/public/booking', { ...booking, clientName: 'Mar', petName: 'Nube', phone: '55552222' }),
+      ])
+      expect(first.status).toBe(200)
+      expect(second.status).toBe(200)
+      const admin = await login('admin')
+      const state = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+      const mine = state.appointments.filter((item) => item.date === day && item.time === '11:00')
+      expect(mine.map((item) => item.petName).sort()).toEqual(['Nube', 'Rocky'])
+      const messages = state.conversations.flatMap((thread) => thread.messages).filter((message) => message.externalId?.startsWith('wamid.'))
+      expect(messages).toHaveLength(2)
+    } finally {
+      globalThis.fetch = original
+      delete process.env.WA_TOKEN
+      delete process.env.WA_PHONE_NUMBER_ID
+      delete process.env.WA_VERIFY_TOKEN
+      delete process.env.WA_APP_SECRET
+    }
+  })
 })
