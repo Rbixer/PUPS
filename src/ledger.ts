@@ -1,7 +1,10 @@
 import { isoDate, parseIso } from './format'
 import { IVA_RATE, regimeOn, round2 } from './ops'
 import { shelfOf } from './shop'
-import type { AppState, Movement, Purchase, Settings } from './types'
+import type { AppState, Movement, Purchase, Sale, Settings } from './types'
+
+/** Misma etiqueta que ops.EMPLOYEE_CREDIT; se evita importar ops para no crear ciclo. */
+const EMPLOYEE_CREDIT = 'Crédito empleado'
 
 export type AccountType = 'activo' | 'pasivo' | 'patrimonio' | 'ingreso' | 'costo' | 'gasto'
 
@@ -180,6 +183,14 @@ export function buildJournal(state: AppState): Entry[] {
     entries.push(...movementEntries(movement, { settings, sales, purchases, payables, movements }).flatMap((entry) => balanced(entry) ?? []))
   }
 
+  /** Ventas a crédito de empleados: se reconocen al momento aunque aún no haya cobro en caja. */
+  for (const sale of state.sales ?? []) {
+    if (sale.status !== 'por cobrar' || sale.method !== EMPLOYEE_CREDIT) continue
+    for (const entry of saleRecognition(sale, settings, '1103')) {
+      push(entry)
+    }
+  }
+
   for (const purchase of state.purchases ?? []) {
     if (purchase.terms !== 'credito') continue
     push({
@@ -188,6 +199,17 @@ export function buildJournal(state: AppState): Entry[] {
       ref: purchase.number,
       concept: `Compra al crédito · ${purchase.supplierName}`,
       lines: [...purchaseLines(purchase), credit('2101', purchase.total)],
+    })
+  }
+
+  /** Depósitos al banco: sale de caja y entra a bancos. */
+  for (const deposit of state.deposits ?? []) {
+    push({
+      id: `deposito-${deposit.id}`,
+      date: deposit.date,
+      ref: deposit.reference || `DEP-${deposit.id.slice(0, 6)}`,
+      concept: `Depósito a ${deposit.bank || 'banco'}${deposit.note ? ` · ${deposit.note}` : ''}`,
+      lines: [debit('1102', deposit.amount), credit('1101', deposit.amount)],
     })
   }
 
@@ -286,6 +308,35 @@ type Context = {
   movements: Map<string, Movement>
 }
 
+/** Partidas de reconocimiento de una venta (ingreso + costo), con el activo que la recibe. */
+function saleRecognition(sale: Sale, settings: Settings, asset: string): Entry[] {
+  const goods = round2(sale.lines.filter((line) => line.productId).reduce((sum, line) => sum + line.qty * line.price, 0))
+  const services = round2(sale.total - goods)
+  const invoiced = Boolean(sale.invoiced)
+  const tax = regimeOn(settings, sale.date) === 'general' && invoiced ? round2(sale.total - sale.total / (1 + IVA_RATE)) : 0
+  const goodsTax = sale.total ? round2((tax * goods) / sale.total) : 0
+  const cost = round2(sale.lines.reduce((sum, line) => sum + (line.productId ? line.qty * (line.cost ?? 0) : 0), 0))
+  const result: Entry[] = [
+    {
+      id: `venta-${sale.id}`,
+      date: sale.date,
+      ref: sale.number,
+      concept: sale.clientName ? `Venta ${sale.number} · ${sale.clientName}` : `Venta ${sale.number}`,
+      lines: [debit(asset, sale.total), credit('4102', goods - goodsTax), credit('4101', services - (tax - goodsTax)), credit('2104', tax)],
+    },
+  ]
+  if (cost > 0) {
+    result.push({
+      id: `venta-${sale.id}-costo`,
+      date: sale.date,
+      ref: sale.number,
+      concept: `Costo de ${sale.number}`,
+      lines: [debit('5101', cost), credit('1104', cost)],
+    })
+  }
+  return result
+}
+
 function movementEntries(movement: Movement, context: Context): Entry[] {
   const base = { id: movement.id, date: movement.date, ref: movement.document, concept: movement.concept }
   const cash = methodAccount(movement.method)
@@ -302,6 +353,10 @@ function movementEntries(movement: Movement, context: Context): Entry[] {
   }
   if (movement.type === 'ingreso') {
     if (movement.method === 'Pedido') return []
+    /** Cobro de una venta ya reconocida a crédito: solo mueve de por cobrar a caja/banco. */
+    if (movement.category === 'Cobro de crédito empleado') {
+      return [{ ...base, lines: [debit(cash, movement.amount), credit('1103', movement.amount)] }]
+    }
     const special = !movement.saleId && !movement.folio && movement.category ? INCOME_ACCOUNT[movement.category] : undefined
     if (special) return [{ ...base, lines: [debit(cash, movement.amount), credit(special, movement.amount)] }]
     const sale = movement.saleId ? context.sales.get(movement.saleId) : undefined
@@ -468,4 +523,54 @@ export function taxMonths(entries: Entry[], settings: Settings, year: number): T
     }
   }
   return result
+}
+
+export type BankInflow = {
+  id: string
+  date: string
+  amount: number
+  kind: 'deposito' | 'cobro'
+  bank: string
+  ref: string
+  detail: string
+}
+
+/** Dinero que entró a bancos: depósitos del corte y cobros con transferencia o tarjeta. */
+export function bankInflows(state: AppState): BankInflow[] {
+  const deposits = (state.deposits ?? []).map((item) => ({
+    id: item.id,
+    date: item.date,
+    amount: item.amount,
+    kind: 'deposito' as const,
+    bank: item.bank || 'Banco',
+    ref: item.reference || 'Depósito',
+    detail: item.note || 'Depósito desde caja',
+  }))
+  const cobros = state.movements
+    .filter((item) => item.type === 'ingreso' && (item.method === 'Transferencia' || item.method === 'Tarjeta') && !item.reverses)
+    .map((item) => ({
+      id: item.id,
+      date: item.date,
+      amount: item.amount,
+      kind: 'cobro' as const,
+      bank: item.method,
+      ref: item.document,
+      detail: item.concept,
+    }))
+  return [...deposits, ...cobros].sort((a, b) => b.date.localeCompare(a.date) || b.ref.localeCompare(a.ref))
+}
+
+/** Partidas del diario que vienen de ventas o compras (incluye costos y créditos). */
+export function isTradeEntry(entry: Entry) {
+  if (entry.id.startsWith('venta-') || entry.id.startsWith('compra-')) return true
+  if (/^(apertura|alta-|kardex-|deposito-|iva-|isr-|planilla-|cxp-)/.test(entry.id)) return false
+  const ref = entry.ref.toUpperCase()
+  if (ref.startsWith('VEN') || ref.startsWith('COM')) return true
+  const concept = entry.concept.toLowerCase()
+  if (concept.includes('venta') || concept.includes('compra') || concept.startsWith('costo de')) return true
+  if (concept.includes('cobro compra trabajador') || concept.includes('cobro de crédito')) return true
+  if (entry.lines.some((line) => line.code === '4101' || line.code === '4102' || line.code === '5101')) return true
+  const buysStock = entry.lines.some((line) => line.code === '1104' && line.debit > 0)
+  const paysCashOrDebt = entry.lines.some((line) => line.credit > 0 && (line.code === '1101' || line.code === '1102' || line.code === '2101'))
+  return buysStock && paysCashOrDebt
 }

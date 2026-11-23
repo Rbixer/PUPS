@@ -422,6 +422,39 @@ describe('contabilidad', () => {
     expect(ivaOf('Ana')).toBe(Math.round((112 - 112 / 1.12) * 100) / 100)
     expect(ivaOf('Luis')).toBe(0)
   })
+
+  it('el diario incluye ventas a crédito, compras y depósitos a bancos', () => {
+    const staff = { id: 'w-banco', name: 'Rosa', username: 'rosa-banco', password: '', role: 'Recepción' as const, active: true, employeeCode: '1099', salary: 3600 }
+    const seed = { ...createSeed(), users: [...createSeed().users, staff], movements: [], sales: [], purchases: [], deposits: [], stockMoves: [] }
+    const product = seed.products!.find((item) => item.kind !== 'insumo' && item.stock > 0)!
+    const credit = apply(
+      seed,
+      ops.recordEmployeePurchase(seed, {
+        employeeId: staff.id,
+        credit: true,
+        method: 'Efectivo',
+        lines: [{ productId: product.id, name: product.name, qty: 1, price: product.price }],
+      }),
+    )
+    const saleEntry = buildJournal(credit.state).find((entry) => entry.id.startsWith('venta-'))
+    expect(saleEntry?.lines.some((line) => line.code === '1103' && line.debit > 0)).toBe(true)
+    const settled = apply(credit.state, ops.settleEmployeeCredit(credit.state, credit.value.id, 'Transferencia'))
+    const cobro = buildJournal(settled.state).find((entry) => entry.concept.includes('Cobro compra trabajador'))
+    expect(cobro?.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: '1102', debit: credit.value.total }),
+        expect.objectContaining({ code: '1103', credit: credit.value.total }),
+      ]),
+    )
+    const withDeposit = {
+      ...settled.state,
+      deposits: [{ id: 'dep1', date: isoDate(), amount: 500, bank: 'Banrural', reference: 'DEP-1', note: 'Corte', at: '', userId: staff.id }],
+    }
+    const deposit = buildJournal(withDeposit).find((entry) => entry.id === 'deposito-dep1')
+    expect(deposit?.lines).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: '1102', debit: 500 }), expect.objectContaining({ code: '1101', credit: 500 })]),
+    )
+  })
 })
 
 describe('clientes', () => {

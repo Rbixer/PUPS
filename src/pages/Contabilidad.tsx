@@ -2,12 +2,14 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
-import { accountName, balanceSheet, buildJournal, incomeStatement, taxMonths, type Balance } from '../ledger'
+import { accountName, balanceSheet, bankInflows, buildJournal, incomeStatement, isTradeEntry, taxMonths, type Balance } from '../ledger'
 import { ACCOUNTING_LINKS, ModuleIcon } from '../modules'
 import { round2 } from '../ops'
 import { useStore } from '../store'
 
 type Scope = 'mes' | 'anio'
+type ReportTab = 'resultados' | 'balance' | 'diario' | 'bancos' | 'impuestos'
+type DiarioFilter = 'todo' | 'comercio'
 
 function lastOfMonth(month: string) {
   const [year, number] = month.split('-').map(Number)
@@ -16,13 +18,15 @@ function lastOfMonth(month: string) {
 
 export function Contabilidad() {
   const { state, allows, setTaxRegime } = useStore()
-  const [tab, setTab] = useState<'resultados' | 'balance' | 'diario' | 'impuestos'>('resultados')
+  const [tab, setTab] = useState<ReportTab>('resultados')
+  const [diarioFilter, setDiarioFilter] = useState<DiarioFilter>('comercio')
   const [scope, setScope] = useState<Scope>('mes')
   const [month, setMonth] = useState(() => isoDate().slice(0, 7))
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const regime = state.settings.taxRegime
   const entries = useMemo(() => buildJournal(state), [state])
+  const banks = useMemo(() => bankInflows(state), [state])
   const year = Number(month.slice(0, 4))
   const from = scope === 'mes' ? `${month}-01` : `${year}-01-01`
   const to = scope === 'mes' ? lastOfMonth(month) : `${year}-12-31`
@@ -35,6 +39,12 @@ export function Contabilidad() {
   const mixed = new Set(taxes.map((item) => item.regime ?? '')).size > 1
   const since = state.settings.taxHistory?.length ? [...state.settings.taxHistory].sort((a, b) => b.from.localeCompare(a.from))[0].from : ''
   const inRange = entries.filter((entry) => entry.date >= from && entry.date <= to)
+  const diario = (diarioFilter === 'comercio' ? inRange.filter(isTradeEntry) : inRange).slice().reverse()
+  const bankRange = banks.filter((item) => item.date >= from && item.date <= to)
+  const bankTotal = round2(bankRange.reduce((sum, item) => sum + item.amount, 0))
+  const bankDeposits = round2(bankRange.filter((item) => item.kind === 'deposito').reduce((sum, item) => sum + item.amount, 0))
+  const bankCharges = round2(bankRange.filter((item) => item.kind === 'cobro').reduce((sum, item) => sum + item.amount, 0))
+  const bankBalance = sheet.assets.find((row) => row.code === '1102')?.balance ?? 0
   const monthly = Array.from({ length: 12 }, (_, index) => {
     const key = `${year}-${String(index + 1).padStart(2, '0')}`
     const result = incomeStatement(entries, `${key}-01`, lastOfMonth(key))
@@ -155,6 +165,7 @@ export function Contabilidad() {
           { id: 'resultados', label: 'Estado de resultados' },
           { id: 'balance', label: 'Balance general' },
           { id: 'diario', label: 'Libro diario' },
+          { id: 'bancos', label: 'Bancos' },
           { id: 'impuestos', label: 'Impuestos' },
         ]}
       />
@@ -260,10 +271,21 @@ export function Contabilidad() {
         <div className="ledger">
           <header className="module-bar">
             <h2>Libro diario</h2>
-            <span>{inRange.length} partidas</span>
+            <span>{diario.length} partidas</span>
           </header>
-          {inRange.length === 0 ? (
-            <p className="empty" style={{ margin: 14 }}>Sin partidas en {label.toLowerCase()}.</p>
+          <Tabs
+            label="Filtro del diario"
+            value={diarioFilter}
+            onChange={setDiarioFilter}
+            tabs={[
+              { id: 'comercio', label: 'Ventas y compras' },
+              { id: 'todo', label: 'Todas las partidas' },
+            ]}
+          />
+          {diario.length === 0 ? (
+            <p className="empty" style={{ margin: 14 }}>
+              {diarioFilter === 'comercio' ? `Sin ventas ni compras en ${label.toLowerCase()}.` : `Sin partidas en ${label.toLowerCase()}.`}
+            </p>
           ) : (
             <div className="table-wrap">
               <table className="biz-table">
@@ -277,34 +299,94 @@ export function Contabilidad() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inRange
-                    .slice()
-                    .reverse()
-                    .slice(0, 150)
-                    .flatMap((entry) =>
-                      entry.lines.map((line, index) => (
-                        <tr key={`${entry.id}-${index}`} style={index === entry.lines.length - 1 ? { borderBottom: '2px solid var(--line)' } : undefined}>
-                          <td>{index === 0 ? longDate(entry.date) : ''}</td>
-                          <td>
-                            {index === 0 ? (
-                              <>
-                                <strong>{entry.ref}</strong>
-                                <small>{entry.concept}</small>
-                              </>
-                            ) : null}
-                          </td>
-                          <td style={line.credit ? { paddingLeft: 34 } : undefined}>
-                            {line.code} {accountName(line.code)}
-                          </td>
-                          <td className="num">{line.debit ? money(line.debit) : ''}</td>
-                          <td className="num">{line.credit ? money(line.credit) : ''}</td>
-                        </tr>
-                      )),
-                    )}
+                  {diario.slice(0, 300).flatMap((entry) =>
+                    entry.lines.map((line, index) => (
+                      <tr key={`${entry.id}-${index}`} style={index === entry.lines.length - 1 ? { borderBottom: '2px solid var(--line)' } : undefined}>
+                        <td>{index === 0 ? longDate(entry.date) : ''}</td>
+                        <td>
+                          {index === 0 ? (
+                            <>
+                              <strong>{entry.ref}</strong>
+                              <small>{entry.concept}</small>
+                            </>
+                          ) : null}
+                        </td>
+                        <td style={line.credit ? { paddingLeft: 34 } : undefined}>
+                          {line.code} {accountName(line.code)}
+                        </td>
+                        <td className="num">{line.debit ? money(line.debit) : ''}</td>
+                        <td className="num">{line.credit ? money(line.credit) : ''}</td>
+                      </tr>
+                    )),
+                  )}
                 </tbody>
               </table>
             </div>
           )}
+          <p className="section-note">
+            Por defecto se muestran ventas y compras (contado, crédito, costos e IVA). En “Todas las partidas” también salen planilla, gastos, depósitos e impuestos.
+          </p>
+        </div>
+      ) : null}
+
+      {tab === 'bancos' ? (
+        <div className="stack">
+          <Metrics
+            items={[
+              { label: 'Saldo en bancos', value: money(bankBalance), tone: bankBalance >= 0 ? 'ok' : 'bad' },
+              { label: 'Ingresos del periodo', value: money(bankTotal), detail: label },
+              { label: 'Depósitos desde caja', value: money(bankDeposits) },
+              { label: 'Cobros transferencia/tarjeta', value: money(bankCharges) },
+            ]}
+          />
+          <div className="ledger">
+            <header className="module-bar">
+              <h2>Bancos</h2>
+              <span>{bankRange.length} movimientos</span>
+            </header>
+            {bankRange.length === 0 ? (
+              <p className="empty" style={{ margin: 14 }}>Todavía no hay depósitos ni cobros a banco en {label.toLowerCase()}.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="biz-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Tipo</th>
+                      <th>Banco / medio</th>
+                      <th>Detalle</th>
+                      <th className="num">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bankRange.map((item) => (
+                      <tr key={item.id}>
+                        <td>{longDate(item.date)}</td>
+                        <td>{item.kind === 'deposito' ? <Tag tone="ok">Depósito</Tag> : <Tag tone="mute">Cobro</Tag>}</td>
+                        <td>
+                          <strong>{item.bank}</strong>
+                          <small>{item.ref}</small>
+                        </td>
+                        <td>{item.detail}</td>
+                        <td className="num">{money(item.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4}>Total ingresado a bancos</td>
+                      <td className="num">
+                        <strong>{money(bankTotal)}</strong>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+            <p className="section-note">
+              Aquí entra lo depositado desde Corte de caja y los cobros hechos con transferencia o tarjeta. El saldo de bancos también aparece en el balance general.
+            </p>
+          </div>
         </div>
       ) : null}
 

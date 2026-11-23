@@ -1196,7 +1196,7 @@ export function settleEmployeeCredit(state: AppState, saleId: string, method: st
     method,
     notes: lineSummary(sale.lines),
     document: nextDocument(state, 'ingreso'),
-    category: 'Venta de mostrador',
+    category: 'Cobro de crédito empleado',
     saleId: sale.id,
     invoiced: false,
   }
