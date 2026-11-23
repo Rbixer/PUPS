@@ -1,7 +1,8 @@
 import type { Cell, Worksheet } from 'exceljs'
 import { formatName, isoDate, monthTitle } from './format'
+import { GROOMING_PACKAGES, packageLabel, packageOf } from './grooming'
 import { PETTY_REFILL } from './ops'
-import type { AppState, Appointment, Movement } from './types'
+import type { AppState, Appointment, GroomingPackage, Movement } from './types'
 
 export type Tone = 'up' | 'down' | 'flat'
 
@@ -19,6 +20,8 @@ export type MonthReport = {
   pets: number
   clients: number
   premium: number
+  /** Paquetes pagados en citas completadas: Básico, Estándar, Premium (+ otros si hay). */
+  packages: [string, { count: number; amount: number }][]
   pending: number
   cancelled: number
   messages: number
@@ -34,6 +37,8 @@ export type MonthReport = {
   hours: { label: string; count: number }[]
   days: { date: string; sales: number; citas: number }[]
 }
+
+const PACKAGE_ORDER: GroomingPackage[] = ['basico', 'estandar', 'premium', 'paquete', 'stripping']
 
 const ACCENT = 'FFC4492C'
 const WHITE = 'FFFFFFFF'
@@ -66,10 +71,20 @@ export function statusLabel(status: Appointment['status']) {
   return 'Pendiente'
 }
 
+/** Etiqueta corta del plan/paquete cobrado en la cita. */
 export function planLabel(item: Appointment) {
-  if (item.report?.plan === 'premium' || item.service.toLowerCase().includes('premium')) return 'Premium'
-  if (item.report?.plan === 'grooming') return 'Grooming'
+  if (item.report) return packageLabel(item.report)
+  if (item.service.toLowerCase().includes('premium')) return 'Premium'
   return '—'
+}
+
+/** Paquete de grooming de una cita completada; null si no aplica (p. ej. solo pet shop). */
+export function packageOfAppointment(item: Appointment): GroomingPackage | null {
+  if (item.report) return packageOf(item.report)
+  if (item.service.toLowerCase().includes('premium')) return 'premium'
+  const name = item.service.toLowerCase()
+  if (name.includes('grooming') || name.includes('baño') || name.includes('bano') || name.includes('corte')) return 'estandar'
+  return null
 }
 
 function monthDays(cursor: string) {
@@ -132,6 +147,21 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
     sizes.set(name, (sizes.get(name) ?? 0) + 1)
   }
 
+  const packages = new Map<string, { count: number; amount: number }>()
+  for (const id of PACKAGE_ORDER) {
+    const label = GROOMING_PACKAGES.find((item) => item.id === id)?.label ?? id
+    packages.set(label, { count: 0, amount: 0 })
+  }
+  for (const item of done) {
+    const pack = packageOfAppointment(item)
+    if (!pack) continue
+    const label = GROOMING_PACKAGES.find((entry) => entry.id === pack)?.label ?? pack
+    const slot = packages.get(label) ?? { count: 0, amount: 0 }
+    slot.count += 1
+    slot.amount += item.cost
+    packages.set(label, slot)
+  }
+
   const tutors = new Map<string, { visits: number; amount: number }>()
   for (const item of done) {
     const name = formatName(item.clientName)
@@ -172,7 +202,11 @@ export function buildMonthReport(state: AppState, cursor: string): MonthReport {
     average: done.length ? sales / done.length : 0,
     pets: new Set(appointments.map((item) => `${item.petName.trim().toLowerCase()}::${item.phone}`)).size,
     clients: new Set(appointments.map((item) => item.clientName.trim().toLowerCase()).filter(Boolean)).size,
-    premium: done.filter((item) => planLabel(item) === 'Premium').length,
+    premium: done.filter((item) => packageOfAppointment(item) === 'premium').length,
+    packages: PACKAGE_ORDER.map((id) => {
+      const label = GROOMING_PACKAGES.find((item) => item.id === id)?.label ?? id
+      return [label, packages.get(label) ?? { count: 0, amount: 0 }] as [string, { count: number; amount: number }]
+    }).filter(([label, slot]) => slot.count > 0 || label === 'Básico' || label === 'Estándar' || label === 'Premium'),
     pending: appointments.filter((item) => item.status === 'pendiente').length,
     cancelled: appointments.filter((item) => item.status === 'cancelada').length,
     messages,
@@ -262,7 +296,9 @@ export async function downloadExcel(report: MonthReport) {
     ['Citas del mes', report.appointments.length, `${report.pending} pendientes · ${report.cancelled} canceladas`, false],
     ['Cierre', rate(report.done.length, report.appointments.length), 'Porcentaje de citas completadas', false],
     ['Mascotas', report.pets, `${report.clients} tutores`, false],
-    ['Premium en completadas', report.premium, `${report.done.length} citas completadas`, false],
+    ...report.packages.map(
+      ([name, slot]) => [`Paquete ${name}`, slot.count, `${slot.count} citas · ${slot.amount.toFixed(2)} cobrado`, false] as [string, number, string, boolean],
+    ),
     ['Mensajes de WhatsApp', report.messages, `${report.unread} sin leer ahora · ${report.leads} del sitio`, false],
   ]
   summaryRows.forEach((entry, index) => {

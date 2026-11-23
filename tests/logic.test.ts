@@ -4,7 +4,7 @@ import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
 import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteContent, safeLink } from '../src/format'
 import { emptyReport, hardAreas, readReport } from '../src/grooming'
-import { buildMonthReport } from '../src/report'
+import { buildMonthReport, packageOfAppointment } from '../src/report'
 import type { Mark } from '../src/types'
 import { ACCOUNTING_LINKS, MODULE_GROUPS } from '../src/modules'
 import { EMPLOYEE_CREDIT, employeeOwed, recordEmployeePurchase, settleEmployeeCredit } from '../src/ops'
@@ -186,6 +186,30 @@ describe('reportería', () => {
     expect(report.sales).toBe(0)
     expect(report.result).toBe(0)
     expect(report.average).toBe(0)
+    expect(report.packages.map(([name]) => name)).toEqual(['Básico', 'Estándar', 'Premium'])
+  })
+
+  it('cuenta paquetes básico, estándar y premium en citas completadas', () => {
+    const seed = createSeed()
+    const base = seed.appointments.find((item) => item.status === 'completada')!
+    const month = base.date.slice(0, 7)
+    const withPacks = {
+      ...seed,
+      appointments: [
+        { ...base, id: 'p1', folio: 9001, report: { ...emptyReport(), packageId: 'basico' as const, plan: 'grooming' as const }, cost: 100 },
+        { ...base, id: 'p2', folio: 9002, report: { ...emptyReport(), packageId: 'estandar' as const, plan: 'grooming' as const }, cost: 150 },
+        { ...base, id: 'p3', folio: 9003, report: { ...emptyReport(), packageId: 'premium' as const, plan: 'premium' as const }, cost: 220 },
+        { ...base, id: 'p4', folio: 9004, status: 'pendiente' as const, report: { ...emptyReport(), packageId: 'premium' as const, plan: 'premium' as const }, cost: 220 },
+      ],
+    }
+    expect(packageOfAppointment(withPacks.appointments[0])).toBe('basico')
+    const report = buildMonthReport(withPacks, `${month}-01`)
+    expect(Object.fromEntries(report.packages)).toMatchObject({
+      Básico: { count: 1, amount: 100 },
+      Estándar: { count: 1, amount: 150 },
+      Premium: { count: 1, amount: 220 },
+    })
+    expect(report.premium).toBe(1)
   })
 })
 

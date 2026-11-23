@@ -230,7 +230,10 @@ export function Estadisticas() {
             {report.premium}
             <em>/{report.done.length || 0}</em>
           </strong>
-          <small>Completadas con plan premium</small>
+          <small>
+            Básico {report.packages.find(([name]) => name === 'Básico')?.[1].count ?? 0} · Estándar{' '}
+            {report.packages.find(([name]) => name === 'Estándar')?.[1].count ?? 0}
+          </small>
         </article>
       </div>
 
@@ -264,12 +267,23 @@ export function Estadisticas() {
           <p className="hint">
             {report.done.length === 0
               ? 'Este mes no tiene citas completadas.'
-              : `Premium en completadas: ${report.premium} de ${report.done.length}.`}
+              : `Paquetes en completadas: Básico ${report.packages.find(([name]) => name === 'Básico')?.[1].count ?? 0}, Estándar ${report.packages.find(([name]) => name === 'Estándar')?.[1].count ?? 0}, Premium ${report.premium}.`}
           </p>
         </article>
       </div>
 
       <div className="stat-split">
+        <article className="panel">
+          <h2>Paquetes pagados</h2>
+          <p className="hint">Básico, estándar o premium según la constancia de la cita completada.</p>
+          <Meter
+            rows={report.packages.map(([name, slot]) => ({
+              label: name,
+              value: slot.count || slot.amount,
+              detail: `${slot.count} · ${money(slot.amount)}`,
+            }))}
+          />
+        </article>
         <article className="panel">
           <h2>Servicios</h2>
           <Meter
@@ -280,6 +294,9 @@ export function Estadisticas() {
             }))}
           />
         </article>
+      </div>
+
+      <div className="stat-split">
         <article className="panel">
           <h2>Medios de pago</h2>
           <Meter
@@ -298,9 +315,6 @@ export function Estadisticas() {
             }))}
           />
         </article>
-      </div>
-
-      <div className="stat-split">
         <article className="panel">
           <h2>Horas con más citas</h2>
           <p className="hint">Cuenta pendientes y completadas. Canceladas no entran.</p>
