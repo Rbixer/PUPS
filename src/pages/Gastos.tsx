@@ -242,7 +242,7 @@ function MonthExpenses({ cursor, egresos }: { cursor: string; egresos: Movement[
           <span>{egresos.length}</span>
         </header>
         {egresos.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Sin egresos este mes.</p>
+          <p className="empty empty-inset">Sin egresos este mes.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">
@@ -467,7 +467,7 @@ function PettyCash() {
           <span>{money(balance)}</span>
         </header>
         {moves.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Todavía no hay movimientos. Empieza reponiendo la caja chica con el fondo que manejan.</p>
+          <p className="empty empty-inset">Todavía no hay movimientos. Empieza reponiendo la caja chica con el fondo que manejan.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">
@@ -587,7 +587,7 @@ function FixedCosts({ cursor }: { cursor: string }) {
           <span>{list.length} fijos</span>
         </header>
         {list.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Agrega el alquiler y lo que se paga cada mes. Internet, agua, luz y móvil se pagan en Pago de servicios.</p>
+          <p className="empty empty-inset">Agrega el alquiler y lo que se paga cada mes. Internet, agua, luz y móvil se pagan en Pago de servicios.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">

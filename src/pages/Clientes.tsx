@@ -43,7 +43,7 @@ export function Clientes() {
             <input type="search" placeholder="Buscar por nombre, teléfono o mascota" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar cliente" />
           </div>
           {visible.length === 0 ? (
-            <p className="empty" style={{ margin: 14 }}>Sin clientes con esa búsqueda.</p>
+            <p className="empty empty-inset">Sin clientes con esa búsqueda.</p>
           ) : (
             <div className="table-wrap">
               <table className="biz-table">
@@ -137,7 +137,7 @@ export function Clientes() {
                 <span>{current.visits.length}</span>
               </header>
               {current.visits.length === 0 ? (
-                <p className="empty" style={{ margin: 14 }}>Sin visitas.</p>
+                <p className="empty empty-inset">Sin visitas.</p>
               ) : (
                 <div className="table-wrap">
                   <table className="biz-table">
@@ -168,7 +168,7 @@ export function Clientes() {
                 <span>{current.sales.length}</span>
               </header>
               {current.sales.length === 0 ? (
-                <p className="empty" style={{ margin: 14 }}>Sin compras registradas con su nombre o teléfono.</p>
+                <p className="empty empty-inset">Sin compras registradas con su nombre o teléfono.</p>
               ) : (
                 <div className="table-wrap">
                   <table className="biz-table">

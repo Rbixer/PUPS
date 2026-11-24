@@ -1,6 +1,7 @@
 /* Orden de capas: lo heredado abajo, Tailwind arriba. Así las utilidades siempre ganan. */
 @layer legacy, theme, components, utilities;
 
+@import './styles/tokens.css' layer(legacy);
 @import './styles.css' layer(legacy);
 @import './styles/premium.css' layer(legacy);
 @import './styles/business.css' layer(legacy);
@@ -10,6 +11,8 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 @import './styles/ui.css';
+/* Look unificado del panel: va en la capa components, después de ui.css, y gana sobre lo heredado. */
+@import './styles/admin.css' layer(components);
 
 @custom-variant dark (&:where(html[data-theme='dark'], html[data-theme='dark'] *));
 

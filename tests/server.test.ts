@@ -305,4 +305,56 @@ describe('servidor', () => {
       delete process.env.WA_APP_SECRET
     }
   })
+
+  async function limitedUser(id: string, permissions: string[]) {
+    const admin = await login('admin')
+    const current = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const extra = { id, name: id, username: id, role: 'Recepción', active: true, permissions, permissionsVersion: 3 }
+    const saved = await call('PUT', '/api/state', { base: current.revision ?? 0, state: { ...current, users: [...current.users, extra] } }, admin.token)
+    expect(saved.status).toBe(200)
+    expect((await call('POST', '/api/password', { userId: id, password: 'ClaveLarga2026' }, admin.token)).status).toBe(204)
+    return login(id, 'ClaveLarga2026')
+  }
+
+  it('con solo «Citas» no se cancelan citas, ni se cambian datos del negocio, la línea de WhatsApp o el control', async () => {
+    const limited = await limitedUser('soloCitas', ['citas'])
+    const seen = (await call('GET', '/api/state', undefined, limited.token)).body as AppState
+    const pending = seen.appointments.find((item) => item.status === 'pendiente')!
+    const forged = {
+      ...seen,
+      appointments: seen.appointments.map((item) => (item.id === pending.id ? { ...item, status: 'cancelada' as const } : item)),
+      settings: { ...seen.settings, address: 'Otra calle', whatsapp: '+50211112222', controlGoal: 5 },
+      controlRows: [{ year: 2026, month: 1, values: { deas: 9 } }],
+    }
+    const saved = await call('PUT', '/api/state', { base: seen.revision ?? 0, state: forged }, limited.token)
+    expect(saved.status).toBe(200)
+    const after = saved.body.state as AppState
+    expect(after.appointments.find((item) => item.id === pending.id)!.status).toBe('pendiente')
+    expect(after.settings.address).toBe(seen.settings.address)
+    expect(after.settings.whatsapp).toBe(seen.settings.whatsapp)
+    expect(after.settings.controlGoal).toBe(seen.settings.controlGoal)
+    expect(after.controlRows ?? []).toEqual(seen.controlRows ?? [])
+  })
+
+  it('con «Cancelar citas» sí cancela, y con «Datos del negocio» cambia la dirección', async () => {
+    const limited = await limitedUser('conCancelar', ['citas', 'citas_cancelar', 'negocio'])
+    const seen = (await call('GET', '/api/state', undefined, limited.token)).body as AppState
+    const pending = seen.appointments.find((item) => item.status === 'pendiente')!
+    const forged = {
+      ...seen,
+      appointments: seen.appointments.map((item) => (item.id === pending.id ? { ...item, status: 'cancelada' as const } : item)),
+      settings: { ...seen.settings, address: 'Nueva dirección 123' },
+    }
+    const saved = await call('PUT', '/api/state', { base: seen.revision ?? 0, state: forged }, limited.token)
+    expect(saved.status).toBe(200)
+    const after = (await call('GET', '/api/state', undefined, limited.token)).body as AppState
+    expect(after.appointments.find((item) => item.id === pending.id)!.status).toBe('cancelada')
+    expect(after.settings.address).toBe('Nueva dirección 123')
+  })
+
+  it('leer WhatsApp no alcanza para enviar mensajes', async () => {
+    const reader = await limitedUser('soloLeerWa', ['whatsapp'])
+    const sent = await call('POST', '/api/whatsapp/send', { conversationId: 'x', text: 'hola' }, reader.token)
+    expect(sent.status).toBe(403)
+  })
 })

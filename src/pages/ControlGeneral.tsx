@@ -8,7 +8,7 @@ import { useStore } from '../store'
 import type { ControlField } from '../types'
 
 export function ControlGeneral() {
-  const { state, setControl, updateSettings } = useStore()
+  const { state, allows, setControl, updateSettings } = useStore()
   const [year, setYear] = useState(() => new Date().getFullYear())
   const entries = useMemo(() => buildJournal(state), [state])
   const result = incomeStatement(entries, `${year}-01-01`, `${year}-12-31`)
@@ -79,6 +79,7 @@ export function ControlGeneral() {
               type="number"
               min={1}
               max={9999}
+              readOnly={!allows('control_editar')}
               defaultValue={goal}
               key={goal}
               onBlur={(event) => {
@@ -88,12 +89,16 @@ export function ControlGeneral() {
               }}
             />
           </label>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== ''} onClick={() => void onExcel()}>
-            {busy === 'excel' ? 'Preparando…' : 'Excel'}
-          </button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={busy !== ''} onClick={() => void onPdf()}>
-            {busy === 'pdf' ? 'Preparando…' : 'PDF'}
-          </button>
+          {allows('reportes') ? (
+            <>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== ''} onClick={() => void onExcel()}>
+                {busy === 'excel' ? 'Preparando…' : 'Excel'}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" disabled={busy !== ''} onClick={() => void onPdf()}>
+                {busy === 'pdf' ? 'Preparando…' : 'PDF'}
+              </button>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -182,6 +187,7 @@ function Cell({
   field: ControlField
   onSave: (year: number, month: number, field: ControlField, value: number | null) => void
 }) {
+  const { allows } = useStore()
   const value = line.values[field]
   const auto = line.auto[field]
   const manual = Boolean(line.manual[field])
@@ -191,6 +197,7 @@ function Cell({
     <input
       className="num"
       inputMode="decimal"
+      readOnly={!allows('control_editar')}
       defaultValue={text}
       key={`${year}-${line.month}-${field}-${value}-${manual}`}
       aria-label={`${column.label} · ${line.label}`}

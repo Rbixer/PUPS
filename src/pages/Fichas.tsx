@@ -643,7 +643,8 @@ function VisitPhotos({ appointment }: { appointment: Appointment }) {
   const after = visitPhoto(appointment, 'despues')
   const gallery = state.settings.gallery ?? []
   const published = Boolean(after) && gallery.some((photo) => photo.src === after)
-  const canPublish = Boolean(after) && allows(currentUser, 'equipo')
+  const canPublish = Boolean(after) && allows(currentUser, 'fichas_publicar')
+  const canPhotos = allows(currentUser, 'fichas_fotos')
 
   async function onFile(slot: 'antes' | 'despues', file?: File) {
     if (!file) return
@@ -666,12 +667,14 @@ function VisitPhotos({ appointment }: { appointment: Appointment }) {
       <div className="compare">
         <PhotoSlot
           label="Antes"
+          readOnly={!canPhotos}
           src={visitPhoto(appointment, 'antes')}
           onFile={(file) => void onFile('antes', file)}
           onClear={() => setVisitPhoto(appointment.id, 'antes', '')}
         />
         <PhotoSlot
           label="Después"
+          readOnly={!canPhotos}
           src={visitPhoto(appointment, 'despues')}
           onFile={(file) => void onFile('despues', file)}
           onClear={() => setVisitPhoto(appointment.id, 'despues', '')}
@@ -704,7 +707,9 @@ function PhotoSlot({
   src,
   onFile,
   onClear,
+  readOnly = false,
 }: {
+  readOnly?: boolean
   label: string
   src: string
   onFile: (file?: File) => void
@@ -714,7 +719,7 @@ function PhotoSlot({
     <div className="compare-slot">
       <span>{label}</span>
       {src ? <img src={src} alt={label} /> : <span className="photo-empty">Sin foto</span>}
-      <div className="compare-actions">
+      <div className="compare-actions" hidden={readOnly}>
         <label className="btn btn-ghost btn-sm">
           {src ? 'Cambiar' : 'Subir'}
           <input

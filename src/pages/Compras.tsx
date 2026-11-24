@@ -440,7 +440,7 @@ function Suppliers() {
           <span>{suppliers.length}</span>
         </header>
         {suppliers.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Todavía no hay proveedores.</p>
+          <p className="empty empty-inset">Todavía no hay proveedores.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">

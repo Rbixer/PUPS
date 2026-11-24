@@ -1,0 +1,59 @@
+/* Tokens de diseño del panel de PUP'S. Una sola fuente para colores, radios, sombras y tipografía.
+   Las variables heredadas del panel (--bg, --card, --ink, --muted, --line, --accent…) apuntan aquí desde styles.css. */
+
+:root {
+  /* Marca */
+  --navy: #123376;
+  --navy-deep: #0b1f4d;
+  --navy-50: #eef3fb;
+  --aqua: #5ce1e6;
+  --aqua-ink: #0b7c84;
+  --aqua-soft: #e3f9fa;
+
+  /* Superficies y líneas */
+  --app-bg: #f4f8fb;
+  --card-bg: #ffffff;
+  --line-soft: #e3ecf2;
+  --line-strong: #ccdae5;
+
+  /* Texto */
+  --text: #0f1f3d;
+  --text-2: #5b6b80;
+  /* #6B7C90 da 4,3:1 sobre blanco; este tono llega a 4,6:1 (AA). */
+  --text-placeholder: #66778c;
+
+  /* Estados */
+  --ok: #12805c;
+  --ok-bg: #e8f7f1;
+  --warn: #9a5b00;
+  --warn-bg: #fff3dd;
+  --bad: #c2364a;
+  --bad-bg: #fde9ec;
+  --badge: #c2410c;
+
+  /* Radios */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  /* Sombras navy */
+  --sh-1: 0 1px 2px rgba(11, 31, 77, 0.06);
+  --sh-2: 0 6px 16px -4px rgba(11, 31, 77, 0.12);
+  --sh-3: 0 24px 48px -16px rgba(11, 31, 77, 0.28);
+
+  /* Tipografía: títulos y cifras en Manrope, cuerpo en Inter */
+  --font-heading: 'Manrope Variable', 'Manrope', 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-text: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-32: 32px;
+  --fs-44: 44px;
+
+  --ease-ui: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 150ms;
+}

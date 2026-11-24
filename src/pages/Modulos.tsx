@@ -4,7 +4,7 @@ import { allows } from '../access'
 import { alertBadges } from '../alerts'
 import { DEMO_MODE } from '../env'
 import { formatName, todayLabel } from '../format'
-import { MODULE_GROUPS, ModuleIcon } from '../modules'
+import { linkAllowed, MODULE_GROUPS, ModuleIcon } from '../modules'
 import { useStore } from '../store'
 
 const plain = (text: string) =>
@@ -24,18 +24,10 @@ export function Modulos() {
     document.title = "Módulos · PUP'S"
   }, [])
 
-  const canSee = (permission?: (typeof MODULE_GROUPS)[0]['links'][0]['permission'], to?: string) => {
-    if (!currentUser) return false
-    if (!permission) return true
-    if (allows(currentUser, permission)) return true
-    if (to === '/admin/contabilidad') {
-      return allows(currentUser, 'compras') || allows(currentUser, 'planilla')
-    }
-    return false
-  }
+  const canSee = (link: (typeof MODULE_GROUPS)[0]['links'][0]) => Boolean(currentUser) && linkAllowed(link, (permission) => allows(currentUser, permission))
   const groups = MODULE_GROUPS.map((group) => ({
     ...group,
-    links: group.links.filter((link) => canSee(link.permission, link.to)),
+    links: group.links.filter(canSee),
   })).filter((group) => group.links.length > 0)
   const total = groups.reduce((sum, group) => sum + group.links.length, 0)
   const words = plain(query.trim())

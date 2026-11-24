@@ -131,7 +131,7 @@ export function CuentasPorPagar() {
           <Flash error={error} notice={notice} />
           <div className="ledger">
             {rows.length === 0 ? (
-              <p className="empty" style={{ margin: 14 }}>{view === 'pendientes' ? 'Sin facturas pendientes. Todo al día.' : 'Todavía no hay facturas pagadas.'}</p>
+              <p className="empty empty-inset">{view === 'pendientes' ? 'Sin facturas pendientes. Todo al día.' : 'Todavía no hay facturas pagadas.'}</p>
             ) : (
               <div className="table-wrap">
                 <table className="biz-table">

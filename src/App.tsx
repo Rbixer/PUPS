@@ -40,18 +40,19 @@ const Contabilidad = page(() => import('./pages/Contabilidad'), 'Contabilidad')
 const Tareas = page(() => import('./pages/Tareas'), 'Tareas')
 const Asistencia = page(() => import('./pages/Asistencia'), 'Asistencia')
 const ComprasEmpleados = page(() => import('./pages/ComprasEmpleados'), 'ComprasEmpleados')
+const Reportes = page(() => import('./pages/Reportes'), 'Reportes')
 const Modulos = page(() => import('./pages/Modulos'), 'Modulos')
 const Conforme = page(() => import('./pages/Conforme'), 'Conforme')
 
 const GUARDED: { path: string; permission: Permission; element: ReactNode }[] = [
   { path: 'ventas', permission: 'caja', element: <Ventas /> },
   { path: 'corte', permission: 'corte', element: <CorteCaja /> },
-  { path: 'compras-empleados', permission: 'caja', element: <ComprasEmpleados /> },
-  { path: 'clientes', permission: 'caja', element: <Clientes /> },
+  { path: 'compras-empleados', permission: 'empleados', element: <ComprasEmpleados /> },
+  { path: 'clientes', permission: 'clientes', element: <Clientes /> },
   { path: 'compras', permission: 'compras', element: <Compras /> },
   { path: 'inventario', permission: 'inventario', element: <Inventario /> },
-  { path: 'gastos', permission: 'compras', element: <Gastos /> },
-  { path: 'por-pagar', permission: 'compras', element: <CuentasPorPagar /> },
+  { path: 'gastos', permission: 'gastos', element: <Gastos /> },
+  { path: 'por-pagar', permission: 'por_pagar', element: <CuentasPorPagar /> },
   { path: 'planilla', permission: 'planilla', element: <Planilla /> },
   { path: 'tareas', permission: 'tareas', element: <Tareas /> },
 ]
@@ -85,11 +86,11 @@ function Guard({ permission, children }: { permission: Permission; children: Rea
   return children
 }
 
-/** Contabilidad es el hub de compras/gastos/planilla: entra quien tenga cualquiera de esos permisos. */
-function GuardContabilidad({ children }: { children: ReactNode }) {
+/** Hubs (Contabilidad, Reportes): entra quien tenga cualquiera de los permisos de lo que reúnen. */
+function GuardAny({ permissions, children }: { permissions: Permission[]; children: ReactNode }) {
   const { currentUser, booting } = useStore()
   if (!currentUser) return booting ? <Loading /> : <ToLogin />
-  if (!allows(currentUser, 'contabilidad') && !allows(currentUser, 'compras') && !allows(currentUser, 'planilla')) {
+  if (!permissions.some((permission) => allows(currentUser, permission))) {
     return <Navigate to={homeFor(currentUser)} replace />
   }
   return children
@@ -187,7 +188,7 @@ export function App() {
         <Route
           path="control"
           element={
-            <Guard permission="equipo">
+            <Guard permission="control">
               <ControlGeneral />
             </Guard>
           }
@@ -211,7 +212,7 @@ export function App() {
         <Route
           path="tienda"
           element={
-            <Guard permission="caja">
+            <Guard permission="tienda">
               <Tienda />
             </Guard>
           }
@@ -227,7 +228,7 @@ export function App() {
         <Route
           path="egresos"
           element={
-            <Guard permission="movimientos">
+            <Guard permission="egresos">
               <Egresos />
             </Guard>
           }
@@ -235,7 +236,7 @@ export function App() {
         <Route
           path="constancias"
           element={
-            <Guard permission="caja">
+            <Guard permission="constancias">
               <Constancias />
             </Guard>
           }
@@ -246,9 +247,17 @@ export function App() {
         <Route
           path="contabilidad"
           element={
-            <GuardContabilidad>
+            <GuardAny permissions={['contabilidad', 'compras', 'gastos', 'por_pagar', 'planilla']}>
               <Contabilidad />
-            </GuardContabilidad>
+            </GuardAny>
+          }
+        />
+        <Route
+          path="reportes"
+          element={
+            <GuardAny permissions={['estadisticas', 'reportes', 'contabilidad', 'control', 'corte', 'inventario', 'planilla', 'compras']}>
+              <Reportes />
+            </GuardAny>
           }
         />
         <Route path="asistencia" element={<Asistencia />} />

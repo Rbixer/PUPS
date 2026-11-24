@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Permission } from './types'
 
-export type ModuleLink = { to: string; label: string; detail: string; end: boolean; permission?: Permission }
+export type ModuleLink = { to: string; label: string; detail: string; end: boolean; permission?: Permission; anyOf?: Permission[] }
 export type ModuleGroup = { id: string; label: string; tone: string; links: ModuleLink[] }
 
 export const MODULE_GROUPS: ModuleGroup[] = [
@@ -12,7 +12,7 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     links: [
       { to: '/admin', label: 'Citas', detail: 'Agenda del día y del mes.', end: true, permission: 'citas' },
       { to: '/admin/fichas', label: 'Fichas', detail: 'Historial y comportamiento de cada mascota.', end: false, permission: 'fichas' },
-      { to: '/admin/clientes', label: 'Clientes', detail: 'Tutores, mascotas, visitas y compras.', end: false, permission: 'caja' },
+      { to: '/admin/clientes', label: 'Clientes', detail: 'Tutores, mascotas, visitas y compras.', end: false, permission: 'clientes' },
       { to: '/admin/tareas', label: 'Tareas', detail: 'Pendientes asignados al equipo.', end: false, permission: 'tareas' },
       { to: '/admin/whatsapp', label: 'WhatsApp', detail: 'Chat del negocio con los clientes.', end: false, permission: 'whatsapp' },
     ],
@@ -23,12 +23,12 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     tone: '#e07a2f',
     links: [
       { to: '/admin/ventas', label: 'Punto de venta', detail: 'Cobrar productos y servicios en mostrador.', end: false, permission: 'caja' },
-      { to: '/admin/tienda', label: 'Tienda en línea', detail: 'Pedidos y productos del sitio.', end: false, permission: 'caja' },
+      { to: '/admin/tienda', label: 'Tienda en línea', detail: 'Pedidos y productos del sitio.', end: false, permission: 'tienda' },
       { to: '/admin/ingresos', label: 'Registrar ingreso', detail: 'Entradas de dinero fuera del punto de venta.', end: false, permission: 'movimientos' },
-      { to: '/admin/egresos', label: 'Documento de egreso', detail: 'Constancia de salida de la mascota y salidas de caja.', end: false, permission: 'movimientos' },
+      { to: '/admin/egresos', label: 'Documento de egreso', detail: 'Constancia de salida de la mascota y salidas de caja.', end: false, permission: 'egresos' },
       { to: '/admin/corte', label: 'Corte de caja', detail: 'Cierre acumulado y depósitos al banco.', end: false, permission: 'corte' },
-      { to: '/admin/compras-empleados', label: 'Compras de empleados', detail: 'Al contado o a crédito (sin planilla).', end: false, permission: 'caja' },
-      { to: '/admin/constancias', label: 'Constancias', detail: 'Constancias de visita guardadas.', end: false, permission: 'caja' },
+      { to: '/admin/compras-empleados', label: 'Compras de empleados', detail: 'Al contado o a crédito (sin planilla).', end: false, permission: 'empleados' },
+      { to: '/admin/constancias', label: 'Constancias', detail: 'Constancias de visita guardadas.', end: false, permission: 'constancias' },
     ],
   },
   {
@@ -49,11 +49,19 @@ export const MODULE_GROUPS: ModuleGroup[] = [
         label: 'Contabilidad',
         detail: 'Libro, gastos, planilla, facturas por pagar y compras.',
         end: false,
-        /** Visible si tiene contabilidad, compras o planilla; el filtro real está en Modulos. */
+        /** Entra quien tenga contabilidad o cualquiera de los módulos que viven dentro. */
         permission: 'contabilidad',
+        anyOf: ['contabilidad', 'compras', 'gastos', 'por_pagar', 'planilla'],
       },
       { to: '/admin/estadisticas', label: 'Estadísticas', detail: 'Cómo va el mes en números.', end: false, permission: 'estadisticas' },
-      { to: '/admin/control', label: 'Control general', detail: 'Resumen anual de paquetes, ingresos y gastos.', end: false, permission: 'equipo' },
+      {
+        to: '/admin/reportes',
+        label: 'Reportes',
+        detail: 'Todos los reportes y descargas en un solo lugar.',
+        end: false,
+        anyOf: ['estadisticas', 'reportes', 'contabilidad', 'control', 'corte', 'inventario', 'planilla', 'compras'],
+      },
+      { to: '/admin/control', label: 'Control general', detail: 'Resumen anual de paquetes, ingresos y gastos.', end: false, permission: 'control' },
     ],
   },
   {
@@ -73,8 +81,8 @@ export const MODULES_PATH = '/admin/modulos'
 /** Módulos que viven dentro de Contabilidad (no salen en el lanzador principal). */
 export const ACCOUNTING_LINKS: ModuleLink[] = [
   { to: '/admin/compras', label: 'Compras', detail: 'Compras a proveedores que alimentan el inventario.', end: false, permission: 'compras' },
-  { to: '/admin/gastos', label: 'Gastos', detail: 'Caja chica, rubros y pago de servicios.', end: false, permission: 'compras' },
-  { to: '/admin/por-pagar', label: 'Facturas por pagar', detail: 'Lo que se debe a proveedores.', end: false, permission: 'compras' },
+  { to: '/admin/gastos', label: 'Gastos', detail: 'Caja chica, rubros y pago de servicios.', end: false, permission: 'gastos' },
+  { to: '/admin/por-pagar', label: 'Facturas por pagar', detail: 'Lo que se debe a proveedores.', end: false, permission: 'por_pagar' },
   { to: '/admin/planilla', label: 'Planilla', detail: 'Pago, comisiones, metas y pasivo laboral.', end: false, permission: 'planilla' },
 ]
 
@@ -103,7 +111,19 @@ export function moduleAt(pathname: string) {
   return BY_SPECIFICITY.find((link) => (link.end ? path === link.to : path === link.to || path.startsWith(`${link.to}/`)))
 }
 
+/** ¿Puede entrar a este módulo? Respeta `anyOf` (hubs que reúnen varios permisos). */
+export function linkAllowed(link: Pick<ModuleLink, 'permission' | 'anyOf'>, can: (permission: Permission) => boolean) {
+  if (link.anyOf) return link.anyOf.some(can)
+  return !link.permission || can(link.permission)
+}
+
 const PATHS: Record<string, ReactNode> = {
+  '/admin/reportes': (
+    <>
+      <rect x="4" y="3.5" width="16" height="17" rx="2" />
+      <path d="M8 16V12M12 16V8.5M16 16v-2.5" />
+    </>
+  ),
   '/admin': (
     <>
       <rect x="3.5" y="4.5" width="17" height="16" rx="2" />

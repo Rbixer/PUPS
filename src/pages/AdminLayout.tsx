@@ -3,12 +3,11 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { allows } from '../access'
 import { alertBadges } from '../alerts'
 import { saveBackupFile } from '../backup'
-import { AlertsBanner } from '../components/AlertsBanner'
-import { BackupReminder } from '../components/BackupReminder'
 import { CommandPalette, type Command } from '../components/CommandPalette'
-import { Field } from '../components/ui'
+import { NoticeBar } from '../components/NoticeBar'
+import { PermissionsBar } from '../components/PermissionsBar'
 import { initials } from '../format'
-import { ACCOUNTING_LINKS, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
+import { ACCOUNTING_LINKS, linkAllowed, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
 import { usePanelTheme } from '../theme'
 import { useStore } from '../store'
 
@@ -54,64 +53,11 @@ function Icon({ name }: { name: 'grid' | 'search' | 'logout' | 'back' }) {
   }
 }
 
-function PasswordNotice() {
-  const { changeOwnPassword } = useStore()
-  const [open, setOpen] = useState(false)
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [repeat, setRepeat] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  return (
-    <div className="backup-reminder" role="status">
-      <p>
-        <strong>Tu clave es la de demostración o es muy corta.</strong> Cámbiala por una propia de al menos 8 caracteres antes de usar el sistema con datos reales.
-      </p>
-      {open ? (
-        <form
-          className="form-grid"
-          onSubmit={async (event) => {
-            event.preventDefault()
-            if (next !== repeat) {
-              setError('Las claves nuevas no coinciden.')
-              return
-            }
-            setBusy(true)
-            const problem = await changeOwnPassword(current, next)
-            setBusy(false)
-            setError(problem ?? '')
-          }}
-        >
-          <Field label="Clave actual">
-            <input type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required />
-          </Field>
-          <Field label="Clave nueva">
-            <input type="password" autoComplete="new-password" minLength={8} value={next} onChange={(event) => setNext(event.target.value)} required />
-          </Field>
-          <Field label="Repite la clave nueva">
-            <input type="password" autoComplete="new-password" minLength={8} value={repeat} onChange={(event) => setRepeat(event.target.value)} required />
-          </Field>
-          {error ? <p className="form-error">{error}</p> : null}
-          <div>
-            <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
-              {busy ? 'Guardando…' : 'Guardar clave'}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>
-            Cambiar clave
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
+/** Atajo de la paleta de comandos: ⌘K en Mac y iOS, Ctrl K en el resto. */
+const SHORTCUT = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'
 
 export function AdminLayout() {
-  const { state, currentUser, logout, exportBackup, weakPassword, syncNotice, dismissSyncNotice, unsynced } = useStore()
+  const { state, currentUser, logout, exportBackup, unsynced } = useStore()
   const badges = alertBadges(state, currentUser)
   const navigate = useNavigate()
   const location = useLocation()
@@ -123,11 +69,9 @@ export function AdminLayout() {
     ...MODULE_GROUPS.flatMap((group) => group.links),
     ...ACCOUNTING_LINKS,
   ].filter((link) => {
-    if (!link.permission) return true
+    if (!link.permission && !link.anyOf) return true
     if (!currentUser) return false
-    if (allows(currentUser, link.permission)) return true
-    if (link.to === '/admin/contabilidad') return allows(currentUser, 'compras') || allows(currentUser, 'planilla')
-    return false
+    return linkAllowed(link, (permission) => allows(currentUser, permission))
   })
   const current = moduleAt(location.pathname)
   const path = normalizePath(location.pathname)
@@ -168,7 +112,7 @@ export function AdminLayout() {
   const commands: Command[] = [
     { id: 'go-modulos', label: 'Módulos', group: 'Ir a', keywords: 'inicio menú aplicaciones', run: () => navigate(MODULES_PATH) },
     ...links.map((link) => ({ id: `go-${link.to}`, label: link.label, group: 'Ir a', run: () => navigate(link.to) })),
-    ...(currentUser && allows(currentUser, 'equipo')
+    ...(currentUser && allows(currentUser, 'respaldo')
       ? [
           {
             id: 'backup',
@@ -227,7 +171,7 @@ export function AdminLayout() {
           <button type="button" className="topbar-search" onClick={() => setPalette(true)} aria-label="Buscar o ir a">
             <Icon name="search" />
             <span>Buscar o ir a…</span>
-            <kbd>Ctrl K</kbd>
+            <kbd>{SHORTCUT}</kbd>
           </button>
           {unsynced ? <span className="topbar-sync">Cambios por enviar…</span> : null}
           <span className="topbar-user" title={currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}>
@@ -268,19 +212,8 @@ export function AdminLayout() {
         </nav>
       ) : null}
       <main id="contenido" className="admin-main" ref={mainRef} tabIndex={-1}>
-        {weakPassword ? <PasswordNotice /> : null}
-        {syncNotice ? (
-          <div className="backup-reminder" role="alert">
-            <p>{syncNotice}</p>
-            <div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={dismissSyncNotice}>
-                Entendido
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {currentUser && allows(currentUser, 'equipo') ? <BackupReminder /> : null}
-        <AlertsBanner />
+        <NoticeBar />
+        <PermissionsBar />
         <Suspense
           fallback={
             <div className="route-loading" aria-busy="true" aria-label="Cargando">

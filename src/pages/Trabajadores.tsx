@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { defaultsFor } from '../access'
+import { defaultsFor, resolvePermissions } from '../access'
 import { Field } from '../components/ui'
 import { isoDate, money, parseAmount } from '../format'
 import { useStore } from '../store'
@@ -141,7 +141,7 @@ export function Trabajadores() {
               salary,
               username: form.username,
               role: worker.role,
-              permissions: worker.permissions ?? defaultsFor(worker.role),
+              permissions: resolvePermissions(worker),
               password: form.password || undefined,
             })
             setBusy(false)

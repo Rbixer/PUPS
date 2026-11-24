@@ -40,7 +40,7 @@ export function Planilla() {
 }
 
 function Run() {
-  const { state, payPayroll } = useStore()
+  const { state, allows, payPayroll } = useStore()
   const [period, setPeriod] = useState(() => isoDate().slice(0, 7))
   const [adjust, setAdjust] = useState<Record<string, { extra: string; deductions?: string }>>({})
   const [method, setMethod] = useState('Transferencia')
@@ -192,6 +192,8 @@ function Run() {
                 <button
                   type="button"
                   className="btn btn-primary"
+                  disabled={!allows('planilla_pagar')}
+                  title={allows('planilla_pagar') ? undefined : 'Necesitas el permiso para pagar planilla'}
                   onClick={() => {
                     const result = payPayroll({ period, lines, method, date: isoDate() })
                     if (!result.ok) {
@@ -222,7 +224,7 @@ function Run() {
 }
 
 function Workers() {
-  const { state, updateWorker } = useStore()
+  const { state, allows, updateWorker } = useStore()
   const workers = workersOf(state.users)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -232,6 +234,7 @@ function Workers() {
       <Flash error={error} notice={notice} />
       <div className="team-board">
         {workers.map((user) => (
+          <fieldset key={user.id} className="plain-fieldset" disabled={!allows('planilla_salarios')}>
           <WorkerCard
             key={`${user.id}-${user.salary}-${user.commissionRate}-${user.bonus}-${user.hiredAt}-${user.salesGoal}-${user.servicesGoal}`}
             user={user}
@@ -246,6 +249,7 @@ function Workers() {
               setNotice(`${user.name}: datos de planilla guardados.`)
             }}
           />
+          </fieldset>
         ))}
       </div>
     </div>
@@ -354,7 +358,7 @@ function Liabilities() {
             </tbody>
           </table>
         </div>
-        {rows.length === 0 ? <p className="empty" style={{ margin: 14 }}>Sin trabajadores activos.</p> : null}
+        {rows.length === 0 ? <p className="empty empty-inset">Sin trabajadores activos.</p> : null}
         <p className="section-note">
           La base es el salario vigente más el promedio de comisiones de las últimas seis planillas. El aguinaldo corre del 1 de diciembre y el bono 14 del 1 de julio; las vacaciones
           desde el último aniversario. La indemnización suma la sexta parte por aguinaldo y bono 14. Cuando pagues aguinaldo, bono 14, vacaciones o una indemnización, regístralo en
@@ -366,7 +370,7 @@ function Liabilities() {
 }
 
 function History() {
-  const { state, voidPayroll } = useStore()
+  const { state, allows, voidPayroll } = useStore()
   const runs = state.payrolls ?? []
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -407,6 +411,7 @@ function History() {
                         <button
                           type="button"
                           className={`btn btn-sm ${arm === run.id ? 'btn-primary' : 'btn-ghost'}`}
+                          disabled={!allows('planilla_anular')}
                           onClick={() => {
                             if (arm !== run.id) {
                               setArm(run.id)

@@ -497,7 +497,7 @@ export function Constancia({
               {saveError}
             </p>
           ) : null}
-          {printError ? <p className="banner warn">{printError}</p> : null}
+          {printError ? <p className="banner error">{printError}</p> : null}
           {missingPremium.length ? <p className="hint">Para imprimir Premium falta: {missingPremium.join(', ')}.</p> : null}
           <div className="overlay-actions">
             <button type="submit" className="btn btn-ghost">

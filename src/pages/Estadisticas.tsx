@@ -97,9 +97,9 @@ export function Estadisticas() {
   const peakDay = report.days.reduce((best, day) => (day.sales > best.sales ? day : best), report.days[0])
   const peakHour = Math.max(...report.hours.map((hour) => hour.count), 1)
   const status = [
-    { label: 'Completadas', value: report.done.length, color: '#5f7d6c' },
-    { label: 'Pendientes', value: report.pending, color: '#12a4ad' },
-    { label: 'Canceladas', value: report.cancelled, color: '#a9b6c4' },
+    { label: 'Completadas', value: report.done.length, color: '#123376' },
+    { label: 'Pendientes', value: report.pending, color: '#5ce1e6' },
+    { label: 'Canceladas', value: report.cancelled, color: '#ccdae5' },
   ]
 
   useEffect(() => {
@@ -149,7 +149,6 @@ export function Estadisticas() {
             <button type="button" className="cal-arrow" aria-label="Mes anterior" onClick={() => setCursor((value) => shiftMonth(value, -1))}>
               ‹
             </button>
-            <strong>{monthTitle(cursor)}</strong>
             <button
               type="button"
               className="cal-arrow"

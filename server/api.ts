@@ -2,7 +2,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import fs from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
-import { allows } from '../src/access'
+import { allows, settingAllowed } from '../src/access'
 import { BOOKABLE_SERVICES } from '../src/catalog'
 import { isoDate, longDate, newId, normalizePhone, publicSiteContent } from '../src/format'
 import { closedOn, nextFolio, placeOrder, withCounters } from '../src/ops'
@@ -41,23 +41,29 @@ const MEDIA_NAME = /^[0-9a-f]{32}\.(png|jpg|webp|gif)$/
 
 /** Quién puede cambiar cada colección. Si llega cambiada sin alguno de esos permisos, se conserva lo del servidor. */
 const GUARDED: [keyof AppState, Permission[]][] = [
-  ['appointments', ['citas', 'fichas', 'caja']],
-  ['movements', ['caja', 'movimientos', 'compras', 'planilla', 'anular']],
-  ['sales', ['caja', 'anular']],
-  ['products', ['caja', 'compras', 'inventario', 'ajustar']],
-  ['stockMoves', ['caja', 'compras', 'inventario', 'ajustar']],
-  ['payrolls', ['planilla']],
-  ['payables', ['compras', 'planilla']],
+  ['appointments', ['citas', 'fichas', 'fichas_fotos', 'egresos', 'caja']],
+  [
+    'movements',
+    ['caja', 'movimientos', 'egresos', 'gastos', 'compras', 'por_pagar', 'planilla_pagar', 'planilla_anular', 'pedidos_cobrar', 'anular', 'empleados', 'empleados_credito', 'citas_cobrar', 'corte_depositos'],
+  ],
+  ['sales', ['caja', 'anular', 'empleados', 'empleados_credito']],
+  ['products', ['caja', 'tienda_precios', 'tienda_visibilidad', 'inventario', 'inventario_crear', 'ajustar', 'compras', 'empleados', 'anular', 'pedidos_cobrar']],
+  ['stockMoves', ['caja', 'inventario', 'inventario_crear', 'ajustar', 'compras', 'empleados', 'anular', 'pedidos_cobrar']],
+  ['payrolls', ['planilla_pagar', 'planilla_anular']],
+  ['payables', ['compras', 'por_pagar', 'planilla_pagar', 'planilla_anular']],
   ['purchases', ['compras']],
   ['suppliers', ['compras']],
-  ['fixedCosts', ['compras']],
+  ['fixedCosts', ['gastos']],
   ['cashCloses', ['corte']],
-  ['deposits', ['corte']],
+  ['deposits', ['corte', 'corte_depositos']],
   ['tasks', ['tareas']],
-  ['conversations', ['whatsapp']],
-  ['controlRows', ['equipo']],
+  ['conversations', ['whatsapp', 'whatsapp_enviar']],
+  ['controlRows', ['control_editar']],
   ['leads', ['equipo']],
 ]
+
+/** Quien tenga alguno de estos puede cambiar movimientos que no sean cobros abiertos. */
+const BROAD_MOVEMENTS: Permission[] = ['compras', 'gastos', 'por_pagar', 'planilla_pagar', 'planilla_anular', 'equipo']
 
 const LISTS: (keyof AppState)[] = [...GUARDED.map(([key]) => key), 'attendance']
 const COUNTER_JUMP = 1000
@@ -197,8 +203,8 @@ function strip(state: AppState): AppState {
 export function viewFor(user: User, state: AppState): AppState {
   const base = strip(state)
   const books = allows(user, 'contabilidad') || allows(user, 'equipo')
-  const pay = books || allows(user, 'planilla')
-  const buy = books || allows(user, 'compras')
+  const pay = books || allows(user, 'planilla') || allows(user, 'planilla_pagar') || allows(user, 'planilla_salarios') || allows(user, 'asistencia_equipo')
+  const buy = books || ['compras', 'gastos', 'por_pagar'].some((permission) => allows(user, permission as Permission))
   return {
     ...base,
     users: pay ? base.users : base.users.map(({ salary: _salary, bonus: _bonus, ...item }) => item as User),
@@ -493,7 +499,7 @@ export function createApi(dataDir = path.resolve('data')) {
         throw new HttpError(400, 'Debe quedar un administrador activo con acceso a Equipo.')
       }
     } else {
-      const payroll = allows(user, 'planilla')
+      const payroll = allows(user, 'planilla_salarios')
       users = current.users.map((item) => {
         const next = payroll ? incoming.users.find((candidate) => candidate.id === item.id) : undefined
         if (!next) return item
@@ -508,30 +514,36 @@ export function createApi(dataDir = path.resolve('data')) {
         }
       })
     }
-    const settings = team
-      ? { ...current.settings, ...incoming.settings }
-      : {
-          ...current.settings,
-          ...(allows(user, 'whatsapp') ? { whatsapp: incoming.settings?.whatsapp ?? current.settings.whatsapp } : {}),
-          ...(allows(user, 'contabilidad') ? { taxRegime: incoming.settings?.taxRegime, taxHistory: incoming.settings?.taxHistory } : {}),
-          ...(allows(user, 'caja') || allows(user, 'corte') ? { cashFloat: incoming.settings?.cashFloat } : {}),
-        }
-    const merged: AppState = { ...incoming, users, settings, sessionUserId: null }
+    const settings = { ...current.settings } as Record<string, unknown>
+    const proposed = (incoming.settings ?? {}) as Record<string, unknown>
+    for (const key of new Set([...Object.keys(current.settings), ...Object.keys(proposed)])) {
+      if (!settingAllowed(user, key)) continue
+      if (proposed[key] === undefined) delete settings[key]
+      else settings[key] = proposed[key]
+    }
+    const merged: AppState = { ...incoming, users, settings: settings as AppState['settings'], sessionUserId: null }
     for (const [key, permissions] of GUARDED) {
       if (!permissions.some((permission) => allows(user, permission)) && !same(incoming[key], current[key])) {
         ;(merged as Record<string, unknown>)[key] = current[key]
       }
     }
-    if (!['compras', 'planilla', 'equipo'].some((permission) => allows(user, permission as Permission))) {
+    if (!BROAD_MOVEMENTS.some((permission) => allows(user, permission))) {
       merged.movements = limitCashier(current, merged.movements)
     }
     merged.movements = lockClosedDays(current, merged.movements)
-    if (!team && !allows(user, 'planilla')) merged.attendance = limitAttendance(user, current, incoming.attendance)
+    if (!allows(user, 'asistencia_equipo')) merged.attendance = limitAttendance(user, current, incoming.attendance)
     if (!allows(user, 'costos')) {
       const before = byId(current.appointments)
       merged.appointments = merged.appointments.map((item) => {
         const previous = before.get(item.id)
         return previous && previous.cost > 0 && item.cost !== previous.cost ? { ...item, cost: previous.cost } : item
+      })
+    }
+    if (!allows(user, 'citas_cancelar')) {
+      const before = byId(current.appointments)
+      merged.appointments = merged.appointments.map((item) => {
+        const previous = before.get(item.id)
+        return previous && previous.status !== 'cancelada' && item.status === 'cancelada' ? { ...item, status: previous.status } : item
       })
     }
     if (!allows(user, 'ajustar') && merged.products) {
@@ -874,7 +886,7 @@ export function createApi(dataDir = path.resolve('data')) {
     }
     if (at === '/api/whatsapp/send' && method === 'POST') {
       const { user, state: current } = requireUser(request)
-      if (!allows(user, 'whatsapp')) throw new HttpError(403, 'No tienes permiso de WhatsApp.')
+      if (!allows(user, 'whatsapp_enviar')) throw new HttpError(403, 'No tienes permiso para enviar mensajes de WhatsApp.')
       const config = loadWaConfig()
       if (!config) throw new HttpError(503, 'WhatsApp Cloud API no está configurada en el servidor.')
       const body = await readJsonBody<{ conversationId?: string; phone?: string; text?: string; template?: boolean }>(request, PUBLIC_LIMIT)

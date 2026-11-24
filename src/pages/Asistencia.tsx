@@ -19,7 +19,7 @@ function overtimeLabel(hours: number) {
 
 export function Asistencia() {
   const { currentUser } = useStore()
-  const team = currentUser ? allows(currentUser, 'planilla') : false
+  const team = currentUser ? allows(currentUser, 'asistencia_equipo') : false
   return (
     <section className="stack">
       <header className="page-head">
@@ -154,7 +154,7 @@ function MyMonth() {
       />
       <div className="ledger">
         {mine.records.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Sin registros este mes.</p>
+          <p className="empty empty-inset">Sin registros este mes.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">
@@ -305,7 +305,7 @@ function Team() {
             </tbody>
           </table>
         </div>
-        {workers.length === 0 ? <p className="empty" style={{ margin: 14 }}>No hay trabajadores activos con código.</p> : null}
+        {workers.length === 0 ? <p className="empty empty-inset">No hay trabajadores activos con código.</p> : null}
         <p className="section-note">Las metas se fijan en Planilla › Salarios, comisiones y metas. En rojo, quien va por debajo del ritmo del mes.</p>
       </div>
       {selected ? <Corrections key={`${selected}-${period}`} user={workers.find((item) => item.id === selected)} period={period} /> : null}

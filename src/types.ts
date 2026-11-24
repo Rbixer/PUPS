@@ -18,9 +18,42 @@ export type Permission =
   | 'planilla'
   | 'contabilidad'
   | 'tareas'
+  // Versión 3: cada módulo del lanzador y sus acciones sensibles tienen permiso propio.
+  | 'citas_cobrar'
+  | 'citas_cancelar'
+  | 'fichas_fotos'
+  | 'fichas_publicar'
+  | 'clientes'
+  | 'whatsapp_enviar'
+  | 'whatsapp_linea'
+  | 'tareas_borrar'
+  | 'pedidos_cobrar'
+  | 'tienda'
+  | 'tienda_precios'
+  | 'tienda_visibilidad'
+  | 'constancias'
+  | 'empleados'
+  | 'empleados_credito'
+  | 'egresos'
+  | 'corte_depositos'
+  | 'inventario_crear'
+  | 'gastos'
+  | 'por_pagar'
+  | 'planilla_pagar'
+  | 'planilla_anular'
+  | 'planilla_salarios'
+  | 'conta_diario'
+  | 'conta_bancos'
+  | 'conta_impuestos'
+  | 'conta_regimen'
+  | 'control'
+  | 'control_editar'
+  | 'asistencia_equipo'
+  | 'respaldo'
+  | 'negocio'
 
-/** Versión del esquema de permisos guardado en el usuario (2 = granulares). */
-export const PERMISSIONS_VERSION = 2
+/** Versión del esquema de permisos guardado en el usuario (3 = un permiso por módulo y acción sensible). */
+export const PERMISSIONS_VERSION = 3
 
 export type AppointmentStatus = 'pendiente' | 'completada' | 'cancelada'
 

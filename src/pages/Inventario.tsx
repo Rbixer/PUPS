@@ -49,7 +49,7 @@ export function Inventario() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Compras y gastos</p>
+          <p className="eyebrow">Inventario</p>
           <h1>Inventario</h1>
           <p className="lede">Existencias de la tienda y de los insumos de grooming. Cada entrada y salida queda en el kárdex del producto.</p>
         </div>
@@ -79,7 +79,7 @@ export function Inventario() {
         />
         <input type="search" className="filters-search-input" placeholder="Buscar" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar en inventario" style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--surface)', minWidth: 200 }} />
       </div>
-      {allows('inventario') ? (
+      {allows('inventario_crear') ? (
         <form
           className="biz-row"
           style={{ gap: 8, alignItems: 'end' }}
@@ -145,11 +145,11 @@ export function Inventario() {
               </tbody>
             </table>
           </div>
-          {visible.length === 0 ? <p className="empty" style={{ margin: 14 }}>Sin productos con ese filtro.</p> : null}
+          {visible.length === 0 ? <p className="empty empty-inset">Sin productos con ese filtro.</p> : null}
         </div>
         <div className="biz-stack">
           {current ? <Kardex key={current.id} item={current} canAdjust={allows('ajustar')} /> : <p className="empty">Elige un producto para ver su kárdex y ajustar existencia.</p>}
-          {allows('inventario') ? <NewSupply /> : null}
+          {allows('inventario_crear') ? <NewSupply /> : null}
         </div>
       </div>
     </section>
@@ -248,7 +248,7 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
         <span>{moves.length} movimientos</span>
       </header>
       {moves.length === 0 ? (
-        <p className="empty" style={{ margin: 14 }}>Sin movimientos registrados desde que se activó el inventario.</p>
+        <p className="empty empty-inset">Sin movimientos registrados desde que se activó el inventario.</p>
       ) : (
         <div className="table-wrap">
           <table className="biz-table">

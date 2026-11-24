@@ -24,7 +24,8 @@ const STATUS_LABEL: Record<WaDelivery, string> = {
 }
 
 export function WhatsApp() {
-  const { state, updateSettings, ensureThread, sendMessage, waCloudStatus, markRead } = useStore()
+  const { state, allows, updateSettings, ensureThread, sendMessage, waCloudStatus, markRead } = useStore()
+  const canSend = allows('whatsapp_enviar')
   const [params, setParams] = useSearchParams()
   const [line, setLine] = useState(state.settings.whatsapp)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -116,6 +117,7 @@ export function WhatsApp() {
         </p>
       </aside>
 
+      {allows('whatsapp_linea') ? (
       <form
         className="wa-connect"
         onSubmit={(event) => {
@@ -147,6 +149,7 @@ export function WhatsApp() {
             : 'Guarda el mismo número que registraste en Meta para mostrarlo en la página pública.'}
         </p>
       </form>
+      ) : null}
 
       <Flash error={error} notice={notice} />
 
@@ -220,11 +223,11 @@ export function WhatsApp() {
               <textarea
                 value={draft}
                 rows={2}
-                placeholder={apiReady ? 'Escribe la respuesta' : 'Configura la API en el servidor para enviar'}
+                placeholder={!canSend ? 'Solo lectura: tu usuario no puede enviar mensajes' : apiReady ? 'Escribe la respuesta' : 'Configura la API en el servidor para enviar'}
                 onChange={(event) => setDraft(event.target.value)}
-                disabled={!apiReady || sending}
+                disabled={!canSend || !apiReady || sending}
               />
-              <button type="submit" className="btn btn-primary" disabled={!apiReady || !draft.trim() || sending}>
+              <button type="submit" className="btn btn-primary" disabled={!canSend || !apiReady || !draft.trim() || sending}>
                 {sending ? 'Enviando…' : 'Enviar'}
               </button>
             </form>

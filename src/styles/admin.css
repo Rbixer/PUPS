@@ -1,0 +1,550 @@
+/* Look unificado del panel de administración de PUP'S.
+   Se carga en la capa `components`, después de ui.css, así que gana sobre lo heredado (styles.css, premium.css,
+   business.css, modules.css). Aquí vive UNA sola definición de: encabezado, tarjetas, indicadores, botones,
+   campos, píldoras/etiquetas, avisos, estados vacíos, gráficas y la barra de avisos (NoticeBar).
+   Los colores, radios y sombras salen de styles/tokens.css. Las hojas impresas (.sheet, .report-sheet,
+   .constancia-*) no se tocan: ver las excepciones al final de cada bloque. */
+
+/* ---------------------------------------------------------------- Encabezado de página */
+.admin .page-head {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin: 0;
+  padding: 20px 0 8px;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.admin .page-head > :first-child { flex: 1 1 260px; min-width: 0; }
+.admin .page-head h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.admin .page-head .lede {
+  max-width: 56rem;
+  margin: 6px 0 0;
+  font-size: var(--fs-14);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+@media (min-width: 721px) {
+  .admin .page-head .lede {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+}
+/* Dentro de ventanas y paneles laterales el encabezado es solo un título con su botón. */
+.admin :is(.overlay, .dialog, .drawer, .overlay-card) .page-head {
+  margin: 0 0 4px;
+  padding: 0 0 12px;
+  align-items: center;
+}
+.admin :is(.overlay, .dialog, .drawer, .overlay-card) .page-head h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.admin .eyebrow {
+  margin: 0 0 6px;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--aqua-ink);
+}
+.admin .clock-card .eyebrow { text-transform: capitalize; letter-spacing: 0; }
+/* El informe mensual (hoja imprimible) conserva su rótulo de siempre. */
+.admin .report-sheet .eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0c2659;
+}
+
+/* ---------------------------------------------------------------- Títulos con Manrope */
+.admin .panel h2,
+.admin .team-form > h2,
+.admin .team-shop > h2,
+.admin .book-card h3,
+.admin .module-bar h2,
+.admin .day-column h2,
+.admin .stats .panel h2,
+.admin .team .panel h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-16);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.admin .stack > h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.admin .cal-head h2 {
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.admin .month-switch strong { font-family: var(--font-heading); font-weight: 700; }
+.admin .clock-now,
+.admin .cart-sum .grand dd,
+.admin .deposit-total strong { font-family: var(--font-heading); font-weight: 700; }
+
+/* ---------------------------------------------------------------- Tarjetas: borde + sh-1, hover sh-2 */
+.admin .panel,
+.admin .book-card,
+.admin .team-form,
+.admin .team-shop,
+.admin .staff-form,
+.admin .cash-desk > form,
+.admin .wa-connect,
+.admin .report-form,
+.admin .backup,
+.admin .records,
+.admin .cal,
+.admin .day-board,
+.admin .filters,
+.admin .person,
+.admin .file-card,
+.admin .file-hero,
+.admin .file-panel,
+.admin .wa-shell,
+.admin .ledger,
+.admin .module-panel,
+.admin .dialog,
+.admin .drawer,
+.admin .overlay-card,
+.admin .staff-card,
+.admin .control-wrap {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  box-shadow: var(--sh-1);
+}
+.admin .panel,
+.admin .file-card,
+.admin .person,
+.admin .service-row,
+.admin .staff-card {
+  transition: box-shadow var(--t-fast) ease, border-color var(--t-fast) ease, background-color var(--t-fast) ease;
+}
+.admin .dialog,
+.admin .drawer { box-shadow: var(--sh-3); }
+.admin .overlay { background: rgba(11, 31, 77, 0.45); backdrop-filter: blur(4px); }
+@media (hover: hover) {
+  .admin .file-card:hover,
+  .admin .person:hover,
+  .admin .service-row:hover,
+  .admin .staff-card:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); transform: none; }
+}
+
+/* ---------------------------------------------------------------- Indicadores: una sola receta */
+.admin .kpis,
+.admin .metric-rail,
+.admin .stats-figures {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.admin .stats-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.admin .kpi,
+.admin .metric-rail article,
+.admin .stats-figures article,
+.admin .stats-lead {
+  display: block;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  box-shadow: var(--sh-1);
+  transition: box-shadow var(--t-fast) ease, border-color var(--t-fast) ease;
+}
+@media (hover: hover) {
+  .admin .kpi:hover,
+  .admin .metric-rail article:hover,
+  .admin .stats-figures article:hover,
+  .admin .stats-lead:hover { box-shadow: var(--sh-2); border-color: var(--line-strong); background: var(--card-bg); }
+}
+/* Etiqueta */
+.admin .kpi > span,
+.admin .metric-rail article > span,
+.admin .stats-figures article > span,
+.admin .stats-lead > span {
+  display: block;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
+}
+/* Cifra */
+.admin .kpi strong,
+.admin .metric-rail strong,
+.admin .stats-figures strong,
+.admin .stats-lead strong {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-heading);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.admin .stats-lead { padding: 24px 26px; }
+.admin .stats-lead strong {
+  margin-top: 8px;
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  line-height: 1.05;
+}
+.admin .stats-lead p { margin-top: 12px; font-size: var(--fs-14); color: var(--text-2); }
+/* Nota bajo la cifra */
+.admin .kpi small,
+.admin .metric-rail small,
+.admin .metric-rail em,
+.admin .stats-figures small,
+.admin .stats-lead small,
+.admin .delta {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--fs-12);
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.admin .metric-rail em { display: inline; margin: 0; }
+.admin .delta.up { color: var(--ok); }
+.admin .delta.down { color: var(--bad); }
+/* Tonos de la cifra */
+.admin .kpi strong.ok,
+.admin .metric-rail strong.ok,
+.admin .stats-figures strong.ok,
+.admin .stats-lead strong.ok { color: var(--ok); }
+.admin .kpi strong.hot,
+.admin .metric-rail strong.hot,
+.admin .stats-figures strong.hot,
+.admin .stats-lead strong.hot { color: var(--warn); }
+.admin .kpi strong.bad,
+.admin .metric-rail strong.bad,
+.admin .stats-figures strong.bad { color: var(--bad); }
+.admin .kpi strong.cyan,
+.admin .metric-rail strong.cyan,
+.admin .stats-figures strong.cyan { color: var(--aqua-ink); }
+@media (max-width: 980px) {
+  .admin .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin .kpi strong,
+  .admin .metric-rail strong,
+  .admin .stats-figures strong { font-size: 24px; }
+  .admin .stats-hero { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .admin .metric-rail article { padding: 12px; }
+  .admin .metric-rail strong { font-size: 22px; }
+}
+
+/* ---------------------------------------------------------------- Botones */
+.admin .btn {
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  box-shadow: none;
+}
+.admin .btn-primary {
+  border-color: transparent;
+  background: var(--navy);
+  color: #ffffff;
+  box-shadow: var(--sh-1);
+}
+.admin .btn-primary:hover { background: var(--navy-deep); box-shadow: var(--sh-2); }
+.admin .btn-ghost {
+  border-color: var(--line-strong);
+  background: var(--card-bg);
+  color: var(--ink);
+}
+.admin .btn-ghost:hover { border-color: #b3c6d8; background: var(--navy-50); }
+.admin .btn-wa {
+  border-color: #bfe6d6;
+  background: var(--ok-bg);
+  color: #0c6045;
+}
+.admin .btn-wa:hover { border-color: #9fd6bf; background: #d8f0e6; }
+.admin .btn-amber {
+  border-color: #f0d9a8;
+  background: var(--warn-bg);
+  color: #7a4700;
+}
+.admin .btn-amber:hover { border-color: #e6c982; background: #ffe9c2; }
+.admin .btn:focus-visible { outline: 2px solid var(--aqua-ink); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- Campos */
+.admin .field > input,
+.admin .field > select,
+.admin .field > textarea,
+.admin .dialog input,
+.admin .wa-compose textarea,
+.admin .filters input,
+.admin .filters select {
+  border-color: var(--line-strong);
+  border-radius: var(--r-sm);
+  background-color: var(--card-bg);
+  color: var(--ink);
+}
+.admin .field > input:focus,
+.admin .field > select:focus,
+.admin .field > textarea:focus,
+.admin .dialog input:focus,
+.admin .wa-compose textarea:focus,
+.admin .filters input:focus,
+.admin .filters select:focus {
+  border-color: var(--aqua-ink);
+  box-shadow: 0 0 0 3px rgba(92, 225, 230, 0.35);
+}
+/* Marcadores con contraste AA sobre blanco */
+.admin input::placeholder,
+.admin textarea::placeholder,
+.admin .field > input::placeholder,
+.admin .field > textarea::placeholder,
+.admin .filters input::placeholder,
+.admin .wa-compose textarea::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------- Píldoras y etiquetas con punto de color */
+.admin .pill,
+.admin .tag {
+  --dot: #8a9bb0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--app-bg);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+.admin .pill::before,
+.admin .tag::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+.admin .pill-pendiente,
+.admin .tag-warn { --dot: var(--warn); background: var(--warn-bg); color: #7a4700; }
+.admin .pill-completada,
+.admin .tag-ok { --dot: var(--ok); background: var(--ok-bg); color: #0d6b4c; }
+.admin .pill-cancelada,
+.admin .tag-bad { --dot: var(--bad); background: var(--bad-bg); color: #a82c3e; }
+.admin .tag-info { --dot: var(--aqua-ink); background: var(--navy-50); color: var(--navy); }
+.admin .tag-mute { --dot: #8a9bb0; border-color: var(--line-soft); background: var(--app-bg); color: var(--text-2); }
+.admin .person-tags li,
+.admin .file-tags span {
+  font-size: var(--fs-12);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ---------------------------------------------------------------- Avisos en línea (.banner) con tono por tipo */
+.admin .banner {
+  padding: 10px 14px;
+  border: 1px solid #bfe6d6;
+  border-radius: var(--r-md);
+  background: var(--ok-bg);
+  color: #0c5f45;
+  font-size: var(--fs-13);
+}
+.admin .banner.info { border-color: #c8d7ee; background: var(--navy-50); color: var(--navy); }
+.admin .banner.warn { border-color: #f0d9a8; background: var(--warn-bg); color: #7a4700; }
+.admin .banner.error { border-color: #f3c3cb; background: var(--bad-bg); color: #a82c3e; }
+
+/* ---------------------------------------------------------------- Estados vacíos */
+.admin .empty {
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  margin: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--card-bg);
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: none;
+}
+.admin .empty.empty-inset { margin: 14px; }
+/* Dentro del informe imprimible se mantiene el estilo de siempre. */
+.admin .report-sheet .empty {
+  padding: 2rem;
+  border: 1px dashed var(--color-stone-300);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--color-stone-600);
+  font-size: 0.875rem;
+}
+
+/* ---------------------------------------------------------------- Texto mínimo de 12 px en el panel */
+.admin .cal-chip,
+.admin .cal-more,
+.admin .day-hour,
+.admin .pulse-col span { font-size: var(--fs-12); }
+.admin .donut-caption { font-size: var(--fs-12); letter-spacing: 0; text-transform: none; }
+.admin .donut-total { font-family: var(--font-heading); font-weight: 700; }
+.admin .tabs b { font-size: var(--fs-12); }
+
+/* ---------------------------------------------------------------- Gráficas de Estadísticas */
+.admin .pulse-bar { background: var(--aqua); }
+.admin .pulse-col.is-peak .pulse-bar { background: var(--navy); }
+.admin .meter-fill { background: var(--navy); }
+.admin .meter-track { background: var(--navy-50); }
+
+/* ---------------------------------------------------------------- Objetivos táctiles de 40 px en celular */
+@media (max-width: 720px) {
+  .admin .btn-sm { min-height: 40px; }
+  .admin .cal-arrow,
+  .admin .cal-add { width: 40px; height: 40px; }
+  .admin .topbar-btn { width: 40px; height: 40px; }
+}
+
+/* ---------------------------------------------------------------- Barra de avisos (NoticeBar) */
+.admin .notice-bar {
+  --notice: var(--navy);
+  margin: 12px 0 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--card-bg);
+  box-shadow: var(--sh-1);
+  overflow: hidden;
+}
+.admin .notice-bar.tone-bad { --notice: var(--bad); }
+.admin .notice-bar.tone-warn,
+.admin .notice-bar.tone-security { --notice: var(--warn); }
+.admin .notice-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--notice);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--t-fast) ease;
+}
+.admin .notice-toggle:hover { background: var(--app-bg); }
+.admin .notice-toggle:focus-visible { outline: 2px solid var(--aqua-ink); outline-offset: -2px; }
+.admin .notice-icon { display: grid; place-items: center; flex: none; color: var(--notice); }
+.admin .notice-summary {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.admin .notice-summary strong { flex: none; font-weight: 700; }
+.admin .notice-sep { color: var(--text-placeholder); }
+.admin .notice-first { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+.admin .notice-chevron { flex: none; color: var(--text-2); transition: transform var(--t-fast) ease; }
+.admin .notice-chevron.is-open { transform: rotate(180deg); }
+.admin .notice-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--app-bg);
+  list-style: none;
+}
+.admin .notice-list[hidden] { display: none; }
+.admin .notice-item {
+  --tone-fg: var(--navy);
+  border: 1px solid #c8d7ee;
+  border-radius: var(--r-md);
+  background: var(--navy-50);
+}
+.admin .notice-item.tone-bad { --tone-fg: var(--bad); border-color: #f3c3cb; background: var(--bad-bg); }
+.admin .notice-item.tone-warn { --tone-fg: var(--warn); border-color: #f0d9a8; background: var(--warn-bg); }
+/* La clave débil es un aviso de seguridad: ámbar propio, escudo y borde izquierdo marcado. */
+.admin .notice-item.tone-security {
+  --tone-fg: var(--warn);
+  border-color: #e6c27c;
+  border-left: 4px solid var(--warn);
+  background: var(--warn-bg);
+}
+.admin .notice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+}
+.admin .notice-row > .notice-icon { color: var(--tone-fg); }
+.admin .notice-body {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: 1.4;
+  color: var(--ink);
+}
+.admin .notice-body p { margin: 0; }
+.admin .notice-body strong + p { margin-top: 2px; font-size: var(--fs-13); color: var(--text-2); }
+.admin .notice-kind { display: block; font-size: var(--fs-12); font-weight: 600; color: var(--tone-fg); }
+.admin .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.admin .notice-form { flex: 1 1 100%; max-width: 440px; margin-left: 30px; padding-top: 4px; }
+@media (max-width: 720px) {
+  .admin .notice-actions { margin-left: 0; }
+  .admin .notice-form { margin-left: 0; }
+}
+@media print {
+  .admin .notice-bar { display: none !important; }
+}

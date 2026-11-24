@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { allows, defaultsFor, expandLegacyPermissions, homeFor, PERMISSIONS_VERSION, resolvePermissions } from '../src/access'
+import { ACTION_PARENT, allows, allowsAny, defaultsFor, expandLegacyPermissions, homeFor, nodeAt, NODES, PERMISSIONS, PERMISSIONS_VERSION, resolvePermissions, settingAllowed, toggleAction, toggleModule } from '../src/access'
 import { backupDueDays, parseBackup, snoozeBackupReminder } from '../src/backup'
 import { hashSecret, verifySecret, weakSecret } from '../server/api'
 import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteContent, safeLink } from '../src/format'
 import { emptyReport, hardAreas, readReport } from '../src/grooming'
 import { buildMonthReport, packageOfAppointment } from '../src/report'
 import type { Mark } from '../src/types'
-import { ACCOUNTING_LINKS, MODULE_GROUPS, moduleAt } from '../src/modules'
+import { ACCOUNTING_LINKS, linkAllowed, MODULE_GROUPS, moduleAt } from '../src/modules'
 import { EMPLOYEE_CREDIT, employeeOwed, recordEmployeePurchase, settleEmployeeCredit } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, BASE_CATEGORY_NAMES, categoryNames, demoCatalog, normalizeCategory } from '../src/shop'
@@ -398,5 +398,86 @@ describe('módulos contables', () => {
       '/admin/por-pagar',
       '/admin/planilla',
     ])
+  })
+})
+
+describe('permisos versión 3', () => {
+  const user = (role: 'Administrador' | 'Recepción', permissions: Parameters<typeof resolvePermissions>[0]['permissions'], permissionsVersion?: number) => ({
+    role,
+    permissions,
+    permissionsVersion,
+    active: true,
+  })
+
+  it('el catálogo no repite ids, cada acción tiene módulo padre y cada módulo una ruta', () => {
+    const ids = PERMISSIONS.map((item) => item.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const [action, parent] of Object.entries(ACTION_PARENT)) expect(NODES.some((node) => node.id === parent), action).toBe(true)
+    for (const node of NODES) expect(node.route.startsWith('/admin')).toBe(true)
+  })
+
+  it('migra una lista de versión 2 sin quitarle nada a nadie', () => {
+    const before = ['citas', 'caja', 'movimientos', 'whatsapp'] as const
+    const after = resolvePermissions(user('Recepción', [...before], 2))
+    for (const id of before) expect(after).toContain(id)
+    expect(after).toEqual(expect.arrayContaining(['citas_cancelar', 'citas_cobrar', 'clientes', 'tienda', 'tienda_precios', 'empleados', 'empleados_credito', 'pedidos_cobrar', 'egresos', 'whatsapp_enviar', 'whatsapp_linea']))
+    // lo que nunca tuvo, sigue sin tenerlo
+    expect(after).not.toContain('planilla_pagar')
+    expect(after).not.toContain('conta_regimen')
+    expect(after).not.toContain('respaldo')
+    expect(after).not.toContain('negocio')
+  })
+
+  it('migra de versión 1 a 3 por pasos', () => {
+    const after = resolvePermissions(user('Recepción', ['compras', 'planilla', 'equipo']))
+    expect(after).toEqual(
+      expect.arrayContaining(['inventario', 'ajustar', 'inventario_crear', 'gastos', 'por_pagar', 'planilla_pagar', 'planilla_anular', 'planilla_salarios', 'asistencia_equipo', 'control', 'control_editar', 'respaldo', 'negocio', 'tareas_borrar', 'fichas_publicar']),
+    )
+  })
+
+  it('una lista de versión 3 se respeta tal cual', () => {
+    expect(resolvePermissions(user('Recepción', ['caja'], 3))).toEqual(['caja'])
+    expect(resolvePermissions(user('Recepción', ['citas', 'ficha_inexistente' as never], 3))).toEqual(['citas'])
+  })
+
+  it('el administrador siempre puede todo y recepción por defecto conserva lo de antes', () => {
+    expect(resolvePermissions(user('Administrador', [], 3)).length).toBe(PERMISSIONS.length)
+    const front = resolvePermissions(user('Recepción', undefined))
+    expect(front).toEqual(expect.arrayContaining(['citas', 'caja', 'whatsapp_enviar', 'tienda', 'estadisticas', 'reportes']))
+    for (const blocked of ['planilla', 'gastos', 'por_pagar', 'contabilidad', 'control', 'respaldo', 'negocio', 'equipo', 'conta_regimen', 'planilla_pagar']) {
+      expect(front, blocked).not.toContain(blocked)
+    }
+  })
+
+  it('encender una acción enciende su módulo y apagar el módulo apaga sus acciones', () => {
+    expect(toggleAction([], 'anular', true)).toEqual(expect.arrayContaining(['caja', 'anular']))
+    const on = toggleModule(['caja', 'anular', 'pedidos_cobrar', 'citas'], 'caja', false)
+    expect(on).toEqual(['citas'])
+    expect(toggleAction(['caja', 'anular'], 'anular', false)).toEqual(['caja'])
+  })
+
+  it('cada ruta de módulo cae en su permiso y Reportes y Contabilidad son hubs', () => {
+    expect(nodeAt('/admin/ventas')?.id).toBe('caja')
+    expect(nodeAt('/admin/trabajadores')?.id).toBe('equipo')
+    expect(nodeAt('/admin/compras-empleados')?.id).toBe('empleados')
+    expect(nodeAt('/admin/compras')?.id).toBe('compras')
+    expect(nodeAt('/admin')?.id).toBe('citas')
+    expect(nodeAt('/admin/modulos')).toBeUndefined()
+    const links = [...MODULE_GROUPS.flatMap((group) => group.links), ...ACCOUNTING_LINKS]
+    const reportes = links.find((link) => link.to === '/admin/reportes')!
+    const contabilidad = links.find((link) => link.to === '/admin/contabilidad')!
+    const only = (id: string) => (permission: string) => permission === id
+    expect(linkAllowed(reportes, only('control'))).toBe(true)
+    expect(linkAllowed(reportes, only('citas'))).toBe(false)
+    expect(linkAllowed(contabilidad, only('por_pagar'))).toBe(true)
+    expect(linkAllowed(contabilidad, only('tareas'))).toBe(false)
+  })
+
+  it('los ajustes se reparten por permiso fino y «Datos del negocio» abre todos', () => {
+    const marketing = user('Recepción', ['whatsapp', 'whatsapp_linea'], 3)
+    expect(settingAllowed(marketing, 'whatsapp')).toBe(true)
+    expect(settingAllowed(marketing, 'address')).toBe(false)
+    expect(settingAllowed(user('Recepción', ['negocio'], 3), 'address')).toBe(true)
+    expect(allowsAny(marketing, ['equipo', 'whatsapp_linea'])).toBe(true)
   })
 })

@@ -91,24 +91,7 @@
     @apply cursor-pointer rounded-md px-1 text-[13px] text-stone-500 underline-offset-4 hover:text-stone-900 hover:underline dark:text-stone-400 dark:hover:text-stone-100;
   }
 
-  /* Paneles y tarjetas de formulario */
-  .admin .panel,
-  .admin .book-card,
-  .admin .team-form,
-  .admin .team-shop,
-  .admin .staff-form,
-  .admin .cash-desk > form,
-  .admin .wa-connect,
-  .admin .report-form,
-  .admin .backup {
-    @apply rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-18px_rgba(28,25,23,0.18)] dark:border-stone-800 dark:bg-stone-900;
-  }
-  .admin .panel > h2,
-  .admin .team-form > h2,
-  .admin .team-shop > h2,
-  .admin .book-card h3 {
-    @apply font-sans text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100;
-  }
+  /* Paneles, tarjetas y encabezado del panel: ver admin.css */
   .admin .book-card > header span {
     @apply grid size-7 place-items-center rounded-lg bg-caramel-bold font-mono text-[11px] text-on-accent dark:bg-caramel-deep;
   }
@@ -186,106 +169,8 @@
   }
 }
 
-/* Tarjetas de datos, encabezado y widgets del panel */
+/* Listas, calendario y WhatsApp del panel (tarjetas, indicadores, píldoras y tablas: ver admin.css) */
 @layer components {
-  .admin .page-head {
-    @apply sticky top-[calc(var(--topbar-h)+var(--crumbs-h,0px))] z-[4] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-stone-200/80 bg-white/80 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/80;
-  }
-  .admin .eyebrow {
-    @apply text-[11px] font-semibold tracking-[0.12em] text-caramel-deep uppercase dark:text-caramel;
-  }
-  .admin .page-head h1 {
-    @apply font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100;
-  }
-  .admin .lede {
-    @apply text-sm text-stone-600 dark:text-stone-400;
-  }
-
-  /* Receta común de tarjeta */
-  .admin .kpis,
-  .admin .records,
-  .admin .cal,
-  .admin .day-board,
-  .admin .filters,
-  .admin .person,
-  .admin .file-card,
-  .admin .file-hero,
-  .admin .file-panel,
-  .admin .stats-hero,
-  .admin .metric-rail article,
-  .admin .wa-shell,
-  .admin .ledger,
-  .admin .module-panel,
-  .admin .dialog,
-  .admin .drawer,
-  .admin .overlay-card,
-  .admin .staff-card,
-  .admin .control-wrap {
-    @apply rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-18px_rgba(28,25,23,0.18)] dark:border-stone-800 dark:bg-stone-900;
-  }
-  .admin .file-card {
-    @apply transition duration-200 ease-out-soft hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_18px_40px_-18px_rgba(28,25,23,0.28)] dark:hover:border-stone-700;
-  }
-  .admin .dialog,
-  .admin .drawer {
-    @apply shadow-2xl;
-  }
-  .admin .overlay {
-    @apply bg-stone-950/40 backdrop-blur-sm;
-  }
-
-  /* Indicadores */
-  .admin .kpis {
-    @apply overflow-hidden;
-  }
-  .admin .kpi {
-    @apply border-r border-stone-200/80 dark:border-stone-800;
-  }
-  .admin .kpi span,
-  .admin .stats-lead span,
-  .admin .stats-figures span,
-  .admin .metric-rail span {
-    @apply text-[11px] font-semibold tracking-[0.1em] text-stone-500 uppercase dark:text-stone-400;
-  }
-  .admin .kpi strong,
-  .admin .stats-figures strong,
-  .admin .metric-rail strong {
-    @apply font-display font-bold tracking-tight text-stone-900 dark:text-stone-100;
-  }
-  .admin .hot,
-  .admin .hot-text,
-  .admin .kpis .hot,
-  .admin .metric-rail .hot,
-  .admin .stats-figures .hot {
-    @apply text-amber-700 dark:text-amber-400;
-  }
-  .admin .ok,
-  .admin .ok-text,
-  .admin .kpis .ok,
-  .admin .metric-rail .ok,
-  .admin .stats-figures .ok {
-    @apply text-emerald-700 dark:text-emerald-400;
-  }
-  .admin .cyan,
-  .admin .kpis .cyan,
-  .admin .metric-rail .cyan,
-  .admin .stats-figures .cyan {
-    @apply text-caramel-deep dark:text-caramel;
-  }
-  .admin .stats-lead strong {
-    @apply font-display font-bold tracking-tight text-emerald-700 dark:text-emerald-400;
-  }
-  .admin .stats-figures article {
-    @apply border-stone-200/80 dark:border-stone-800;
-  }
-  .admin .legend b {
-    @apply whitespace-nowrap;
-  }
-  .admin .kpi small,
-  .admin .delta {
-    @apply text-xs text-stone-500 dark:text-stone-400;
-  }
-
   /* Listas y filas */
   .admin .record {
     @apply border-b border-stone-200/80 transition-colors hover:bg-stone-50/80 dark:border-stone-800 dark:hover:bg-stone-800/50;
@@ -307,18 +192,6 @@
   }
 
   /* Estados */
-  .admin .pill {
-    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold tracking-[0.06em] uppercase;
-  }
-  .admin .pill-pendiente {
-    @apply border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300;
-  }
-  .admin .pill-completada {
-    @apply border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300;
-  }
-  .admin .pill-cancelada {
-    @apply border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300;
-  }
   .empty {
     @apply rounded-2xl border border-dashed border-stone-300 bg-white/60 p-8 text-center text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-900/40 dark:text-stone-400;
   }
@@ -411,28 +284,6 @@
   }
   .admin .bubble.out time {
     @apply text-white/60;
-  }
-
-  /* Control general */
-  .admin .control-table thead th {
-    @apply bg-stone-900 text-[10px] tracking-[0.08em] text-stone-100 dark:bg-stone-950;
-  }
-  .admin .control-table thead tr:nth-child(2) th {
-    @apply bg-stone-700 dark:bg-stone-800;
-  }
-  .admin .control-table th,
-  .admin .control-table td {
-    @apply border-stone-200/80 dark:border-stone-800;
-  }
-  .admin .control-table tbody tr:hover td {
-    @apply bg-stone-50 dark:bg-stone-800/50;
-  }
-  .admin .control-table input {
-    @apply rounded-md px-1.5 transition hover:bg-stone-100 focus:bg-white focus:ring-2 focus:ring-caramel/40 focus:outline-none dark:hover:bg-stone-800 dark:focus:bg-stone-900;
-  }
-  .admin .control-table tfoot td,
-  .admin .control-table tfoot th {
-    @apply bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-stone-100;
   }
 
   @media (max-width: 720px) {

@@ -28,7 +28,7 @@ export default defineConfig({
       manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,ico,woff2}'],
-        globIgnores: ['**/exceljs*', '**/inter-{cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*'],
+        globIgnores: ['**/exceljs*', '**/{inter,manrope}-{cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/(robots\.txt|sitemap\.xml)$/],
         cleanupOutdatedCaches: true,

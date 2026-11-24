@@ -577,7 +577,9 @@ export function Citas() {
                 <select value={draft.status} onChange={(event) => patch('status', event.target.value as AppointmentStatus)}>
                   <option value="pendiente">Pendiente</option>
                   <option value="completada">Completada</option>
-                  <option value="cancelada">Cancelada</option>
+                  <option value="cancelada" disabled={!allows('citas_cancelar') && (editing === 'new' || editing.status !== 'cancelada')}>
+                    Cancelada
+                  </option>
                 </select>
               </Field>
               {draft.status === 'completada' && (editing === 'new' || editing.status !== 'completada') ? (

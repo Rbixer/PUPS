@@ -132,7 +132,7 @@ export function Tareas() {
               </header>
               {items.map((task) => {
                 const late = task.status !== 'hecha' && task.dueDate && task.dueDate < today
-                const canDelete = task.createdBy === currentUser?.id || allows('equipo')
+                const canDelete = task.createdBy === currentUser?.id || allows('tareas_borrar')
                 return (
                   <article key={task.id} className={`task-card ${late ? 'is-late' : ''}`}>
                     <strong>{task.title}</strong>

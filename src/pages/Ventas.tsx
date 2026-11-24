@@ -136,7 +136,7 @@ function Register() {
             ))}
           </div>
         </div>
-        {visible.length === 0 ? <p className="empty" style={{ margin: 14 }}>Sin productos con ese filtro.</p> : null}
+        {visible.length === 0 ? <p className="empty empty-inset">Sin productos con ese filtro.</p> : null}
         <div className="pos-grid">
           {visible.map((item) => {
             const inCart = cart.find((line) => line.productId === item.id)?.qty ?? 0
@@ -401,7 +401,7 @@ function History() {
           </header>
           <Flash error={error} notice={notice} />
           {sales.length === 0 ? (
-            <p className="empty" style={{ margin: 14 }}>Este mes todavía no tiene ventas.</p>
+            <p className="empty empty-inset">Este mes todavía no tiene ventas.</p>
           ) : (
             <div className="table-wrap">
               <table className="biz-table">
@@ -526,7 +526,7 @@ function Pending() {
       </p>
       <Flash error={error} notice={notice} />
       {orders.length === 0 ? (
-        <p className="empty" style={{ margin: 14 }}>No hay pedidos pendientes de cobro.</p>
+        <p className="empty empty-inset">No hay pedidos pendientes de cobro.</p>
       ) : (
         <div className="table-wrap">
           <table className="biz-table">
@@ -576,6 +576,7 @@ function Pending() {
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
+                          disabled={!allows('pedidos_cobrar')}
                           onClick={() => {
                             const result = settleOrder(order.id, method, invoices[order.id] ?? false)
                             if (!result.ok) {

@@ -178,7 +178,7 @@ export function CorteCaja() {
             <span>{range(summary.from, summary.date)}</span>
           </header>
           {Object.keys(summary.byMethod).length === 0 ? (
-            <p className="empty" style={{ margin: 14 }}>Sin movimientos en esos días.</p>
+            <p className="empty empty-inset">Sin movimientos en esos días.</p>
           ) : (
             <div className="statement">
               {Object.entries(summary.byMethod).map(([method, amount]) => (
@@ -225,7 +225,7 @@ export function CorteCaja() {
           <span>{closes.length}</span>
         </header>
         {closes.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>Todavía no hay cortes.</p>
+          <p className="empty empty-inset">Todavía no hay cortes.</p>
         ) : (
           <div className="table-wrap">
             <table className="biz-table">
@@ -300,7 +300,7 @@ function SplitStatement({ title, part, note }: { title: string; part: CashSplit[
 }
 
 function Deposits() {
-  const { state, recordDeposit, removeDeposit } = useStore()
+  const { state, allows, recordDeposit, removeDeposit } = useStore()
   const today = isoDate()
   const onHand = cashOnHand(state, today)
   const fund = state.settings.cashFloat ?? 0
@@ -432,6 +432,7 @@ function Deposits() {
                     <button
                       type="button"
                       className="text-btn"
+                      disabled={!allows('corte_depositos')}
                       onClick={() => {
                         if (!window.confirm(`¿Quitar el depósito de ${money(item.amount)}?`)) return
                         const result = removeDeposit(item.id)

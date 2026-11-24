@@ -36,6 +36,8 @@ export function Tienda() {
   const [notice, setNotice] = useState('')
   const editing = products.some((item) => item.id === form.id)
   const canCost = allows('ajustar')
+  const canEdit = allows('tienda_precios')
+  const canToggle = allows('tienda_visibilidad') || canEdit
 
   function edit(item: CatalogItem) {
     setForm(item)
@@ -59,6 +61,15 @@ export function Tienda() {
         </div>
       </header>
       <div className="cash-desk">
+        {!canEdit ? (
+          <aside className="panel">
+            <h2>Solo lectura</h2>
+            <p className="hint">
+              Para crear productos o cambiar precios necesitas el permiso «Crear productos y cambiar precios».
+              {canToggle ? ' Sí puedes mostrar u ocultar productos en la portada.' : ''}
+            </p>
+          </aside>
+        ) : (
         <form
           className="panel form-grid"
           onSubmit={(event) => {
@@ -188,6 +199,7 @@ export function Tienda() {
             </button>
           </div>
         </form>
+        )}
         <div className="ledger">
           <header className="module-bar">
             <h2>En catálogo</h2>
@@ -205,9 +217,12 @@ export function Tienda() {
                   </span>
                 </div>
                 <div className="shelf-actions">
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => edit(item)}>
-                    Editar
-                  </button>
+                  {canEdit ? (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => edit(item)}>
+                      Editar
+                    </button>
+                  ) : null}
+                  {canToggle ? (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
@@ -219,6 +234,7 @@ export function Tienda() {
                   >
                     {item.active === false ? 'Mostrar' : 'Ocultar'}
                   </button>
+                  ) : null}
                 </div>
               </article>
             ))}

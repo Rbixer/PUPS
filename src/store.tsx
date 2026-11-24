@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { allows as userAllows } from './access'
+import { allows as userAllows, settingAllowed } from './access'
 import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, newId, normalizePhone } from './format'
@@ -675,8 +675,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const can = (permission: Permission) => userAllows(currentUser, permission)
 
     /** Aplica una operación al instante y la deja en cola; si otro equipo guardó antes, se repite sobre su versión. */
-    function run<T>(permission: Permission | null, op: (current: AppState) => Op<T>): Result<T> {
-      if (permission && !can(permission)) return { ok: false, error: DENIED }
+    function run<T>(permission: Permission | Permission[] | null, op: (current: AppState) => Op<T>): Result<T> {
+      if (permission && !(Array.isArray(permission) ? permission.some(can) : can(permission))) return { ok: false, error: DENIED }
       if (!currentUser) return { ok: false, error: 'Vuelve a entrar al panel.' }
       const result = op(latest.current)
       if (!result.ok) return result
@@ -806,7 +806,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             employeeCode: employeeCode || undefined,
             employeeId: employeeCode ? current.users.find((item) => item.employeeCode === employeeCode)?.id : undefined,
           }
-          const charged = ops.chargeAppointment({ ...current, appointments: [next, ...current.appointments] }, next, method, can('caja'), invoiced)
+          const charged = ops.chargeAppointment({ ...current, appointments: [next, ...current.appointments] }, next, method, can('citas_cobrar'), invoiced)
           if (!charged.ok) return charged
           return { ok: true, value: next, patch: { ...charged.patch, appointments: [next, ...current.appointments] } }
         }),
@@ -816,6 +816,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!previous) return { ok: false, error: 'Esa cita ya no existe.' }
           const nextPatch = { ...patch }
           if (nextPatch.cost !== undefined && nextPatch.cost !== previous.cost && !can('costos')) nextPatch.cost = previous.cost
+          if (nextPatch.status === 'cancelada' && previous.status !== 'cancelada' && !can('citas_cancelar')) {
+            return { ok: false, error: 'No tienes permiso para cancelar citas.' }
+          }
           if (nextPatch.employeeCode !== undefined) {
             const employeeCode = nextPatch.employeeCode.trim()
             nextPatch.employeeCode = employeeCode || undefined
@@ -835,7 +838,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return { ok: false, error: 'Ese horario ya tiene 3 citas. Elige otro.' }
           }
           if (!next.petCode?.trim()) next.petCode = resolvePetCode(current.appointments.filter((item) => item.id !== id), next)
-          const charged = ops.chargeAppointment(current, next, method, can('caja'), invoiced)
+          const charged = ops.chargeAppointment(current, next, method, can('citas_cobrar'), invoiced)
           if (!charged.ok) return charged
           return {
             ok: true,
@@ -844,7 +847,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }),
       setVisitPhoto: (id, slot, data) =>
-        run('fichas', (current) => {
+        run('fichas_fotos', (current) => {
           const previous = current.appointments.find((item) => item.id === id)
           if (!previous) return { ok: false, error: 'Esa cita ya no existe.' }
           const index = slot === 'antes' ? 0 : 2
@@ -910,7 +913,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return patch.password?.trim() ? setPassword(id, patch.password) : null
       },
       setControl: (year, month, field, value) => {
-        run('equipo', (current) => {
+        run('control_editar', (current) => {
           const rows = current.controlRows ?? []
           const index = rows.findIndex((item) => item.year === year && item.month === month)
           const previous = index >= 0 ? rows[index] : { year, month, values: {} }
@@ -935,7 +938,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return result.ok ? null : result.error
       },
       addMovement: (movement) =>
-        run('movimientos', (current) => {
+        run(movement.type === 'egreso' ? ['egresos', 'gastos'] : 'movimientos', (current) => {
           const concept = movement.concept.trim()
           if (!concept || !Number.isFinite(movement.amount) || movement.amount <= 0) return { ok: false, error: 'Concepto y un monto mayor a cero son obligatorios.' }
           if (!movement.method || movement.method === 'Pedido') return { ok: false, error: 'Elige el medio de pago.' }
@@ -947,64 +950,65 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ok: true, value: next, patch: { movements: [next, ...current.movements] } }
         }),
       saveProduct: (product) => {
-        if (!can('caja') && !can('compras') && !can('inventario')) return DENIED
-        const result = run(null, (current) => ops.saveProduct(current, product, can('ajustar')))
+        const previous = (latest.current.products ?? []).find((item) => item.id === product.id)
+        const onlyVisibility = Boolean(previous) && JSON.stringify({ ...previous, active: 0 }) === JSON.stringify({ ...product, active: 0 })
+        const result = run(onlyVisibility ? ['tienda_visibilidad', 'tienda_precios'] : ['tienda_precios', 'inventario_crear', 'ajustar', 'compras'], (current) => ops.saveProduct(current, product, can('ajustar')))
         return result.ok ? null : result.error
       },
       recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
-      settleOrder: (movementId, method, invoiced) => run('caja', (current) => ops.settleOrder(current, movementId, method, undefined, invoiced)),
+      settleOrder: (movementId, method, invoiced) => run('pedidos_cobrar', (current) => ops.settleOrder(current, movementId, method, undefined, invoiced)),
       voidSale: (saleId, reason) => run('anular', (current) => ops.voidSale(current, saleId, reason)),
       adjustStock: (input) => run('ajustar', (current) => ops.adjustStock(current, input)),
       saveSupplier: (supplier) => run('compras', (current) => ops.saveSupplier(current, supplier)),
       recordPurchase: (input) => run('compras', (current) => ops.recordPurchase(current, input)),
-      savePayable: (input) => run('compras', (current) => ops.savePayable(current, input)),
-      payPayable: (input) => run('compras', (current) => ops.payPayable(current, input)),
-      saveFixedCost: (item) => run('compras', (current) => ops.saveFixedCost(current, item)),
-      payFixedCost: (input) => run('compras', (current) => ops.payFixedCost(current, input)),
-      updateWorker: (id, patch) => run('planilla', (current) => ops.updateWorker(current, id, patch)),
-      payPayroll: (input) => run('planilla', (current) => ops.payPayroll(current, input)),
-      voidPayroll: (id) => run('planilla', (current) => ops.voidPayroll(current, id)),
+      savePayable: (input) => run('por_pagar', (current) => ops.savePayable(current, input)),
+      payPayable: (input) => run('por_pagar', (current) => ops.payPayable(current, input)),
+      saveFixedCost: (item) => run('gastos', (current) => ops.saveFixedCost(current, item)),
+      payFixedCost: (input) => run('gastos', (current) => ops.payFixedCost(current, input)),
+      updateWorker: (id, patch) => run('planilla_salarios', (current) => ops.updateWorker(current, id, patch)),
+      payPayroll: (input) => run('planilla_pagar', (current) => ops.payPayroll(current, input)),
+      voidPayroll: (id) => run('planilla_anular', (current) => ops.voidPayroll(current, id)),
       saveTask: (task) => run('tareas', (current) => ops.saveTask(current, task, currentUser?.id)),
       setTaskStatus: (id, status) => run('tareas', (current) => ops.setTaskStatus(current, id, status)),
       removeTask: (id) =>
         run('tareas', (current) => {
           const task = (current.tasks ?? []).find((item) => item.id === id)
-          if (task && task.createdBy !== currentUser?.id && !can('equipo')) {
+          if (task && task.createdBy !== currentUser?.id && !can('tareas_borrar')) {
             return { ok: false, error: 'Solo quien creó la tarea o un administrador puede borrarla.' }
           }
           return ops.removeTask(current, id)
         }),
       closeCash: (input) => run('corte', (current) => ops.closeCash(current, { ...input, userId: currentUser?.id })),
-      recordDeposit: (input) => run('corte', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
-      removeDeposit: (id) => run('corte', (current) => ops.removeDeposit(current, id)),
-      recordEmployeePurchase: (input) => run('caja', (current) => ops.recordEmployeePurchase(current, { ...input, userId: currentUser?.id })),
-      settleEmployeeCredit: (saleId, method) => run('caja', (current) => ops.settleEmployeeCredit(current, saleId, method)),
+      recordDeposit: (input) => run('corte_depositos', (current) => ops.recordDeposit(current, { ...input, userId: currentUser?.id })),
+      removeDeposit: (id) => run('corte_depositos', (current) => ops.removeDeposit(current, id)),
+      recordEmployeePurchase: (input) => run(input.credit ? 'empleados_credito' : 'empleados', (current) => ops.recordEmployeePurchase(current, { ...input, userId: currentUser?.id })),
+      settleEmployeeCredit: (saleId, method) => run('empleados_credito', (current) => ops.settleEmployeeCredit(current, saleId, method)),
       clockIn: () => run(null, (current) => ops.clockIn(current, currentUser?.id ?? '')),
       clockOut: () => run(null, (current) => ops.clockOut(current, currentUser?.id ?? '')),
-      saveAttendance: (record) => run('planilla', (current) => ops.saveAttendance(current, record)),
+      saveAttendance: (record) => run('asistencia_equipo', (current) => ops.saveAttendance(current, record)),
       removeAttendance: (id) =>
-        run('planilla', (current) => ({ ok: true, value: null, patch: { attendance: (current.attendance ?? []).filter((item) => item.id !== id) } })),
+        run('asistencia_equipo', (current) => ({ ok: true, value: null, patch: { attendance: (current.attendance ?? []).filter((item) => item.id !== id) } })),
       setTaxRegime: (regime) => {
-        run('contabilidad', (current) => ({ ok: true, value: null, patch: { settings: ops.changeRegime(current.settings, regime) } }))
+        run('conta_regimen', (current) => ({ ok: true, value: null, patch: { settings: ops.changeRegime(current.settings, regime) } }))
       },
       updateSettings: (patch) => {
-        const onlyLine = Object.keys(patch).every((key) => key === 'whatsapp')
-        if (!can('equipo') && !(onlyLine && can('whatsapp'))) return
+        const allowed = Object.keys(patch).every((key) => settingAllowed(currentUser, key))
+        if (!allowed) return
         run(null, (current) => ({ ok: true, value: null, patch: { settings: { ...current.settings, ...patch } } }))
       },
       ensureThread: (phone, name, petName) => {
-        if (!can('whatsapp')) return null
+        if (!can('whatsapp_enviar')) return null
         const key = digits(phone)
         const found = state.conversations.find((item) => digits(item.phone) === key)
         if (found) return found.id
         const next: Conversation = { id: newId(), phone: phone.trim(), name: name.trim() || 'Cliente', petName: petName.trim(), unread: 0, messages: [] }
-        const result = run('whatsapp', (current) => ({ ok: true, value: next.id, patch: { conversations: [next, ...current.conversations] } }))
+        const result = run('whatsapp_enviar', (current) => ({ ok: true, value: next.id, patch: { conversations: [next, ...current.conversations] } }))
         return result.ok ? result.value : null
       },
       sendMessage: async (conversationId, body, template = false) => {
         const text = body.trim()
         if (!text) return 'Escribe el mensaje.'
-        if (!can('whatsapp')) return DENIED
+        if (!can('whatsapp_enviar')) return DENIED
         try {
           const response = await request('POST', '/api/whatsapp/send', { conversationId, text, template })
           const data = (await response.json().catch(() => ({}))) as { error?: string; state?: AppState }
@@ -1037,14 +1041,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }))
       },
       exportBackup: () => {
-        if (!can('equipo')) return null
+        if (!can('respaldo')) return null
         return JSON.stringify({ ...outgoing(state), exportedAt: new Date().toISOString() })
       },
       importBackup: (raw) => {
-        if (!can('equipo')) return 'No tienes permiso para restaurar datos.'
+        if (!can('respaldo')) return 'No tienes permiso para restaurar datos.'
         const parsed = parseBackup(raw, state)
         if ('error' in parsed) return parsed.error
-        const result = run('equipo', () => ({ ok: true, value: null, patch: { ...parsed.state, sessionUserId: state.sessionUserId, revision: undefined } }))
+        const result = run('respaldo', () => ({ ok: true, value: null, patch: { ...parsed.state, sessionUserId: state.sessionUserId, revision: undefined } }))
         return result.ok ? null : result.error
       },
       resetDemo: () => {

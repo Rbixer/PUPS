@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   defaultsFor,
   grantModuleAll,
+  NODES,
+  nodeCount,
   PERMISSION_GROUPS,
-  permissionGroupChips,
+  PERMISSIONS,
+  permissionSummary,
   resolvePermissions,
+  revokeModuleAll,
   toggleAction,
   toggleModule,
+  type PermissionNode,
 } from '../access'
 import { saveBackupFile } from '../backup'
 import { SiteContent } from '../components/SiteContent'
@@ -42,7 +48,9 @@ function draftFrom(user: User): Draft {
 }
 
 export function Usuarios() {
-  const { state, addUser, updateUser, toggleUser, updateSettings, exportBackup, importBackup } = useStore()
+  const { state, allows, addUser, updateUser, toggleUser, updateSettings, exportBackup, importBackup } = useStore()
+  const [params] = useSearchParams()
+  const focusModule = NODES.find((node) => node.id === params.get('modulo'))?.label ?? ''
   const fileRef = useRef<HTMLInputElement>(null)
   const [backupNote, setBackupNote] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [error, setError] = useState('')
@@ -100,11 +108,19 @@ export function Usuarios() {
               <span className={user.active ? 'pill pill-completada' : 'pill pill-cancelada'}>
                 {user.active ? user.role : 'Inactivo'}
               </span>
+              <p className="person-count">
+                {permissions.length} de {PERMISSIONS.length} permisos
+              </p>
               <ul className="person-tags">
                 {permissions.length === 0 ? (
                   <li>Sin módulos</li>
                 ) : (
-                  permissionGroupChips(permissions).map((label) => <li key={label}>{label}</li>)
+                  permissionSummary(permissions).map((item) => (
+                    <li key={item.label}>
+                      {item.label}
+                      {item.extra ? <b> +{item.extra}</b> : null}
+                    </li>
+                  ))
                 )}
               </ul>
               <div className="person-actions">
@@ -190,8 +206,8 @@ export function Usuarios() {
             </select>
           </Field>
         </div>
-        <p className="hint">Al cambiar el rol se marcan los del rol. Abre cada grupo para afinar acciones (anular, costos, corte…).</p>
-        <PermissionEditor value={form.permissions} locked={form.role === 'Administrador'} onChange={setPermissions} />
+        <p className="hint">Al cambiar el rol se marcan los del rol. Marca el módulo y, debajo, las acciones sensibles que sí puede hacer dentro de él.</p>
+        <PermissionEditor value={form.permissions} locked={form.role === 'Administrador'} onChange={setPermissions} focus={focusModule} />
         {error ? <p className="form-error">{error}</p> : null}
         <div className="team-actions">
           {editingId ? (
@@ -213,6 +229,7 @@ export function Usuarios() {
         </div>
       </form>
 
+      {allows('negocio') ? (
       <form
         className="panel team-shop"
         onSubmit={(event) => {
@@ -272,10 +289,12 @@ export function Usuarios() {
           </button>
         </div>
       </form>
+      ) : null}
       </div>
 
-      <SiteContent />
+      {allows('negocio') ? <SiteContent /> : null}
 
+      {allows('respaldo') ? (
       <section className="panel backup" aria-labelledby="backup-title">
         <div>
           <h2 id="backup-title">Respaldo de datos</h2>
@@ -316,101 +335,143 @@ export function Usuarios() {
           />
         </div>
         {backupNote ? (
-          <p className={backupNote.tone === 'error' ? 'banner warn' : 'banner'} role="status">
+          <p className={backupNote.tone === 'error' ? 'banner error' : 'banner'} role="status">
             {backupNote.text}
           </p>
         ) : null}
       </section>
+      ) : null}
     </section>
   )
 }
+
+const plain = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 
 function PermissionEditor({
   value,
   locked,
   onChange,
+  focus = '',
 }: {
   value: Permission[]
   locked: boolean
   onChange: (next: Permission[]) => void
+  focus?: string
 }) {
-  const [open, setOpen] = useState<string[]>(['operacion', 'caja'])
+  const [query, setQuery] = useState(focus)
+  const words = plain(query.trim())
+  const shown = locked ? PERMISSIONS.map((item) => item.id) : value
+  const matches = (node: PermissionNode) =>
+    !words || plain([node.label, node.detail, ...(node.actions ?? []).flatMap((action) => [action.label, action.detail])].join(' ')).includes(words)
+  const allowed = NODES.filter((node) => shown.includes(node.id))
+  const denied = NODES.filter((node) => !shown.includes(node.id))
   return (
-    <div className="permit-accordion" role="group" aria-label="Módulos y acciones">
+    <div className="perm-editor" role="group" aria-label="Módulos y acciones">
+      <div className="perm-toolbar">
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar módulo o acción…"
+          aria-label="Buscar permiso"
+        />
+        <strong className="perm-count" aria-live="polite">
+          {shown.length} de {PERMISSIONS.length} permisos
+        </strong>
+        <div className="perm-presets">
+          <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange(defaultsFor('Administrador'))}>
+            Todo
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange(defaultsFor('Recepción'))}>
+            Como recepción
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange([])}>
+            Ninguno
+          </button>
+        </div>
+      </div>
       {PERMISSION_GROUPS.map((group) => {
-        const active = group.nodes.filter((node) => value.includes(node.id)).length
-        const total = group.nodes.length
-        const expanded = open.includes(group.id)
+        const nodes = group.nodes.filter(matches)
+        if (nodes.length === 0) return null
+        const groupOn = group.nodes.filter((node) => shown.includes(node.id)).length
         return (
-          <div key={group.id} className="permit-group">
-            <button
-              type="button"
-              className="permit-group-head"
-              aria-expanded={expanded}
-              onClick={() => setOpen((current) => (current.includes(group.id) ? current.filter((id) => id !== group.id) : [...current, group.id]))}
-            >
-              <strong>{group.label}</strong>
+          <section key={group.id} className="perm-group">
+            <header>
+              <h3>{group.label}</h3>
               <span>
-                {active}/{total}
+                {groupOn} de {group.nodes.length} módulos
               </span>
-            </button>
-            {expanded ? (
-              <ul className="permit-nodes">
-                {group.nodes.map((node) => {
-                  const on = value.includes(node.id)
-                  const actions = node.actions ?? []
-                  const actionOn = actions.filter((action) => value.includes(action.id)).length
-                  const allOn = on && actionOn === actions.length
-                  return (
-                    <li key={node.id} className="permit-node">
-                      <div className="permit-node-row">
-                        <button
-                          type="button"
-                          className="permit"
-                          disabled={locked}
-                          aria-pressed={on}
-                          onClick={() => onChange(toggleModule(value, node.id, !on))}
-                        >
-                          <strong>{node.label}</strong>
-                          <small>{node.detail}</small>
-                        </button>
-                        {actions.length ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            disabled={locked || allOn}
-                            onClick={() => onChange(grantModuleAll(value, node.id))}
-                          >
-                            Todo
-                          </button>
-                        ) : null}
-                      </div>
-                      {actions.length ? (
-                        <ul className="permit-actions">
-                          {actions.map((action) => (
-                            <li key={action.id}>
-                              <button
-                                type="button"
-                                className="permit permit-action"
-                                disabled={locked}
-                                aria-pressed={value.includes(action.id)}
-                                onClick={() => onChange(toggleAction(value, action.id, !value.includes(action.id)))}
-                              >
-                                <strong>{action.label}</strong>
-                                <small>{action.detail}</small>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
+              {!locked ? (
+                <span className="perm-group-actions">
+                  <button type="button" className="text-btn" onClick={() => onChange(group.nodes.reduce((list, node) => grantModuleAll(list, node.id), value))}>
+                    Marcar todo
+                  </button>
+                  <button type="button" className="text-btn" onClick={() => onChange(group.nodes.reduce((list, node) => revokeModuleAll(list, node.id), value))}>
+                    Quitar todo
+                  </button>
+                </span>
+              ) : null}
+            </header>
+            <ul className="perm-cards">
+              {nodes.map((node) => {
+                const on = shown.includes(node.id)
+                const count = nodeCount(shown, node)
+                return (
+                  <li key={node.id} className={on ? 'perm-card is-on' : 'perm-card'} id={`perm-${node.id}`}>
+                    <label className="perm-card-head">
+                      <input type="checkbox" checked={on} disabled={locked} onChange={() => onChange(toggleModule(value, node.id, !on))} />
+                      <span>
+                        <strong>{node.label}</strong>
+                        <small>{node.detail}</small>
+                      </span>
+                      {count.total > 1 ? (
+                        <em>
+                          {count.on}/{count.total}
+                        </em>
                       ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-          </div>
+                    </label>
+                    {node.actions?.length ? (
+                      <ul className="perm-actions">
+                        {node.actions.map((action) => (
+                          <li key={action.id}>
+                            <label title={action.detail}>
+                              <input
+                                type="checkbox"
+                                checked={shown.includes(action.id)}
+                                disabled={locked}
+                                onChange={() => onChange(toggleAction(value, action.id, !value.includes(action.id)))}
+                              />
+                              <span>
+                                {action.label}
+                                <small>{action.detail}</small>
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
         )
       })}
+      {words && NODES.every((node) => !matches(node)) ? <p className="empty">Ningún permiso coincide con “{query.trim()}”.</p> : null}
+      <div className="perm-preview" aria-live="polite">
+        <p>
+          <b>Podrá entrar a:</b> {allowed.length ? allowed.map((node) => node.label).join(', ') : 'ningún módulo'}.
+        </p>
+        {denied.length ? (
+          <p>
+            <b>No podrá entrar a:</b> {denied.map((node) => node.label).join(', ')}.
+          </p>
+        ) : null}
+      </div>
       {locked ? <p className="hint">Administrador siempre tiene todos los permisos.</p> : null}
     </div>
   )

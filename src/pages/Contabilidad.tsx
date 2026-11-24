@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { accountName, balanceSheet, bankInflows, buildJournal, incomeStatement, isTradeEntry, taxMonths, type Balance } from '../ledger'
-import { ACCOUNTING_LINKS, ModuleIcon } from '../modules'
+import { ACCOUNTING_LINKS, linkAllowed, ModuleIcon } from '../modules'
 import { round2 } from '../ops'
 import { useStore } from '../store'
 
@@ -68,7 +68,7 @@ export function Contabilidad() {
     }
   }
 
-  const hub = ACCOUNTING_LINKS.filter((link) => !link.permission || allows(link.permission))
+  const hub = ACCOUNTING_LINKS.filter((link) => linkAllowed(link, allows))
 
   return (
     <section className="stack">
@@ -81,6 +81,7 @@ export function Contabilidad() {
         </div>
         {allows('contabilidad') ? (
           <div className="export-row">
+            {allows('conta_regimen') ? (
             <label className="field">
               <span>Régimen fiscal</span>
               <select value={regime ?? ''} onChange={(event) => setTaxRegime((event.target.value || undefined) as typeof regime)}>
@@ -90,6 +91,7 @@ export function Contabilidad() {
               </select>
               {since && since > '0000-01-01' ? <small>Vigente desde {longDate(since)}. Los meses anteriores conservan su régimen.</small> : null}
             </label>
+            ) : null}
             {allows('reportes') ? (
               <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void onExcel()}>
                 {busy ? 'Preparando…' : 'Excel'}
@@ -117,8 +119,8 @@ export function Contabilidad() {
         </ul>
       ) : null}
 
-      {allows('contabilidad') && !regime ? (
-        <p className="banner">Elige el régimen fiscal del negocio para que la contabilidad separe el IVA o calcule el impuesto del 5 %. Mientras tanto, los montos se muestran sin impuestos.</p>
+      {allows('conta_regimen') && !regime ? (
+        <p className="banner info">Elige el régimen fiscal del negocio para que la contabilidad separe el IVA o calcule el impuesto del 5 %. Mientras tanto, los montos se muestran sin impuestos.</p>
       ) : null}
 
       {!allows('contabilidad') ? (
@@ -162,11 +164,11 @@ export function Contabilidad() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { id: 'resultados', label: 'Estado de resultados' },
-          { id: 'balance', label: 'Balance general' },
-          { id: 'diario', label: 'Libro diario' },
-          { id: 'bancos', label: 'Bancos' },
-          { id: 'impuestos', label: 'Impuestos' },
+          { id: 'resultados' as const, label: 'Estado de resultados' },
+          { id: 'balance' as const, label: 'Balance general' },
+          ...(allows('conta_diario') ? [{ id: 'diario' as const, label: 'Libro diario' }] : []),
+          ...(allows('conta_bancos') ? [{ id: 'bancos' as const, label: 'Bancos' }] : []),
+          ...(allows('conta_impuestos') ? [{ id: 'impuestos' as const, label: 'Impuestos' }] : []),
         ]}
       />
 
@@ -267,7 +269,7 @@ export function Contabilidad() {
         </div>
       ) : null}
 
-      {tab === 'diario' ? (
+      {tab === 'diario' && allows('conta_diario') ? (
         <div className="ledger">
           <header className="module-bar">
             <h2>Libro diario</h2>
@@ -283,7 +285,7 @@ export function Contabilidad() {
             ]}
           />
           {diario.length === 0 ? (
-            <p className="empty" style={{ margin: 14 }}>
+            <p className="empty empty-inset">
               {diarioFilter === 'comercio' ? `Sin ventas ni compras en ${label.toLowerCase()}.` : `Sin partidas en ${label.toLowerCase()}.`}
             </p>
           ) : (
@@ -329,7 +331,7 @@ export function Contabilidad() {
         </div>
       ) : null}
 
-      {tab === 'bancos' ? (
+      {tab === 'bancos' && allows('conta_bancos') ? (
         <div className="stack">
           <Metrics
             items={[
@@ -345,7 +347,7 @@ export function Contabilidad() {
               <span>{bankRange.length} movimientos</span>
             </header>
             {bankRange.length === 0 ? (
-              <p className="empty" style={{ margin: 14 }}>Todavía no hay depósitos ni cobros a banco en {label.toLowerCase()}.</p>
+              <p className="empty empty-inset">Todavía no hay depósitos ni cobros a banco en {label.toLowerCase()}.</p>
             ) : (
               <div className="table-wrap">
                 <table className="biz-table">
@@ -390,14 +392,14 @@ export function Contabilidad() {
         </div>
       ) : null}
 
-      {tab === 'impuestos' ? (
+      {tab === 'impuestos' && allows('conta_impuestos') ? (
         <div className="ledger">
           <header className="module-bar">
             <h2>{mixed ? 'Impuestos del año' : regime === 'pequeno' ? 'Impuesto de pequeño contribuyente (5 %)' : regime === 'general' ? 'IVA del año' : 'Impuestos'}</h2>
             <span>{year}</span>
           </header>
           {!anyRegime ? (
-            <p className="empty" style={{ margin: 14 }}>Elige el régimen fiscal arriba para calcular impuestos.</p>
+            <p className="empty empty-inset">Elige el régimen fiscal arriba para calcular impuestos.</p>
           ) : (
             <div className="table-wrap">
               <table className="biz-table">

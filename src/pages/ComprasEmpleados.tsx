@@ -33,7 +33,7 @@ export function ComprasEmpleados() {
 }
 
 function PurchaseForm() {
-  const { state, recordEmployeePurchase } = useStore()
+  const { state, allows, recordEmployeePurchase } = useStore()
   const workers = workersOf(state.users)
   const products = shelfOf(state.products).filter((item) => item.kind !== 'insumo' && item.stock > 0)
   const [employeeId, setEmployeeId] = useState('')
@@ -149,7 +149,7 @@ function PurchaseForm() {
         <button type="button" aria-pressed={!credit} onClick={() => setCredit(false)}>
           Contado
         </button>
-        <button type="button" aria-pressed={credit} onClick={() => setCredit(true)}>
+        <button type="button" aria-pressed={credit} disabled={!allows('empleados_credito')} title={allows('empleados_credito') ? undefined : 'Necesitas el permiso para vender a crédito'} onClick={() => setCredit(true)}>
           Crédito
         </button>
       </div>
@@ -172,7 +172,7 @@ function PurchaseForm() {
 }
 
 function Owed() {
-  const { state, settleEmployeeCredit } = useStore()
+  const { state, allows, settleEmployeeCredit } = useStore()
   const [payMethod, setPayMethod] = useState('Efectivo')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -218,6 +218,7 @@ function Owed() {
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
+                  disabled={!allows('empleados_credito')}
                   onClick={() => {
                     const result = settleEmployeeCredit(sale.id, payMethod)
                     if (!result.ok) {
@@ -272,7 +273,7 @@ function History() {
       />
       <div className="ledger">
         {sales.length === 0 ? (
-          <p className="empty" style={{ margin: 14 }}>
+          <p className="empty empty-inset">
             Este mes no hay compras de empleados.
           </p>
         ) : (
