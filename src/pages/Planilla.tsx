@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, hoursLabel, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
@@ -16,7 +17,7 @@ export function Planilla() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Finanzas</p>
+          <p className="eyebrow"><Link className="accounting-back" to="/admin/contabilidad">Contabilidad</Link></p>
           <h1>Planilla</h1>
           <p className="lede">
             Salario, comisión sobre servicios atendidos, bonificación incentivo e IGSS. Las prestaciones (aguinaldo, bono 14, vacaciones e indemnización) se provisionan cada mes.

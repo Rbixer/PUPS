@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, isoDate, longDate, money } from '../format'
@@ -50,7 +51,7 @@ export function Compras() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Compras y gastos</p>
+          <p className="eyebrow"><Link className="accounting-back" to="/admin/contabilidad">Contabilidad</Link></p>
           <h1>Compras</h1>
           <p className="lede">
             Registra lo que entra de cada proveedor. Cada producto sube su existencia en inventario, separado en lo que es para venta y lo que se usa en los servicios.

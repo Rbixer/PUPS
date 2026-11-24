@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Field } from '../components/ui'
 import { DEMO_MODE } from '../env'
 import { MODULES_PATH } from '../modules'
+import { installedApp } from '../standalone'
 import { useStore } from '../store'
 import { usePanelTheme } from '../theme'
 
@@ -14,7 +15,7 @@ export function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [remember, setRemember] = useState(false)
+  const [remember, setRemember] = useState(installedApp)
   const [reveal, setReveal] = useState(false)
   const [busy, setBusy] = useState(false)
   const [expired] = useState(() => sessionStorage.getItem('pups-expired') === '1')
@@ -90,10 +91,14 @@ export function Login() {
               {reveal ? 'Ocultar' : 'Ver'}
             </button>
           </Field>
-          <label className="remember">
-            <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-            Mantener la sesión en este dispositivo
-          </label>
+          {installedApp() ? (
+            <p className="hint">La sesión queda en este equipo para abrir la agenda sin señal.</p>
+          ) : (
+            <label className="remember">
+              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+              Mantener la sesión en este dispositivo
+            </label>
+          )}
           {expired && !error ? (
             <p className="banner" role="status">
               La sesión venció. Vuelve a entrar.

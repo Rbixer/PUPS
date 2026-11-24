@@ -85,8 +85,13 @@ export function AdminLayout() {
   const showCrumbs = Boolean(current) && !onLauncher
   const parent = detail && current ? current.to : inAccounting ? '/admin/contabilidad' : MODULES_PATH
 
-  /** Atrás vuelve a la pantalla anterior; si se entró directo a esta página, sube un nivel. */
+  /** Dentro de Contabilidad, Atrás vuelve siempre al módulo. En el resto, a la pantalla anterior. */
+  const backToAccounting = inAccounting && !detail
   function goBack() {
+    if (backToAccounting) {
+      navigate('/admin/contabilidad')
+      return
+    }
     const index = (window.history.state as { idx?: number } | null)?.idx ?? 0
     if (index > 0) navigate(-1)
     else navigate(parent)
@@ -187,7 +192,7 @@ export function AdminLayout() {
         <nav className="crumbs" aria-label="Ruta de navegación">
           <button type="button" className="crumbs-back" onClick={goBack}>
             <Icon name="back" />
-            <span>Atrás</span>
+            <span>{backToAccounting ? 'Contabilidad' : 'Atrás'}</span>
           </button>
           <ol>
             <li>

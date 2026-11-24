@@ -80,6 +80,8 @@ export function planLabel(item: Appointment) {
 
 /** Paquete de grooming de una cita completada; null si no aplica (p. ej. solo pet shop). */
 export function packageOfAppointment(item: Appointment): GroomingPackage | null {
+  if (item.packageId === null) return null
+  if (item.packageId) return item.packageId
   if (item.report) return packageOf(item.report)
   if (item.service.toLowerCase().includes('premium')) return 'premium'
   const name = item.service.toLowerCase()

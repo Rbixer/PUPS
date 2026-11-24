@@ -355,7 +355,7 @@ export function Estadisticas() {
       {preview && (
         <Dialog className="overlay report-overlay" labelledBy="report-title" onClose={() => setPreview(false)} backdrop>
           <div className="report-frame">
-            <div className="report-toolbar">
+            <div className="report-toolbar no-print">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPreview(false)}>
                 Cerrar
               </button>

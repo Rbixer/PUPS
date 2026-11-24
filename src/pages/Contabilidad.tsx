@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
-import { accountName, balanceSheet, bankInflows, buildJournal, incomeStatement, isTradeEntry, taxMonths, type Balance } from '../ledger'
+import { accountName, balanceSheet, bankInflows, buildJournal, incomeStatement, isTradeEntry, taxMonths, type AccountType, type Balance, type Entry } from '../ledger'
 import { ACCOUNTING_LINKS, iconTone, linkAllowed, ModuleIcon } from '../modules'
 import { round2 } from '../ops'
 import { useStore } from '../store'
@@ -180,7 +180,7 @@ export function Contabilidad() {
               <span>{label}</span>
             </header>
             <div className="statement">
-              <Rows title="Ingresos" rows={statement.revenue} />
+              <Rows title="Ingresos" rows={statement.revenue} entries={inRange} />
               <div className="sub">
                 <span>Total de ingresos</span>
                 <span>{money(statement.totalRevenue)}</span>
@@ -193,8 +193,8 @@ export function Contabilidad() {
                 <span>Utilidad bruta</span>
                 <span>{money(statement.gross)}</span>
               </div>
-              <Rows title="Planilla" rows={statement.payroll} />
-              <Rows title="Gastos de operación" rows={statement.expenses} />
+              <Rows title="Planilla" rows={statement.payroll} entries={inRange} />
+              <Rows title="Gastos de operación" rows={statement.expenses} entries={inRange} />
               {statement.taxes ? (
                 <div className="indent">
                   <span>(−) Impuesto pequeño contribuyente</span>
@@ -234,12 +234,12 @@ export function Contabilidad() {
             {squared ? <Tag tone="ok">Cuadra</Tag> : <Tag tone="bad">Revisar</Tag>}
           </header>
           <div className="statement">
-            <Rows title="Activo" rows={sheet.assets} />
+            <Rows title="Activo" rows={sheet.assets} entries={entries.filter((entry) => entry.date <= to)} />
             <div className="sub">
               <span>Total activo</span>
               <span>{money(sheet.totalAssets)}</span>
             </div>
-            <Rows title="Pasivo" rows={sheet.liabilities} />
+            <Rows title="Pasivo" rows={sheet.liabilities} entries={entries.filter((entry) => entry.date <= to)} />
             <div className="sub">
               <span>Total pasivo</span>
               <span>{money(sheet.totalLiabilities)}</span>
@@ -455,7 +455,13 @@ export function Contabilidad() {
   )
 }
 
-function Rows({ title, rows }: { title: string; rows: Balance[] }) {
+function lineEffect(type: AccountType, debit: number, credit: number) {
+  const natural = type === 'activo' || type === 'costo' || type === 'gasto'
+  return round2(natural ? debit - credit : credit - debit)
+}
+
+function Rows({ title, rows, entries }: { title: string; rows: Balance[]; entries: Entry[] }) {
+  const [open, setOpen] = useState<string | null>(null)
   return (
     <>
       <div className="head">
@@ -468,14 +474,46 @@ function Rows({ title, rows }: { title: string; rows: Balance[] }) {
           <span>{money(0)}</span>
         </div>
       ) : (
-        rows.map((row) => (
-          <div key={row.code} className="indent">
-            <span>
-              {row.code} · {row.name}
-            </span>
-            <span>{money(row.balance)}</span>
-          </div>
-        ))
+        rows.map((row) => {
+          const moves = entries.flatMap((entry) =>
+            entry.lines.map((line, index) => ({ entry, line, index })).filter(({ line }) => line.code === row.code && (line.debit !== 0 || line.credit !== 0)),
+          )
+          const shown = open === row.code
+          return (
+            <div key={row.code} className="drill">
+              <button type="button" className="drill-toggle" aria-expanded={shown} onClick={() => setOpen(shown ? null : row.code)}>
+                <span>
+                  {row.code} · {row.name}
+                </span>
+                <span>{money(row.balance)}</span>
+              </button>
+              {shown ? (
+                moves.length === 0 ? (
+                  <p className="drill-empty">Sin partidas en este periodo.</p>
+                ) : (
+                  <ul className="drill-lines">
+                    {moves.slice(0, 40).map(({ entry, line, index }) => {
+                      const amount = lineEffect(row.type, line.debit, line.credit)
+                      return (
+                        <li key={`${entry.id}-${index}`}>
+                          <span>
+                            {longDate(entry.date)} · {entry.ref} · {entry.concept}
+                          </span>
+                          <b className={amount < 0 ? 'hot-text' : ''}>{money(amount)}</b>
+                        </li>
+                      )
+                    })}
+                    {moves.length > 40 ? (
+                      <li>
+                        <span>Y {moves.length - 40} partidas más, en el libro diario.</span>
+                      </li>
+                    ) : null}
+                  </ul>
+                )
+              ) : null}
+            </div>
+          )
+        })
       )}
     </>
   )

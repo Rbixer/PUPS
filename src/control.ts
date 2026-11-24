@@ -1,5 +1,5 @@
 import { isoDate } from './format'
-import { packageOf } from './grooming'
+import { countedPackage } from './grooming'
 import { PETTY_REFILL } from './ops'
 import type { AppState, ControlField, ControlRow, Movement } from './types'
 
@@ -159,10 +159,10 @@ export function controlAuto(state: AppState, year: number, goal = CONTROL_GOAL) 
   }
 
   for (const appointment of state.appointments) {
-    if (appointment.status !== 'completada' || !appointment.report || !appointment.date.startsWith(prefix)) continue
+    if (appointment.status !== 'completada' || !appointment.date.startsWith(prefix)) continue
     const values = months[Number(appointment.date.slice(5, 7)) - 1]
-    const pack = packageOf(appointment.report)
-    if (values && (pack === 'basico' || pack === 'estandar' || pack === 'premium')) values[pack] += 1
+    const pack = countedPackage(appointment)
+    if (values && pack) values[pack] += 1
   }
 
   for (const sale of state.sales ?? []) {

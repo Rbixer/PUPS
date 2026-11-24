@@ -9,7 +9,8 @@ type BeforeInstallPromptEvent = Event & {
 const DISMISS = 'pups-install-dismissed'
 
 function isIos() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const iPadAsMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || iPadAsMac
 }
 
 function isStandalone() {
@@ -66,7 +67,7 @@ export function InstallBanner() {
   if (prompt) {
     return (
       <div className="install-banner">
-        <p>Instala PUP'S. La agenda, las fichas y las reservas abren como una app, también sin señal.</p>
+        <p>Instala PUP'S en este equipo. La agenda sigue aquí si se va la señal y se envía al volver la conexión.</p>
         <div className="install-actions">
           <button
             type="button"
@@ -114,21 +115,48 @@ export function InstallBanner() {
   )
 }
 
+/** El aviso solo sale si el servidor no contesta. navigator.onLine se queda en falso en el celular aunque haya señal. */
+async function serverAnswers() {
+  const controller = new AbortController()
+  const limit = window.setTimeout(() => controller.abort(), 5000)
+  try {
+    await fetch('/api/state', { cache: 'no-store', signal: controller.signal })
+    return true
+  } catch {
+    return false
+  } finally {
+    window.clearTimeout(limit)
+  }
+}
+
 export function OfflineChip() {
-  const [online, setOnline] = useState(() => navigator.onLine)
+  const [offline, setOffline] = useState(false)
 
   useEffect(() => {
-    const up = () => setOnline(true)
-    const down = () => setOnline(false)
-    window.addEventListener('online', up)
-    window.addEventListener('offline', down)
+    let gone = false
+    const probe = () => {
+      void serverAnswers().then((up) => {
+        if (!gone) setOffline(!up)
+      })
+    }
+    const onVisible = () => {
+      if (!document.hidden) probe()
+    }
+    probe()
+    window.addEventListener('online', probe)
+    window.addEventListener('offline', probe)
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = window.setInterval(probe, 20_000)
     return () => {
-      window.removeEventListener('online', up)
-      window.removeEventListener('offline', down)
+      gone = true
+      window.clearInterval(timer)
+      window.removeEventListener('online', probe)
+      window.removeEventListener('offline', probe)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [])
 
-  if (online) return null
+  if (!offline) return null
   return (
     <p className="offline-chip" role="status">
       Sin conexión. Este dispositivo conserva la agenda.

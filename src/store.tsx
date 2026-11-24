@@ -3,6 +3,7 @@ import { allows as userAllows, settingAllowed } from './access'
 import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, newId, normalizePhone } from './format'
+import { installedApp } from './standalone'
 import * as ops from './ops'
 import { resolvePetCode, slotTaken } from './visit'
 import type { ChargeNote, Op } from './ops'
@@ -330,7 +331,7 @@ function readSession(): { token: string; userId: string } | null {
 
 function saveSession(session: { token: string; userId: string }, remember: boolean) {
   sessionStorage.setItem(TOKEN, JSON.stringify(session))
-  if (remember) localStorage.setItem(TOKEN, JSON.stringify(session))
+  if (remember || installedApp()) localStorage.setItem(TOKEN, JSON.stringify(session))
   else localStorage.removeItem(TOKEN)
 }
 
@@ -353,11 +354,20 @@ function readSync(): SyncMark {
 }
 
 function persist(payload: AppState, sync: SyncMark) {
+  const body = { ...payload, sessionUserId: null }
   try {
     localStorage.setItem(SYNC, JSON.stringify(sync))
-    localStorage.setItem(KEY, JSON.stringify(lightweight({ ...payload, sessionUserId: null })))
   } catch {
-    /* Sin cupo en el navegador: el servidor del local sigue siendo la copia principal. */
+    /* Sin cupo ni para la marca de sincronización. */
+  }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(body))
+  } catch {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(lightweight(body)))
+    } catch {
+      /* Sin cupo: el servidor del local sigue siendo la copia principal. */
+    }
   }
 }
 
@@ -535,10 +545,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async push() {
       if (pushing.current || !token.current || pending.current.length === 0) return
       if (!server.current) {
-        if (navigator.onLine) await engine.current?.loadPrivate()
+        await engine.current?.loadPrivate()
         return
       }
-      if (!navigator.onLine) return
       pushing.current = true
       const sent = pending.current.length
       const payload = outgoing(latest.current)
@@ -628,7 +637,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     else void engine.current?.loadPublic()
 
     const poll = async () => {
-      if (!token.current || pushing.current || pending.current.length > 0 || document.hidden || !navigator.onLine) return
+      if (!token.current || pushing.current || pending.current.length > 0 || document.hidden) return
       if (!server.current) {
         await engine.current?.loadPrivate()
         return

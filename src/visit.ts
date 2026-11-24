@@ -23,7 +23,9 @@ export function priceFor(plan: PlanId, size: string) {
 }
 
 export function planOf(appointment: Appointment): PlanId {
-  if (appointment.report?.plan === 'premium') return 'premium'
+  if (appointment.packageId === 'premium') return 'premium'
+  if (appointment.packageId) return 'grooming'
+  if (appointment.report?.plan === 'premium' || appointment.report?.packageId === 'premium') return 'premium'
   if (appointment.service.toLowerCase().includes('premium')) return 'premium'
   return 'grooming'
 }

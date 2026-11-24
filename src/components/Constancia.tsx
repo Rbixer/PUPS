@@ -19,6 +19,10 @@ type Draft = {
 
 function fromAppointment(appointment: Appointment): Draft {
   const report = readReport(appointment.report)
+  if (!appointment.report && appointment.packageId) {
+    report.packageId = appointment.packageId
+    report.plan = appointment.packageId === 'premium' ? 'premium' : 'grooming'
+  }
   if (!report.photos[0] && appointment.beforePhoto) report.photos[0] = appointment.beforePhoto
   if (!report.photos[2] && appointment.afterPhoto) report.photos[2] = appointment.afterPhoto
   return {
@@ -157,6 +161,7 @@ export function Constancia({
       breed: draft.breed.trim(),
       sex: draft.sex,
       allergies: draft.allergies.trim(),
+      packageId: nextReport.packageId,
       report: nextReport,
       beforePhoto: report.photos[0] ?? '',
       afterPhoto: report.photos[2] ?? '',
@@ -208,7 +213,8 @@ export function Constancia({
           className="report-form no-print"
           onSubmit={(event) => {
             event.preventDefault()
-            save()
+            if (!save()) return
+            if (!embedded) onClose()
           }}
         >
           <header className="constancia-mast">

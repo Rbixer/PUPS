@@ -447,11 +447,29 @@
 .person-count { margin: 0; font-size: 0.8rem; color: var(--muted, #6b7280); font-variant-numeric: tabular-nums; }
 .person-tags b { font-weight: 600; opacity: 0.7; }
 
-/* Hub de reportes */
+/* Hub de reportes: tarjetas con acciones alineadas, no el mosaico de íconos. */
 .reports-grid .is-locked { opacity: 0.55; }
-.report-card { cursor: default; }
-.report-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.report-card { align-items: flex-start; cursor: default; }
+.report-card .module-text { width: 100%; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.report-actions .btn { flex: 1 1 5.5rem; justify-content: center; }
 .report-lock { font-size: 0.8rem; color: var(--muted, #6b7280); }
+@media (max-width: 760px) {
+  .reports-grid { grid-template-columns: 1fr; }
+  .reports-grid .module-card {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px;
+    text-align: left;
+  }
+  .reports-grid .module-text small { display: block; }
+  .reports-grid .module-text strong { font-size: 15px; }
+}
+@media (max-width: 720px) {
+  .report-toolbar .btn { flex: 1 1 30%; }
+}
 
 /* «Tus permisos aquí»: franja plegable dentro de cada módulo. */
 .perm-bar { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 0 0 14px; font-size: 0.88rem; }

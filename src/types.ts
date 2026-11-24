@@ -175,6 +175,8 @@ export type Appointment = {
   sex: string
   breed: string
   service: string
+  /** Paquete elegido al agendar. `null` es «sin paquete»; si falta, se usa la constancia. */
+  packageId?: GroomingPackage | null
   size: string
   coat: string
   allergies: string

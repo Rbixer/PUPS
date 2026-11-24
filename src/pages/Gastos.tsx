@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { EXPENSE_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { count, isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
@@ -57,7 +58,7 @@ export function Gastos() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Compras y gastos</p>
+          <p className="eyebrow"><Link className="accounting-back" to="/admin/contabilidad">Contabilidad</Link></p>
           <h1>Gastos</h1>
           <p className="lede">Los gastos salen de la caja chica y cada uno lleva su rubro: administrativos, venta o servicio.</p>
         </div>

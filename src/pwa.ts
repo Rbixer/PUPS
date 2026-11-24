@@ -15,6 +15,12 @@ const isPublic = () => !location.pathname.startsWith('/admin') && location.pathn
 
 export function startPwa() {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return
+  // Si otra pestaña aplica la versión nueva, esta también recarga. Si no, se queda con código viejo.
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload()
+    })
+  }
   const update = registerSW({
     immediate: true,
     onNeedRefresh() {

@@ -18,6 +18,30 @@ export function packageLabel(report?: Pick<GroomingReport, 'plan' | 'packageId'>
   return GROOMING_PACKAGES.find((item) => item.id === id)?.label ?? 'Estándar'
 }
 
+/** Los tres paquetes que suma Control general. */
+export const CONTROL_PACKAGES = [
+  { id: 'basico', label: 'Básico' },
+  { id: 'estandar', label: 'Estándar' },
+  { id: 'premium', label: 'Premium' },
+] as const
+
+export function isControlPackage(id: string | null | undefined): id is 'basico' | 'estandar' | 'premium' {
+  return id === 'basico' || id === 'estandar' || id === 'premium'
+}
+
+export function packageName(id?: string | null) {
+  return GROOMING_PACKAGES.find((item) => item.id === id)?.label ?? ''
+}
+
+/** Paquete que entra en Control general: el de la cita, o el de la constancia si la cita es anterior. */
+export function countedPackage(appointment: { packageId?: string | null; report?: Pick<GroomingReport, 'plan' | 'packageId'> }) {
+  if (appointment.packageId === null) return null
+  if (isControlPackage(appointment.packageId)) return appointment.packageId
+  if (!appointment.report) return null
+  const pack = packageOf(appointment.report)
+  return isControlPackage(pack) ? pack : null
+}
+
 export const INGRESO_ITEMS: { key: string; label: string }[] = [
   { key: 'nudos', label: 'Nudos' },
   { key: 'nudos-piel', label: 'Nudos pegados a la piel' },

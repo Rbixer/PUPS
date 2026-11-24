@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
 import { addDays, count, daysBetween, isoDate, longDate, money } from '../format'
@@ -38,7 +39,7 @@ export function CuentasPorPagar() {
     <section className="stack">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Compras y gastos</p>
+          <p className="eyebrow"><Link className="accounting-back" to="/admin/contabilidad">Contabilidad</Link></p>
           <h1>Facturas por pagar</h1>
           <p className="lede">Compras al crédito, servicios del local y cuotas del IGSS. Cada pago o abono sale de caja con su documento de egreso.</p>
         </div>

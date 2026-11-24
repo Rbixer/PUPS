@@ -14,6 +14,282 @@
 /* Look unificado del panel: va en la capa components, después de ui.css, y gana sobre lo heredado. */
 @import './styles/admin.css' layer(components);
 
+/* Calendario de citas. Va sin capa para ganar a ui.css, que también está sin capa. */
+.admin .cal-grid { gap: 6px; }
+.admin .cal-dow {
+  padding: 2px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.admin .cal-day {
+  min-height: 92px;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: #fff;
+}
+.admin .cal-day:hover { border-color: var(--line-strong); background: var(--navy-50); }
+.admin .cal-day.selected {
+  border-color: var(--aqua-ink);
+  background: var(--aqua-soft);
+  box-shadow: inset 0 0 0 1px var(--aqua-ink);
+}
+.admin .cal-day.out { border-color: transparent; background: transparent; opacity: 0.45; }
+.admin .cal-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.admin .cal-day.today .cal-num { background: var(--navy); color: #fff; }
+.admin .cal-chip,
+.admin .cal-more {
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.admin .cal-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-left: 3px solid var(--aqua-ink);
+  background: #fff;
+  color: var(--navy-deep);
+  box-shadow: 0 1px 0 rgba(11, 31, 77, 0.05);
+}
+.admin .cal-chip b {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--aqua-ink);
+}
+.admin .cal-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.admin .cal-chip.pendiente { background: #fff; }
+.admin .cal-chip.completada { border-left-color: var(--ok); background: var(--ok-bg); color: #0c5f45; }
+.admin .cal-chip.completada b { color: var(--ok); }
+.admin .cal-chip.cancelada {
+  border-left-color: transparent;
+  background: transparent;
+  color: var(--text-placeholder);
+  box-shadow: none;
+  text-decoration: line-through;
+}
+.admin .cal-more { padding-left: 4px; font-weight: 700; color: var(--text-2); }
+
+.admin .day-column {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card-bg);
+  box-shadow: var(--sh-1);
+}
+.admin .day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.admin .day-head h2 { margin: 0; font-size: 22px; }
+.admin .day-head p { margin: 2px 0 0; color: var(--text-2); font-size: 13px; }
+.admin .day-count {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--navy-50);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin .day-board {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: linear-gradient(to right, var(--navy-50) 58px, #fff 58px);
+  box-shadow: none;
+  overflow: hidden;
+}
+.admin .day-hour {
+  right: 0;
+  left: 0;
+  display: block;
+  transform: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.admin .day-hour span {
+  display: block;
+  width: 58px;
+  padding: 6px 0 0 8px;
+}
+.admin .day-hour:hover { background: linear-gradient(to right, var(--navy-50) 58px, var(--aqua-soft) 58px); }
+.admin .day-hour:hover span { color: var(--aqua-ink); }
+.admin .day-hour-end { border-bottom: 0; }
+.admin .day-hour-end span { padding-top: 6px; }
+.admin .day-empty {
+  position: absolute;
+  top: 42%;
+  right: 16px;
+  left: 74px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+.admin .day-block {
+  padding: 6px 8px 6px 10px;
+  border-left: 3px solid var(--aqua-ink);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--navy-deep);
+  box-shadow: var(--sh-2);
+}
+.admin .day-block.pendiente { background: linear-gradient(180deg, #fff, var(--aqua-soft)); }
+.admin .day-block.completada { border-left-color: var(--ok); background: var(--ok-bg); color: #0c5f45; }
+.admin .day-block strong { font-family: var(--font-heading); font-size: 13px; font-weight: 700; }
+.admin .day-block em {
+  display: block;
+  overflow: hidden;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Cabecera del formulario de cita: franja amarilla, letras negras y huellas. */
+.admin .overlay:has(.cita-form) {
+  align-items: start;
+  padding-top: 112px;
+}
+.admin .cita-form {
+  overflow: hidden;
+  padding: 0 22px 22px;
+}
+.admin .cita-mast {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 -22px 20px;
+  padding: 26px 22px 22px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0.08), transparent 34%),
+    linear-gradient(180deg, #ffe14a 0%, #ffd000 100%);
+  color: #141414;
+  box-shadow: inset 0 -4px 0 #141414;
+}
+.admin .cita-mast h2 {
+  margin: 0;
+  color: #141414;
+  font-family: var(--font-heading);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.admin .cita-mast p {
+  margin: 0 0 4px;
+  color: #141414;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.admin .cita-mast div > span {
+  display: block;
+  margin-top: 6px;
+  color: #141414;
+  font-size: 13px;
+  font-weight: 700;
+}
+.admin .cita-mast div { position: relative; z-index: 1; }
+.admin .cita-paws {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.admin .cita-paws svg {
+  position: absolute;
+  fill: #141414;
+}
+.admin .cita-paws svg:nth-child(1) { top: -14px; right: 132px; width: 58px; opacity: 0.22; transform: rotate(-16deg); }
+.admin .cita-paws svg:nth-child(2) { right: 28px; bottom: -22px; width: 78px; opacity: 0.18; transform: rotate(18deg); }
+.admin .cita-paws svg:nth-child(3) { top: 14px; left: -8px; width: 30px; opacity: 0.38; transform: rotate(-22deg); }
+.admin .cita-paws svg:nth-child(4) { bottom: 12px; left: 42%; width: 20px; opacity: 0.45; transform: rotate(8deg); }
+.admin .cita-paws svg:nth-child(5) { top: 6px; right: 210px; width: 16px; opacity: 0.5; transform: rotate(28deg); }
+.admin .cita-mast .btn {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  border-color: #141414;
+  background: transparent;
+  color: #141414;
+  box-shadow: none;
+}
+.admin .cita-mast .btn:hover { background: #141414; color: #ffd000; }
+@media (max-width: 640px) {
+  .admin .cita-mast { align-items: flex-start; padding: 20px 16px 18px; }
+  .admin .cita-mast h2 { font-size: 26px; }
+}
+
+/* En el detalle del día solo se ve la acción principal. El resto vive en Más. */
+.admin .slot-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin .slot-more { display: contents; }
+.admin .slot-menu {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.admin .slot-menu button,
+.admin .slot-menu a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.admin .slot-menu button:hover,
+.admin .slot-menu a:hover { background: var(--navy-50); }
+@media (max-width: 760px) {
+  .admin .cal-day { min-height: 68px; padding: 4px; }
+  .admin .cal-chip b { display: none; }
+  .admin .day-column { padding: 12px; }
+}
+
 @custom-variant dark (&:where(html[data-theme='dark'], html[data-theme='dark'] *));
 
 @theme {

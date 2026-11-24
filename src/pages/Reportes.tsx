@@ -42,7 +42,7 @@ export function Reportes() {
       detail: 'Citas, ventas, paquetes pagados, servicios y horas fuertes del mes.',
       permission: 'estadisticas',
       download: {
-        label: 'Excel del mes',
+        label: 'Excel',
         run: async () => {
           const report = buildMonthReport(state, monthStart(`${month}-01`))
           await downloadExcel(report)
@@ -57,7 +57,7 @@ export function Reportes() {
       detail: 'Estado de resultados, balance, libro diario, bancos e impuestos.',
       permission: 'contabilidad',
       download: {
-        label: 'Excel contable del mes',
+        label: 'Excel',
         run: async () => {
           const entries = buildJournal(state)
           const from = `${month}-01`
@@ -86,7 +86,7 @@ export function Reportes() {
       detail: 'Una fila por mes: paquetes, ingresos, gastos y meta.',
       permission: 'control',
       download: {
-        label: 'Excel del año',
+        label: 'Excel',
         run: async () => {
           const goal = state.settings.controlGoal ?? CONTROL_GOAL
           const sheet = controlSheet(year, state.controlRows ?? [], state, goal)

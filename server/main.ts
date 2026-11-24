@@ -161,6 +161,11 @@ function serveStatic(request: http.IncomingMessage, response: http.ServerRespons
     reject(response, 400)
     return
   }
+  // El service worker precachea /index.html y solo se instala si el archivo responde 200, byte por byte.
+  if (pathname === '/index.html' && fs.existsSync(target) && fs.statSync(target).isFile()) {
+    serveFile(target, response)
+    return
+  }
   if (path.basename(target) !== 'index.html' && fs.existsSync(target) && fs.statSync(target).isFile()) {
     serveFile(target, response)
     return

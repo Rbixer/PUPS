@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { clientProfiles } from '../clients'
 import { Metrics, StatusPill, Tag } from '../components/ui'
@@ -14,6 +14,10 @@ export function Clientes() {
   const needle = query.trim().toLowerCase()
   const visible = profiles.filter((item) => !needle || [item.name, item.phone, ...item.pets.map((pet) => pet.name)].join(' ').toLowerCase().includes(needle))
   const current = profiles.find((item) => item.key === picked) ?? visible[0] ?? null
+  useEffect(() => {
+    if (!picked || !window.matchMedia('(max-width: 1100px)').matches) return
+    document.getElementById('client-profile')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [picked])
   const recurring = profiles.filter((item) => item.completed >= 2).length
   const owed = profiles.reduce((sum, item) => sum + item.pending, 0)
   const lifetime = profiles.reduce((sum, item) => sum + item.total, 0)
@@ -49,9 +53,9 @@ export function Clientes() {
               <table className="biz-table">
                 <tbody>
                   {visible.map((item) => (
-                    <tr key={item.key} className={current?.key === item.key ? 'is-picked' : ''}>
+                    <tr key={item.key} className={current?.key === item.key ? 'is-picked pick-row' : 'pick-row'}>
                       <td>
-                        <button type="button" className="linkish" onClick={() => setPicked(item.key)}>
+                        <button type="button" className="linkish" aria-pressed={current?.key === item.key} onClick={() => setPicked(item.key)}>
                           {formatName(item.name) || 'Sin nombre'}
                         </button>
                         <small>
@@ -71,7 +75,7 @@ export function Clientes() {
         </div>
 
         {current ? (
-          <div className="biz-stack">
+          <div className="biz-stack" id="client-profile">
             <div className="ledger">
               <div className="client-head">
                 <span className="client-mark">{initials(current.name, 'C')}</span>

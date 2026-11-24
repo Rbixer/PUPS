@@ -4,7 +4,8 @@ import { visitMinutes } from '../visit'
 
 const OPEN = 8 * 60
 const CLOSE = 19 * 60
-const HOUR = 56
+const HOUR = 48
+const GUTTER = 58
 
 function label(total: number) {
   const hour = Math.floor(total / 60)
@@ -54,14 +55,15 @@ export function DayBoard({
   onMove: (id: string, time: string) => void
   onCreate: (time: string) => void
 }) {
-  const height = ((CLOSE - OPEN) / 60) * HOUR
+  const rows = (CLOSE - OPEN) / 60
+  const height = rows * HOUR
   const visible = items.filter((item) => item.status !== 'cancelada')
   const lanes = layout(visible)
 
   return (
     <div
       className="day-board"
-      style={{ height }}
+      style={{ height: height + 28 }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault()
@@ -74,17 +76,21 @@ export function DayBoard({
         onMove(id, label(total))
       }}
     >
-      {Array.from({ length: (CLOSE - OPEN) / 60 + 1 }, (_, index) => OPEN + index * 60).map((minute) => (
-        <button key={minute} type="button" className="day-hour" style={{ top: ((minute - OPEN) / 60) * HOUR }} onClick={() => onCreate(label(minute))}>
+      {Array.from({ length: rows }, (_, index) => OPEN + index * 60).map((minute) => (
+        <button key={minute} type="button" className="day-hour" style={{ top: ((minute - OPEN) / 60) * HOUR, height: HOUR }} onClick={() => onCreate(label(minute))}>
           <span className="num">{label(minute)}</span>
         </button>
       ))}
+      <button type="button" className="day-hour day-hour-end" style={{ top: height, height: 28 }} onClick={() => onCreate(label(CLOSE))}>
+        <span className="num">{label(CLOSE)}</span>
+      </button>
+      {visible.length === 0 ? <p className="day-empty">Toca una hora para agendar.</p> : null}
       {visible.map((item) => {
         const start = Math.min(CLOSE - 30, Math.max(OPEN, minutesOf(item.time)))
         const top = ((start - OPEN) / 60) * HOUR
         const block = Math.max(40, Math.min(visitMinutes(item), CLOSE - start) / 60 * HOUR - 6)
         const { lane, lanes: count } = lanes.get(item.id) ?? { lane: 0, lanes: 1 }
-        const share = `calc((100% - 84px) / ${count} - 6px)`
+        const laneWidth = `(100% - ${GUTTER + 16}px) / ${count}`
         return (
           <article
             key={item.id}
@@ -92,9 +98,9 @@ export function DayBoard({
             style={{
               top,
               height: block,
-              width: share,
-              left: `calc(68px + ${lane} * ((100% - 84px) / ${count}))`,
-              zIndex: 1 + lane,
+              width: `calc(${laneWidth} - 8px)`,
+              left: `calc(${GUTTER + 8}px + ${lane} * (${laneWidth}))`,
+              zIndex: 2 + lane,
             }}
             aria-label={`${formatName(item.petName)} ${item.time}`}
             draggable
@@ -108,6 +114,7 @@ export function DayBoard({
             <span>
               {item.time} · {visitMinutes(item)} min
             </span>
+            {item.service && visitMinutes(item) >= 60 ? <em>{item.service}</em> : null}
           </article>
         )
       })}

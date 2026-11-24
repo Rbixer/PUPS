@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { parseAmount } from '../format'
 import type { AppointmentStatus } from '../types'
 
@@ -149,7 +150,9 @@ export function Dialog({
     }
   }, [escape])
 
-  return (
+  const host = document.querySelector('.admin') ?? document.body
+
+  return createPortal(
     <div
       ref={ref}
       className={className}
@@ -159,6 +162,7 @@ export function Dialog({
       onClick={backdrop ? (event) => event.target === event.currentTarget && onClose() : undefined}
     >
       {children}
-    </div>
+    </div>,
+    host,
   )
 }

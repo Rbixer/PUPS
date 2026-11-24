@@ -96,6 +96,15 @@ describe('control general automático', () => {
     expect(march.diferencia).toBe(7)
   })
 
+  it('suma el paquete elegido en la cita aunque todavía no tenga constancia', () => {
+    const base = state()
+    base.appointments.push({ ...groomed(6, '2025-03-09', 'premium'), report: undefined, packageId: 'premium' })
+    base.appointments.push({ ...groomed(7, '2025-03-09', 'basico'), report: undefined, packageId: null })
+    const march = controlAuto(base, 2025)[2]
+    expect(march.premium).toBe(2)
+    expect(march.basico).toBe(1)
+  })
+
   it('deja otros años fuera y los meses sin datos en cero', () => {
     const months = controlAuto(state(), 2025)
     expect(months[1].gastos).toBe(0)

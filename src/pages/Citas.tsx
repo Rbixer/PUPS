@@ -5,8 +5,9 @@ import { Constancia } from '../components/Constancia'
 import { DayBoard } from '../components/DayBoard'
 import { Dialog, Field, InvoiceChoice, StatusPill } from '../components/ui'
 import { digits, formatName, isoDate, longDate, money, monthCells, monthStart, monthTitle, parseAmount, shiftMonth, show } from '../format'
+import { CONTROL_PACKAGES, packageName, packageOf } from '../grooming'
 import { useStore, type ChargeNote, type Result } from '../store'
-import type { Appointment, AppointmentStatus } from '../types'
+import type { Appointment, AppointmentStatus, GroomingPackage } from '../types'
 import { overlaps, petFiles, petKey, SLOT_CAPACITY, visitMinutes } from '../visit'
 
 type Draft = {
@@ -19,12 +20,25 @@ type Draft = {
   sex: string
   breed: string
   service: string
+  packageId: GroomingPackage | ''
   size: string
   coat: string
   allergies: string
   cost: string
   employeeCode: string
   petCode: string
+}
+
+function Paw() {
+  return (
+    <svg viewBox="0 0 64 64">
+      <ellipse cx="32" cy="40" rx="13" ry="15" />
+      <ellipse cx="14" cy="24" rx="6.5" ry="8.5" transform="rotate(-18 14 24)" />
+      <ellipse cx="25" cy="13" rx="6.2" ry="8.2" />
+      <ellipse cx="40" cy="13" rx="6.2" ry="8.2" />
+      <ellipse cx="51" cy="25" rx="6.5" ry="8.5" transform="rotate(16 51 25)" />
+    </svg>
+  )
 }
 
 function blankDraft(): Draft {
@@ -38,6 +52,7 @@ function blankDraft(): Draft {
     sex: 'Macho',
     breed: '',
     service: 'Baño y corte',
+    packageId: 'estandar',
     size: 'Pequeño',
     coat: '',
     allergies: '',
@@ -58,6 +73,7 @@ function fromAppointment(item: Appointment): Draft {
     sex: item.sex,
     breed: item.breed,
     service: item.service,
+    packageId: item.packageId === null ? '' : item.packageId ?? (item.report ? packageOf(item.report) : ''),
     size: item.size,
     coat: item.coat,
     allergies: item.allergies,
@@ -89,6 +105,7 @@ export function Citas() {
   const [cashNote, setCashNote] = useState<ChargeNote | null>(null)
   const [cashError, setCashError] = useState('')
   const [completeError, setCompleteError] = useState('')
+  const [menuId, setMenuId] = useState<string | null>(null)
   const [params, setParams] = useSearchParams()
 
   useEffect(() => {
@@ -123,6 +140,24 @@ export function Citas() {
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
   }, [])
+
+  useEffect(() => {
+    if (!menuId) return
+    function onPointer(event: PointerEvent) {
+      const target = event.target
+      if (target instanceof Element && target.closest('.slot-more')) return
+      setMenuId(null)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMenuId(null)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuId])
 
   const needle = query.trim().toLowerCase()
   const matches = (item: Appointment) => {
@@ -202,14 +237,21 @@ export function Citas() {
     setDraft((current) => ({ ...current, [key]: value }))
   }
 
+  function closeMenu(run: () => void) {
+    setMenuId(null)
+    run()
+  }
+
   function actions(item: Appointment) {
+    const open = menuId === item.id
     return (
-      <div className="record-actions">
+      <div className="slot-actions">
         {item.status === 'pendiente' ? (
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={() => {
+              setMenuId(null)
               setCompleteTarget(item)
               setCompleteError('')
               setPayMethod('Efectivo')
@@ -217,53 +259,81 @@ export function Citas() {
           >
             Completar
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            setSheetIntent('form')
-            setSheet(item)
-          }}
-        >
-          Constancia
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            setSheetIntent('print')
-            setSheet(item)
-          }}
-        >
-          Imprimir
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(item)}>
-          Editar
-        </button>
-        {allows('costos') ? (
+        ) : (
           <button
             type="button"
-            className="btn btn-amber btn-sm"
-            onClick={() => {
-              setCostTarget(item)
-              setCostValue(String(item.cost))
-              setCostError('')
-            }}
+            className="btn btn-ghost btn-sm"
+            onClick={() => closeMenu(() => {
+              setSheetIntent('form')
+              setSheet(item)
+            })}
           >
-            Editar costo
+            Constancia
           </button>
-        ) : null}
-        {allows('fichas') ? (
-          <Link className="btn btn-ghost btn-sm" to={`/admin/fichas/${encodeURIComponent(petKey(item))}`}>
-            Ficha
-          </Link>
-        ) : null}
-        {allows('whatsapp') ? (
-          <Link className="btn btn-wa btn-sm" to={`/admin/whatsapp?tel=${digits(item.phone)}`}>
-            WhatsApp
-          </Link>
-        ) : null}
+        )}
+        <div className="slot-more">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            aria-expanded={open}
+            aria-haspopup="menu"
+            onClick={() => setMenuId(open ? null : item.id)}
+          >
+            Más
+          </button>
+          {open ? (
+            <div className="slot-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => closeMenu(() => openEdit(item))}>
+                Editar
+              </button>
+              {item.status === 'pendiente' ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => closeMenu(() => {
+                    setSheetIntent('form')
+                    setSheet(item)
+                  })}
+                >
+                  Constancia
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => closeMenu(() => {
+                  setSheetIntent('print')
+                  setSheet(item)
+                })}
+              >
+                Imprimir
+              </button>
+              {allows('costos') ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => closeMenu(() => {
+                    setCostTarget(item)
+                    setCostValue(String(item.cost))
+                    setCostError('')
+                  })}
+                >
+                  Editar costo
+                </button>
+              ) : null}
+              {allows('fichas') ? (
+                <Link role="menuitem" to={`/admin/fichas/${encodeURIComponent(petKey(item))}`} onClick={() => setMenuId(null)}>
+                  Ficha
+                </Link>
+              ) : null}
+              {allows('whatsapp') ? (
+                <Link role="menuitem" to={`/admin/whatsapp?tel=${digits(item.phone)}`} onClick={() => setMenuId(null)}>
+                  WhatsApp
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -386,7 +456,8 @@ export function Citas() {
                       event.dataTransfer.effectAllowed = 'move'
                     }}
                   >
-                    {formatName(item.petName)}
+                    <b>{item.time.slice(0, 5)}</b>
+                    <span>{formatName(item.petName)}</span>
                   </span>
                 ))}
                 {extra > 0 ? <span className="cal-more">+{extra}</span> : null}
@@ -397,11 +468,15 @@ export function Citas() {
       </section>
 
       <section className="day-column">
-        <h2>
-          {selected === today ? 'Hoy' : longDate(selected)} · {selectedItems.length}{' '}
-          {selectedItems.length === 1 ? 'cita' : 'citas'}
-        </h2>
-        <p className="hint">Arrastra una cita dentro del día o suéltala en otro día del mes. La hora del tablero es de operación, de 8:00 a 19:00.</p>
+        <header className="day-head">
+          <div>
+            <h2>{selected === today ? 'Hoy' : longDate(selected)}</h2>
+            {selected === today ? <p>{longDate(selected)}</p> : null}
+          </div>
+          <span className="day-count">
+            {selectedItems.length} {selectedItems.length === 1 ? 'cita' : 'citas'}
+          </span>
+        </header>
         <DayBoard
           items={selectedItems}
           onMove={(id, time) => moveAppointment(id, { time })}
@@ -430,7 +505,8 @@ export function Citas() {
                     {item.petCode ? ` · ${item.petCode}` : ''}
                   </strong>
                   <span>
-                    {formatName(item.clientName)} · {show(item.service)} · {visitMinutes(item)} min
+                    {formatName(item.clientName)} · {show(item.service)}
+                    {packageName(item.packageId) ? ` · ${packageName(item.packageId)}` : ''} · {visitMinutes(item)} min
                     {item.employeeCode ? ` · ${item.employeeCode}` : ''}
                   </span>
                   {(() => {
@@ -490,7 +566,7 @@ export function Citas() {
       {editing ? (
         <Dialog labelledBy="edit-title" onClose={() => setEditing(null)}>
           <form
-            className="drawer"
+            className="drawer cita-form"
             onSubmit={(event) => {
               event.preventDefault()
               if (!draft.clientName.trim() || !draft.phone.trim() || !draft.petName.trim() || !draft.date || !draft.time) {
@@ -502,6 +578,11 @@ export function Citas() {
                 setFormError('El costo debe ser un número válido.')
                 return
               }
+              const packageId = draft.packageId || null
+              const previous = editing === 'new' ? undefined : editing.report
+              const report = previous
+                ? { ...previous, packageId: packageId ?? previous.packageId, plan: packageId === 'premium' ? 'premium' as const : packageId ? 'grooming' as const : previous.plan }
+                : undefined
               const payload = {
                 petName: draft.petName.trim(),
                 date: draft.date,
@@ -512,6 +593,8 @@ export function Citas() {
                 sex: draft.sex,
                 breed: draft.breed.trim(),
                 service: draft.service,
+                packageId,
+                ...(report ? { report } : {}),
                 size: draft.size,
                 coat: draft.coat,
                 allergies: draft.allergies.trim(),
@@ -533,8 +616,21 @@ export function Citas() {
               setEditing(null)
             }}
           >
-            <header className="page-head">
-              <h2 id="edit-title">{editing === 'new' ? 'Nueva cita' : `Editar #${editing.folio}`}</h2>
+            <header className="cita-mast">
+              <span className="cita-paws" aria-hidden="true">
+                <Paw />
+                <Paw />
+                <Paw />
+                <Paw />
+                <Paw />
+              </span>
+              <div>
+                <p>Agenda</p>
+                <h2 id="edit-title">{editing === 'new' ? 'Nueva cita' : `Editar #${editing.folio}`}</h2>
+                <span>
+                  {longDate(draft.date)} · {draft.time || 'sin hora'}
+                </span>
+              </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>
                 Cerrar
               </button>
@@ -618,6 +714,23 @@ export function Citas() {
                     <option key={service}>{service}</option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Paquete">
+                <div className="choice-row" role="group" aria-label="Paquete">
+                  {CONTROL_PACKAGES.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-pressed={draft.packageId === item.id}
+                      onClick={() => patch('packageId', item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <button type="button" aria-pressed={draft.packageId === ''} onClick={() => patch('packageId', '')}>
+                    Sin paquete
+                  </button>
+                </div>
               </Field>
               <Field label="Pelaje">
                 <select value={draft.coat} onChange={(event) => patch('coat', event.target.value)}>
