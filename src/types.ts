@@ -1,4 +1,4 @@
-export type Role = 'Administrador' | 'Recepción'
+export type Role = 'Administrador' | 'Recepción' | 'Trabajador'
 
 export type Permission =
   | 'citas'

@@ -151,6 +151,7 @@ describe('permisos', () => {
     expect(homeFor(custom)).toBe('/admin/whatsapp')
     expect(homeFor({ ...custom, permissions: [] })).toBe('/admin/asistencia')
     expect(defaultsFor('Administrador').length).toBeGreaterThan(defaultsFor('Recepción').length)
+    expect(defaultsFor('Recepción').length).toBeGreaterThan(defaultsFor('Trabajador').length)
   })
 
   it('expande caja y compras legacy y no lo hace con versión 2', () => {
@@ -402,7 +403,7 @@ describe('módulos contables', () => {
 })
 
 describe('permisos versión 3', () => {
-  const user = (role: 'Administrador' | 'Recepción', permissions: Parameters<typeof resolvePermissions>[0]['permissions'], permissionsVersion?: number) => ({
+  const user = (role: 'Administrador' | 'Recepción' | 'Trabajador', permissions: Parameters<typeof resolvePermissions>[0]['permissions'], permissionsVersion?: number) => ({
     role,
     permissions,
     permissionsVersion,
@@ -438,6 +439,16 @@ describe('permisos versión 3', () => {
   it('una lista de versión 3 se respeta tal cual', () => {
     expect(resolvePermissions(user('Recepción', ['caja'], 3))).toEqual(['caja'])
     expect(resolvePermissions(user('Recepción', ['citas', 'ficha_inexistente' as never], 3))).toEqual(['citas'])
+  })
+
+  it('el trabajador ve su trabajo y no la caja', () => {
+    const worker = user('Trabajador', undefined)
+    expect(resolvePermissions(worker)).toEqual(['citas', 'fichas', 'fichas_fotos', 'tareas'])
+    expect(homeFor(worker)).toBe('/admin')
+    for (const blocked of ['caja', 'citas_cobrar', 'citas_cancelar', 'costos', 'whatsapp', 'clientes', 'fichas_publicar', 'tareas_borrar', 'equipo', 'planilla', 'contabilidad']) {
+      expect(allows(worker, blocked), blocked).toBe(false)
+    }
+    expect(allows(worker, 'fichas_fotos')).toBe(true)
   })
 
   it('el administrador siempre puede todo y recepción por defecto conserva lo de antes', () => {

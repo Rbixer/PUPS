@@ -291,8 +291,13 @@ export function expandV3Permissions(source: Permission[]): Permission[] {
 
 const RECEPTION = expandV3Permissions(RECEPTION_V2)
 
+/** Lo del piso: agenda y fichas de su trabajo, sus tareas y su propia asistencia (esa no pide permiso). */
+const WORKER: Permission[] = ['citas', 'fichas', 'fichas_fotos', 'tareas']
+
 export function defaultsFor(role: Role): Permission[] {
-  return role === 'Administrador' ? [...ALL] : [...RECEPTION]
+  if (role === 'Administrador') return [...ALL]
+  if (role === 'Trabajador') return [...WORKER]
+  return [...RECEPTION]
 }
 
 /** El administrador siempre puede todo; el resto sigue su lista, migrada por pasos si es de una versión anterior. */

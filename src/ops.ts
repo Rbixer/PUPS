@@ -193,6 +193,8 @@ export function chargeAppointment(
   }
   const existing = movements.find((item) => item.type === 'ingreso' && item.folio === appointment.folio && !item.reverses)
   if (!existing) {
+    // Sin permiso de cobro la cita igual puede quedar completada; el cobro lo registra quien sí puede.
+    if (!canCash) return unchanged
     const date = closedOn(state, appointment.date) ? isoDate() : appointment.date
     const problem = guard(date)
     if (problem) return fail(problem)

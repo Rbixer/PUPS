@@ -53,7 +53,7 @@ export function Trabajadores() {
         <div>
           <p className="eyebrow">Equipo</p>
           <h1>Trabajadores</h1>
-          <p className="hint">Cada persona entra con su usuario. El código se guarda en las citas que registra y así se cuenta el trabajo de cada uno.</p>
+          <p className="hint">Cada persona entra con su usuario. Ve sus citas, fichas, tareas y asistencia. No ve caja, compras ni finanzas. El código se guarda en las citas que registra.</p>
         </div>
       </header>
 
@@ -160,8 +160,8 @@ export function Trabajadores() {
             salary,
             username: form.username,
             password: form.password,
-            role: 'Recepción',
-            permissions: defaultsFor('Recepción'),
+            role: 'Trabajador',
+            permissions: defaultsFor('Trabajador'),
             employeeCode: nextCode(state.users),
           })
           setBusy(false)

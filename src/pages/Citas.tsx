@@ -519,7 +519,7 @@ export function Citas() {
                 employeeCode: draft.employeeCode,
                 petCode: draft.petCode.trim() || undefined,
               }
-              const charging = payload.status === 'completada' && (editing === 'new' || editing.status !== 'completada')
+              const charging = allows('citas_cobrar') && payload.status === 'completada' && (editing === 'new' || editing.status !== 'completada')
               const method = charging ? payMethod : undefined
               const result = editing === 'new' ? addAppointment(payload, method, invoiced) : updateAppointment(editing.id, payload, method, invoiced)
               if (!result.ok) {
@@ -582,7 +582,7 @@ export function Citas() {
                   </option>
                 </select>
               </Field>
-              {draft.status === 'completada' && (editing === 'new' || editing.status !== 'completada') ? (
+              {allows('citas_cobrar') && draft.status === 'completada' && (editing === 'new' || editing.status !== 'completada') ? (
                 <>
                   <Field label="Medio de pago">
                     <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
@@ -655,7 +655,7 @@ export function Citas() {
             className="dialog"
             onSubmit={(event) => {
               event.preventDefault()
-              const result = updateAppointment(completeTarget.id, { status: 'completada' }, payMethod, invoiced)
+              const result = updateAppointment(completeTarget.id, { status: 'completada' }, allows('citas_cobrar') ? payMethod : undefined, allows('citas_cobrar') ? invoiced : false)
               if (!result.ok) {
                 setCompleteError(result.error)
                 return
@@ -666,23 +666,28 @@ export function Citas() {
           >
             <h2 id="done-title">Completar #{completeTarget.folio}</h2>
             <p className="hint">
-              {formatName(completeTarget.petName)} · {money(completeTarget.cost)}. El cobro entra a caja con este medio.
+              {formatName(completeTarget.petName)} · {money(completeTarget.cost)}.
+              {allows('citas_cobrar') ? ' El cobro entra a caja con este medio.' : ' Queda completada. El cobro lo registra quien puede cobrar citas.'}
             </p>
-            <Field label="Medio de pago">
-              <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
-                {METHODS.map((method) => (
-                  <option key={method}>{method}</option>
-                ))}
-              </select>
-            </Field>
-            <InvoiceChoice value={invoiced} onChange={setInvoiced} />
+            {allows('citas_cobrar') ? (
+              <>
+                <Field label="Medio de pago">
+                  <select value={payMethod} onChange={(event) => setPayMethod(event.target.value as (typeof METHODS)[number])}>
+                    {METHODS.map((method) => (
+                      <option key={method}>{method}</option>
+                    ))}
+                  </select>
+                </Field>
+                <InvoiceChoice value={invoiced} onChange={setInvoiced} />
+              </>
+            ) : null}
             {completeError ? <p className="form-error">{completeError}</p> : null}
             <div className="overlay-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setCompleteTarget(null)}>
                 Volver
               </button>
               <button type="submit" className="btn btn-primary">
-                Completar y cobrar
+                {allows('citas_cobrar') ? 'Completar y cobrar' : 'Completar'}
               </button>
             </div>
           </form>

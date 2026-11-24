@@ -84,7 +84,7 @@ sudo systemctl start pups
 ## Checklist antes de entregar
 
 1. Compilar con `VITE_DEMO=false` y desplegar; confirmar que el login no muestra "Acceso de demostración".
-2. Cambiar las claves de `admin` y `recepcion`; crear los usuarios reales en Usuarios.
+2. Cambiar las claves de `admin` y `recepcion`. Crear a cada persona en Trabajadores: entra como Trabajador (citas, fichas, tareas y su asistencia, sin caja ni finanzas).
 3. Decidir qué datos quedan (catálogo de productos y servicios; borrar citas, movimientos y conversaciones de prueba si el cliente arranca limpio).
 4. Activar snapshots de Lightsail.
 5. Recorrido manual: reserva pública → cita → constancia → conforme por QR → venta → corte de caja → Contabilidad → Usuarios con permisos → Asistencia → Estadísticas.

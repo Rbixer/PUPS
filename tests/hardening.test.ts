@@ -38,10 +38,15 @@ function visit(patch: Partial<Appointment> = {}): Appointment {
 }
 
 describe('cobro de citas', () => {
-  it('pide permiso de caja y rechaza el medio Pedido', () => {
+  it('sin permiso de cobro la cita queda completada y el dinero no se mueve', () => {
     const seed = createSeed()
-    expect(ops.chargeAppointment(seed, visit(), 'Efectivo', false).ok).toBe(false)
+    const skipped = ops.chargeAppointment(seed, visit(), 'Efectivo', false)
+    expect(skipped.ok).toBe(true)
+    if (skipped.ok) expect(skipped.patch).toEqual({})
     expect(ops.chargeAppointment(seed, visit(), 'Pedido', true).ok).toBe(false)
+    const charged = apply(seed, ops.chargeAppointment(seed, visit(), 'Efectivo', true)).state
+    expect(ops.chargeAppointment(charged, visit({ cost: 200 }), undefined, false).ok).toBe(false)
+    expect(ops.chargeAppointment(charged, visit({ status: 'pendiente' }), undefined, false).ok).toBe(false)
   })
 
   it('una cita de un día con caja cerrada se cobra con fecha de hoy', () => {

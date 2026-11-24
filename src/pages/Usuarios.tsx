@@ -88,7 +88,7 @@ export function Usuarios() {
           <p className="eyebrow">Equipo</p>
           <h1>Usuarios</h1>
           <p className="lede">
-            Elige el rol y ajusta módulos y acciones sensibles. Administrador lo puede todo; Recepción arranca con lo del mostrador.
+            Elige el rol y ajusta módulos y acciones sensibles. Administrador lo puede todo. Recepción arranca con el mostrador. Trabajador arranca con citas, fichas, tareas y su asistencia.
           </p>
         </div>
       </header>
@@ -201,6 +201,7 @@ export function Usuarios() {
           </Field>
           <Field label="Rol">
             <select value={form.role} onChange={(event) => setRole(event.target.value as Role)}>
+              <option>Trabajador</option>
               <option>Recepción</option>
               <option>Administrador</option>
             </select>
@@ -388,6 +389,9 @@ function PermissionEditor({
           </button>
           <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange(defaultsFor('Recepción'))}>
             Como recepción
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange(defaultsFor('Trabajador'))}>
+            Como trabajador
           </button>
           <button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={() => onChange([])}>
             Ninguno
