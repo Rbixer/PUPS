@@ -6,7 +6,7 @@ import { addDays, daysBetween, money, normalizePhone, parseAmount, publicSiteCon
 import { emptyReport, hardAreas, readReport } from '../src/grooming'
 import { buildMonthReport, packageOfAppointment } from '../src/report'
 import type { Mark } from '../src/types'
-import { ACCOUNTING_LINKS, MODULE_GROUPS } from '../src/modules'
+import { ACCOUNTING_LINKS, MODULE_GROUPS, moduleAt } from '../src/modules'
 import { EMPLOYEE_CREDIT, employeeOwed, recordEmployeePurchase, settleEmployeeCredit } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, BASE_CATEGORY_NAMES, categoryNames, demoCatalog, normalizeCategory } from '../src/shop'
@@ -163,6 +163,22 @@ describe('permisos', () => {
     expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'corte')).toBe(false)
     expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'movimientos')).toBe(true)
     expect(allows({ role: 'Recepción', permissions: undefined, active: true }, 'anular')).toBe(false)
+  })
+})
+
+describe('navegación de módulos', () => {
+  it('resuelve cada ruta a su módulo, sin confundir prefijos ni barras finales', () => {
+    expect(moduleAt('/admin')?.label).toBe('Citas')
+    expect(moduleAt('/admin/')?.label).toBe('Citas')
+    expect(moduleAt('/admin/inventario')?.label).toBe('Inventario')
+    expect(moduleAt('/admin/Inventario/')?.label).toBe('Inventario')
+    expect(moduleAt('/admin/compras')?.label).toBe('Compras')
+    expect(moduleAt('/admin/compras-empleados')?.label).toBe('Compras de empleados')
+    expect(moduleAt('/admin/fichas/abc')?.label).toBe('Fichas')
+    expect(moduleAt('/admin/modulos')).toBeUndefined()
+    for (const link of [...MODULE_GROUPS.flatMap((group) => group.links), ...ACCOUNTING_LINKS]) {
+      expect(moduleAt(link.to)?.to).toBe(link.to)
+    }
   })
 })
 

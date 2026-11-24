@@ -90,8 +90,17 @@ const ALL_LINKS = [
   ...ACCOUNTING_LINKS.map((link) => ({ ...link, group: ACCOUNTING_GROUP })),
 ]
 
+/** Las rutas más largas van primero para que '/admin/compras-empleados' no se confunda con '/admin/compras'. */
+const BY_SPECIFICITY = [...ALL_LINKS].sort((a, b) => b.to.length - a.to.length)
+
+/** Sin barra final ni mayúsculas, igual que las compara el enrutador. */
+export function normalizePath(pathname: string) {
+  return pathname.replace(/\/+$/, '').toLowerCase() || '/'
+}
+
 export function moduleAt(pathname: string) {
-  return ALL_LINKS.find((link) => (link.end ? pathname === link.to : pathname.startsWith(link.to)))
+  const path = normalizePath(pathname)
+  return BY_SPECIFICITY.find((link) => (link.end ? path === link.to : path === link.to || path.startsWith(`${link.to}/`)))
 }
 
 const PATHS: Record<string, ReactNode> = {

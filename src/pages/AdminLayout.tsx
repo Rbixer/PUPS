@@ -8,13 +8,20 @@ import { BackupReminder } from '../components/BackupReminder'
 import { CommandPalette, type Command } from '../components/CommandPalette'
 import { Field } from '../components/ui'
 import { initials } from '../format'
-import { ACCOUNTING_LINKS, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt } from '../modules'
-import { applyTheme, readTheme, resolveTheme, saveTheme, usePanelTheme } from '../theme'
+import { ACCOUNTING_LINKS, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
+import { usePanelTheme } from '../theme'
 import { useStore } from '../store'
 
-function Icon({ name }: { name: 'grid' | 'search' | 'sun' | 'moon' | 'logout' }) {
+function Icon({ name }: { name: 'grid' | 'search' | 'logout' | 'back' }) {
   const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
   switch (name) {
+    case 'back':
+      return (
+        <svg {...common}>
+          <path d="M19 12H5" />
+          <path d="m11 6-6 6 6 6" />
+        </svg>
+      )
     case 'grid':
       return (
         <svg {...common} width={18} height={18}>
@@ -34,19 +41,6 @@ function Icon({ name }: { name: 'grid' | 'search' | 'sun' | 'moon' | 'logout' })
         <svg {...common}>
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
-        </svg>
-      )
-    case 'sun':
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </svg>
-      )
-    case 'moon':
-      return (
-        <svg {...common}>
-          <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" />
         </svg>
       )
     case 'logout':
@@ -123,8 +117,7 @@ export function AdminLayout() {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const firstRender = useRef(true)
-  const [dark, setDark] = useState(() => resolveTheme(readTheme()) === 'dark')
-  usePanelTheme(true)
+  usePanelTheme()
   const [palette, setPalette] = useState(false)
   const links = [
     ...MODULE_GROUPS.flatMap((group) => group.links),
@@ -137,8 +130,23 @@ export function AdminLayout() {
     return false
   })
   const current = moduleAt(location.pathname)
-  const onLauncher = location.pathname === MODULES_PATH
+  const path = normalizePath(location.pathname)
+  const onLauncher = path === MODULES_PATH
   const pending = Object.values(badges).reduce((sum, value) => sum + value, 0)
+  const inAccounting = current?.group.id === 'contabilidad-hub'
+  /** Una ruta más profunda que el módulo (por ejemplo la ficha de una mascota) es un detalle del módulo. */
+  const detail = current && !current.end && path.length > current.to.length ? 'Detalle' : null
+  /** Si el grupo se llama igual que su único módulo (Inventario), la miga del medio sobra. */
+  const showGroup = current ? !(current.group.links.length === 1 && current.group.label === current.label) : false
+  const showCrumbs = Boolean(current) && !onLauncher
+  const parent = detail && current ? current.to : inAccounting ? '/admin/contabilidad' : MODULES_PATH
+
+  /** Atrás vuelve a la pantalla anterior; si se entró directo a esta página, sube un nivel. */
+  function goBack() {
+    const index = (window.history.state as { idx?: number } | null)?.idx ?? 0
+    if (index > 0) navigate(-1)
+    else navigate(parent)
+  }
 
   function leave() {
     if (unsynced && !window.confirm('Hay cambios que todavía no llegan al servidor. Si sales ahora se guardan en este equipo y se envían al volver a entrar. ¿Salir?')) return
@@ -157,16 +165,9 @@ export function AdminLayout() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const toggleTheme = () => {
-    const next = dark ? 'light' : 'dark'
-    saveTheme(next)
-    applyTheme(next)
-    setDark(!dark)
-  }
   const commands: Command[] = [
     { id: 'go-modulos', label: 'Módulos', group: 'Ir a', keywords: 'inicio menú aplicaciones', run: () => navigate(MODULES_PATH) },
     ...links.map((link) => ({ id: `go-${link.to}`, label: link.label, group: 'Ir a', run: () => navigate(link.to) })),
-    { id: 'theme', label: dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro', group: 'Acción', keywords: 'tema apariencia', run: toggleTheme },
     ...(currentUser && allows(currentUser, 'equipo')
       ? [
           {
@@ -201,7 +202,7 @@ export function AdminLayout() {
   }, [location.pathname, current?.label, onLauncher])
 
   return (
-    <div className="admin">
+    <div className={showCrumbs ? 'admin has-crumbs' : 'admin'}>
       <a className="skip-link" href="#contenido">
         Saltar al contenido
       </a>
@@ -229,16 +230,6 @@ export function AdminLayout() {
             <kbd>Ctrl K</kbd>
           </button>
           {unsynced ? <span className="topbar-sync">Cambios por enviar…</span> : null}
-          <button
-            type="button"
-            className="topbar-btn"
-            aria-pressed={dark}
-            aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            title={dark ? 'Modo claro' : 'Modo oscuro'}
-            onClick={toggleTheme}
-          >
-            <Icon name={dark ? 'sun' : 'moon'} />
-          </button>
           <span className="topbar-user" title={currentUser?.employeeCode ? `${currentUser.role} · ${currentUser.employeeCode}` : currentUser?.role}>
             <span className="topbar-avatar">{initials(currentUser?.name, 'P')}</span>
             <span className="topbar-user-name">{currentUser?.name}</span>
@@ -248,6 +239,34 @@ export function AdminLayout() {
           </button>
         </div>
       </header>
+      {current && showCrumbs ? (
+        <nav className="crumbs" aria-label="Ruta de navegación">
+          <button type="button" className="crumbs-back" onClick={goBack}>
+            <Icon name="back" />
+            <span>Atrás</span>
+          </button>
+          <ol>
+            <li>
+              <Link to={MODULES_PATH}>Módulos</Link>
+            </li>
+            {showGroup ? (
+              <li>{inAccounting ? <Link to="/admin/contabilidad">Contabilidad</Link> : <span>{current.group.label}</span>}</li>
+            ) : null}
+            <li>
+              {detail ? (
+                <Link to={current.to}>{current.label}</Link>
+              ) : (
+                <span aria-current="page">{current.label}</span>
+              )}
+            </li>
+            {detail ? (
+              <li>
+                <span aria-current="page">{detail}</span>
+              </li>
+            ) : null}
+          </ol>
+        </nav>
+      ) : null}
       <main id="contenido" className="admin-main" ref={mainRef} tabIndex={-1}>
         {weakPassword ? <PasswordNotice /> : null}
         {syncNotice ? (

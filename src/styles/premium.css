@@ -343,7 +343,6 @@ html.has-install .site main { padding-bottom: 128px; }
   text-align: center;
   font-size: 0.92rem;
 }
-html[data-theme="dark"] .empty { color: #a99d90; border-color: rgba(196, 120, 74, 0.35); }
 
 /* Encabezados que no se salen de la pantalla en celular */
 .admin .page-head { flex-wrap: wrap; }

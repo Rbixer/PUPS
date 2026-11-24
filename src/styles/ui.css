@@ -189,7 +189,7 @@
 /* Tarjetas de datos, encabezado y widgets del panel */
 @layer components {
   .admin .page-head {
-    @apply sticky top-(--topbar-h) z-[4] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-stone-200/80 bg-white/80 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/80;
+    @apply sticky top-[calc(var(--topbar-h)+var(--crumbs-h,0px))] z-[4] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-stone-200/80 bg-white/80 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/80;
   }
   .admin .eyebrow {
     @apply text-[11px] font-semibold tracking-[0.12em] text-caramel-deep uppercase dark:text-caramel;

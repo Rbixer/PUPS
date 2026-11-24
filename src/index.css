@@ -3,7 +3,6 @@
 
 @import './styles.css' layer(legacy);
 @import './styles/premium.css' layer(legacy);
-@import './styles/dark.css' layer(legacy);
 @import './styles/business.css' layer(legacy);
 @import './styles/modules.css' layer(legacy);
 

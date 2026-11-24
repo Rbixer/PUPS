@@ -53,7 +53,7 @@ export function PublicLayout() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
   const { state } = useStore()
-  usePanelTheme(false)
+  usePanelTheme()
 
   useEffect(() => {
     setOpen(false)

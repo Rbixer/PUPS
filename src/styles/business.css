@@ -131,7 +131,7 @@
 .pos-item strong { font-size: 0.86rem; line-height: 1.25; }
 .pos-item span { display: flex; justify-content: space-between; gap: 6px; font-size: 0.8rem; color: var(--muted); }
 .pos-item span b { color: var(--ink); }
-.cart-panel { position: sticky; top: 96px; }
+.cart-panel { position: sticky; top: calc(var(--topbar-h) + var(--crumbs-h, 0px) + 40px); }
 .cart-lines { list-style: none; margin: 0; padding: 0; display: grid; }
 .cart-lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--line); }
 .cart-lines li small { display: block; color: var(--muted); font-size: 0.78rem; }
@@ -211,7 +211,6 @@
   color: #c45c1a;
   font-size: 1.05rem;
 }
-html[data-theme='dark'] .clock-overtime { color: #f0a05a; }
 .clock-now { font-size: clamp(2.2rem, 5vw, 3rem); line-height: 1.05; font-weight: 750; letter-spacing: -0.02em; }
 .clock-btn { min-width: 200px; margin-top: 8px; padding-block: 14px; font-size: 1rem; }
 .section-title { margin: 8px 0 0; font-size: 1.1rem; }

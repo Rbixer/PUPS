@@ -27,12 +27,7 @@
     <title>PUP'S · Pet Shop y Grooming</title>
     <link rel="icon" href="/logo.png" />
     <script>
-      try {
-        var t = localStorage.getItem('pups-theme')
-        var panel = /^\/(admin|login)/.test(location.pathname)
-        var dark = panel && (t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches))
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-      } catch (e) {}
+      document.documentElement.dataset.theme = 'light'
     </script>
   </head>
   <body>

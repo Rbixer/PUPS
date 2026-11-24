@@ -8,7 +8,7 @@ import { usePanelTheme } from '../theme'
 
 export function Login() {
   const { login, currentUser } = useStore()
-  usePanelTheme(true)
+  usePanelTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const [username, setUsername] = useState('')
