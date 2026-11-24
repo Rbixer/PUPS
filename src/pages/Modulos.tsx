@@ -4,7 +4,7 @@ import { allows } from '../access'
 import { alertBadges } from '../alerts'
 import { DEMO_MODE } from '../env'
 import { formatName, todayLabel } from '../format'
-import { linkAllowed, MODULE_GROUPS, ModuleIcon } from '../modules'
+import { iconTone, linkAllowed, MODULE_GROUPS, ModuleIcon } from '../modules'
 import { useStore } from '../store'
 
 const plain = (text: string) =>
@@ -82,7 +82,7 @@ export function Modulos() {
           <ul className="modules-grid">
             {cards.map((card) => (
               <li key={card.to}>
-                <Link className="module-card" to={card.to} style={{ '--tone': card.group.tone } as CSSProperties}>
+                <Link className="module-card" to={card.to} style={{ '--tone': iconTone(card.to) } as CSSProperties}>
                   <span className="module-icon">
                     <ModuleIcon to={card.to} size={26} />
                   </span>

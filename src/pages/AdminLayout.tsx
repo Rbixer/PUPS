@@ -7,7 +7,7 @@ import { CommandPalette, type Command } from '../components/CommandPalette'
 import { NoticeBar } from '../components/NoticeBar'
 import { PermissionsBar } from '../components/PermissionsBar'
 import { initials } from '../format'
-import { ACCOUNTING_LINKS, linkAllowed, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
+import { ACCOUNTING_LINKS, iconTone, linkAllowed, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
 import { usePanelTheme } from '../theme'
 import { useStore } from '../store'
 
@@ -160,7 +160,7 @@ export function AdminLayout() {
           <span>PUP'S</span>
         </Link>
         {current ? (
-          <span className="topbar-current" style={{ '--tone': current.group.tone } as CSSProperties}>
+          <span className="topbar-current" style={{ '--tone': iconTone(current.to) } as CSSProperties}>
             <span className="topbar-current-icon">
               <ModuleIcon to={current.to} size={14} />
             </span>

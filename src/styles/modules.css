@@ -90,8 +90,9 @@
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: rgba(92, 225, 230, 0.16);
-  color: var(--aqua);
+  background: var(--tone, var(--aqua));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .topbar-current-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
@@ -274,7 +275,7 @@
   text-align: left;
   cursor: pointer;
 }
-.modules-cats button i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--navy); }
+.modules-cats button i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--tone, var(--navy)); }
 .modules-cats button span { flex: 1; min-width: 0; }
 .modules-cats button small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .modules-cats button[aria-pressed='true'] { background: var(--navy-50); font-weight: 600; }
@@ -288,7 +289,7 @@
   padding: 0;
   list-style: none;
 }
-/* Mosaicos: fondo navy-50, ícono navy con línea aqua; se ignoran los tonos por grupo (--tone). */
+/* Mosaicos: la pastilla del ícono toma el color propio de cada módulo (--tone). */
 .module-card {
   position: relative;
   display: flex;
@@ -304,16 +305,28 @@
   transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease, background-color 150ms ease;
 }
 .module-icon {
+  position: relative;
   display: grid;
   place-items: center;
   flex: none;
+  overflow: hidden;
   width: 52px;
   height: 52px;
-  border-radius: var(--r-md);
-  background: #fff;
-  color: var(--navy);
-  box-shadow: var(--sh-1), inset 0 -3px 0 var(--aqua);
+  border-radius: 16px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--tone, var(--navy)) 72%, #fff) 0%, var(--tone, var(--navy)) 68%);
+  color: #fff;
+  box-shadow:
+    0 8px 16px -6px color-mix(in srgb, var(--tone, var(--navy)) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
+.module-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 46%);
+  pointer-events: none;
+}
+.module-icon svg { position: relative; z-index: 1; }
 .module-text { display: grid; gap: 3px; min-width: 0; }
 .module-text strong { font-family: var(--font-heading); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .module-text small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }

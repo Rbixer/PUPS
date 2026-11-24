@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { CONTROL_GOAL, controlFilename, controlSheet } from '../control'
 import { isoDate, monthStart, monthTitle } from '../format'
 import { balanceSheet, buildJournal, incomeStatement, taxMonths } from '../ledger'
-import { ModuleIcon } from '../modules'
+import { iconTone, ModuleIcon } from '../modules'
 import { buildMonthReport, downloadExcel, excelFilename } from '../report'
 import { useStore } from '../store'
 import type { Permission } from '../types'
@@ -144,7 +144,7 @@ export function Reportes() {
           const open = allows(report.permission)
           return (
             <li key={report.id} className={open ? undefined : 'is-locked'}>
-              <article className="module-card report-card" style={{ '--tone': '#2e9a6a' } as CSSProperties}>
+              <article className="module-card report-card" style={{ '--tone': iconTone(report.to) } as CSSProperties}>
                 <span className="module-icon">
                   <ModuleIcon to={report.to} size={24} />
                 </span>

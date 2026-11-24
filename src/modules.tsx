@@ -78,6 +78,38 @@ export const MODULE_GROUPS: ModuleGroup[] = [
 
 export const MODULES_PATH = '/admin/modulos'
 
+/** Un color por módulo, para la pastilla del ícono. Cada uno es distinto a propósito. */
+const ICON_TONES: Record<string, string> = {
+  '/admin': '#3B82F6',
+  '/admin/fichas': '#8B5CF6',
+  '/admin/clientes': '#0EA5E9',
+  '/admin/tareas': '#10B981',
+  '/admin/whatsapp': '#128C7E',
+  '/admin/ventas': '#F97316',
+  '/admin/tienda': '#EC4899',
+  '/admin/ingresos': '#14B8A6',
+  '/admin/egresos': '#EF4444',
+  '/admin/corte': '#D97706',
+  '/admin/compras-empleados': '#F43F5E',
+  '/admin/constancias': '#6366F1',
+  '/admin/inventario': '#7C3AED',
+  '/admin/contabilidad': '#059669',
+  '/admin/estadisticas': '#2563EB',
+  '/admin/reportes': '#0891B2',
+  '/admin/control': '#0F766E',
+  '/admin/asistencia': '#F59E0B',
+  '/admin/trabajadores': '#DB2777',
+  '/admin/usuarios': '#4F46E5',
+  '/admin/compras': '#EA580C',
+  '/admin/gastos': '#DC2626',
+  '/admin/por-pagar': '#9333EA',
+  '/admin/planilla': '#0284C7',
+}
+
+export function iconTone(to: string) {
+  return ICON_TONES[to] ?? '#0B1F4D'
+}
+
 /** Módulos que viven dentro de Contabilidad (no salen en el lanzador principal). */
 export const ACCOUNTING_LINKS: ModuleLink[] = [
   { to: '/admin/compras', label: 'Compras', detail: 'Compras a proveedores que alimentan el inventario.', end: false, permission: 'compras' },
@@ -263,7 +295,7 @@ export function ModuleIcon({ to, size = 16 }: { to: string; size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.6}
+      strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

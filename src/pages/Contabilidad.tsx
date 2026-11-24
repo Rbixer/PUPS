@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Metrics, Tabs, Tag } from '../components/ui'
 import { isoDate, longDate, money, monthTitle, shiftMonth } from '../format'
 import { accountName, balanceSheet, bankInflows, buildJournal, incomeStatement, isTradeEntry, taxMonths, type Balance } from '../ledger'
-import { ACCOUNTING_LINKS, linkAllowed, ModuleIcon } from '../modules'
+import { ACCOUNTING_LINKS, iconTone, linkAllowed, ModuleIcon } from '../modules'
 import { round2 } from '../ops'
 import { useStore } from '../store'
 
@@ -105,7 +105,7 @@ export function Contabilidad() {
         <ul className="modules-grid accounting-hub">
           {hub.map((link) => (
             <li key={link.to}>
-              <Link className="module-card" to={link.to} style={{ '--tone': '#2e9a6a' } as CSSProperties}>
+              <Link className="module-card" to={link.to} style={{ '--tone': iconTone(link.to) } as CSSProperties}>
                 <span className="module-icon">
                   <ModuleIcon to={link.to} size={22} />
                 </span>
