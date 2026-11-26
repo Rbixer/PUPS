@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { EXPENSE_METHODS as PAY_METHODS } from '../catalog'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
+import { saveConstanciaPdf, supplierOrderPdf } from '../constanciaPdf'
 import { addDays, count, isoDate, longDate, money } from '../format'
 import { payableBalance, purchaseSplit, round2 } from '../ops'
 import { BASE_CATEGORY_NAMES, categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
-import type { ProductUse, Purchase, ShopCategoryName, Supplier } from '../types'
+import type { AppState, ProductUse, Purchase, ShopCategoryName, Supplier } from '../types'
 
 
 type Draft = {
@@ -39,12 +40,17 @@ const blankLine = (): Draft => ({
 const USE_LABEL: Record<ProductUse, string> = { venta: 'Para venta', insumo: 'Uso en servicio' }
 const blankSupplier = (): Supplier => ({ id: '', name: '', nit: '', phone: '', email: '', contact: '', notes: '' })
 
+type PurchaseTab = 'pedido' | 'llegada' | 'nueva' | 'historial' | 'proveedores'
+
 export function Compras() {
   const { state } = useStore()
-  const [tab, setTab] = useState<'nueva' | 'historial' | 'proveedores'>(() => ((state.suppliers ?? []).length ? 'nueva' : 'proveedores'))
+  const [tab, setTab] = useState<PurchaseTab>(() => ((state.suppliers ?? []).length ? 'pedido' : 'proveedores'))
+  const [banner, setBanner] = useState('')
   const month = isoDate().slice(0, 7)
   const purchases = state.purchases ?? []
-  const thisMonth = purchases.filter((item) => item.date.startsWith(month))
+  const invoices = purchases.filter((item) => !item.stage)
+  const thisMonth = invoices.filter((item) => item.date.startsWith(month))
+  const pending = purchases.filter((item) => item.stage === 'pedida')
   const credit = (state.payables ?? []).filter((item) => item.purchaseId).reduce((sum, item) => sum + payableBalance(item), 0)
   const split = purchaseSplit(thisMonth, state.products)
   return (
@@ -54,7 +60,7 @@ export function Compras() {
           <p className="eyebrow"><Link className="accounting-back" to="/admin/contabilidad">Contabilidad</Link></p>
           <h1>Compras</h1>
           <p className="lede">
-            Registra lo que entra de cada proveedor. Cada producto sube su existencia en inventario, separado en lo que es para venta y lo que se usa en los servicios.
+            El pedido se descarga en PDF sin precios para dárselo al proveedor. Cuando la mercadería llega, eliges si cada producto es consumible o de la tienda en línea y entra al inventario y al kárdex.
           </p>
         </div>
       </header>
@@ -63,7 +69,8 @@ export function Compras() {
           { label: 'Compras del mes', value: money(round2(thisMonth.reduce((sum, item) => sum + item.total, 0))), detail: count(thisMonth.length, 'documento', 'documentos') },
           { label: 'Para venta', value: money(split.venta), tone: 'ok', detail: 'Producto de la tienda' },
           { label: 'Uso en servicio', value: money(split.insumo), detail: split.gasto ? `${money(split.gasto)} sin inventario` : 'Insumos de grooming' },
-          { label: 'Al crédito pendiente', value: money(round2(credit)), tone: credit > 0 ? 'hot' : undefined, detail: count((state.suppliers ?? []).length, 'proveedor', 'proveedores') },
+          { label: 'Por llegar', value: count(pending.length, 'pedido', 'pedidos'), tone: pending.length ? 'hot' : undefined, detail: count((state.suppliers ?? []).length, 'proveedor', 'proveedores') },
+          { label: 'Al crédito pendiente', value: money(round2(credit)), tone: credit > 0 ? 'hot' : undefined },
         ]}
       />
       <Tabs
@@ -71,13 +78,325 @@ export function Compras() {
         value={tab}
         onChange={setTab}
         tabs={[
+          { id: 'pedido', label: 'Pedido' },
+          { id: 'llegada', label: 'Por llegar', count: pending.length },
           { id: 'nueva', label: 'Nueva compra' },
           { id: 'historial', label: 'Historial' },
           { id: 'proveedores', label: 'Proveedores', count: (state.suppliers ?? []).length },
         ]}
       />
-      {tab === 'nueva' ? <NewPurchase onNeedSupplier={() => setTab('proveedores')} /> : tab === 'historial' ? <History /> : <Suppliers />}
+      <Flash notice={banner} />
+      {tab === 'pedido' ? (
+        <SupplierOrder
+          onNeedSupplier={() => setTab('proveedores')}
+          onPlaced={(message) => {
+            setBanner(message)
+            setTab('llegada')
+          }}
+        />
+      ) : tab === 'llegada' ? (
+        <Arrivals onReceived={setBanner} />
+      ) : tab === 'nueva' ? (
+        <NewPurchase onNeedSupplier={() => setTab('proveedores')} />
+      ) : tab === 'historial' ? (
+        <History />
+      ) : (
+        <Suppliers />
+      )}
     </section>
+  )
+}
+
+async function downloadSupplierPdf(state: AppState, purchase: Purchase) {
+  const supplier = (state.suppliers ?? []).find((item) => item.id === purchase.supplierId)
+  const bytes = supplierOrderPdf({
+    number: purchase.number,
+    when: longDate(purchase.date),
+    supplier: purchase.supplierName,
+    contact: [supplier?.contact, supplier?.phone].filter(Boolean).join(' · '),
+    lines: purchase.lines.map((line) => ({ name: line.description, qty: line.qty })),
+  })
+  return saveConstanciaPdf(bytes, `Pedido-${purchase.number}.pdf`)
+}
+
+type OrderLine = { fresh: boolean; productId: string; description: string; qty: string }
+
+const blankOrder = (): OrderLine => ({ fresh: false, productId: '', description: '', qty: '1' })
+
+function SupplierOrder({ onNeedSupplier, onPlaced }: { onNeedSupplier: () => void; onPlaced: (message: string) => void }) {
+  const { state, placeSupplierOrder } = useStore()
+  const suppliers = state.suppliers ?? []
+  const products = shelfOf(state.products)
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
+  const [date, setDate] = useState(isoDate())
+  const [notes, setNotes] = useState('')
+  const [lines, setLines] = useState<OrderLine[]>([blankOrder()])
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (suppliers.length === 0) {
+    return (
+      <div className="empty">
+        Primero registra un proveedor.{' '}
+        <button type="button" className="text-btn" onClick={onNeedSupplier}>
+          Agregar proveedor
+        </button>
+      </div>
+    )
+  }
+
+  function setLine(index: number, patch: Partial<OrderLine>) {
+    setLines((current) => current.map((line, at) => (at === index ? { ...line, ...patch } : line)))
+  }
+
+  async function submit() {
+    setBusy(true)
+    setError('')
+    const result = placeSupplierOrder({
+      date,
+      supplierId,
+      notes,
+      lines: lines
+        .filter((line) => line.productId || line.description.trim())
+        .map((line) => ({
+          productId: line.fresh ? undefined : line.productId || undefined,
+          description: line.fresh || !line.productId ? line.description : (products.find((item) => item.id === line.productId)?.name ?? line.description),
+          qty: amountOf(line.qty) || 0,
+        })),
+    })
+    if (!result.ok) {
+      setError(result.error)
+      setBusy(false)
+      return
+    }
+    setLines([blankOrder()])
+    setNotes('')
+    let message = `${result.value.number} quedó registrado. No se pudo armar el PDF; puedes bajarlo en Por llegar.`
+    try {
+      const saved = await downloadSupplierPdf(state, result.value)
+      message = saved === 'cancel'
+        ? `${result.value.number} quedó registrado. El PDF no se guardó; puedes bajarlo en Por llegar.`
+        : `${result.value.number} quedó registrado. Se descargó el pedido sin precios para el proveedor.`
+    } catch {
+      message = `${result.value.number} quedó registrado. No se pudo armar el PDF; puedes bajarlo en Por llegar.`
+    }
+    setBusy(false)
+    onPlaced(message)
+  }
+
+  return (
+    <form
+      className="ledger biz-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void submit()
+      }}
+    >
+      <h2>Pedido al proveedor</h2>
+      <p className="hint">La lista no lleva precios. La existencia no cambia hasta que la mercadería llega a la tienda.</p>
+      <div className="form-pair">
+        <Field label="Proveedor">
+          <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+            {suppliers.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Fecha">
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+        </Field>
+      </div>
+      <div className="line-editor order-lines">
+        {lines.map((line, index) => (
+          <div key={index} className="line">
+            <Field label={index === 0 ? 'Producto' : ' '}>
+              <select
+                value={line.fresh ? '__nuevo' : line.productId}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (value === '__nuevo') setLine(index, { fresh: true, productId: '', description: '' })
+                  else setLine(index, { fresh: false, productId: value, description: '' })
+                }}
+              >
+                <option value="">Elige un producto…</option>
+                {(['venta', 'insumo'] as const).map((use) => (
+                  <optgroup key={use} label={USE_LABEL[use]}>
+                    {products
+                      .filter((item) => (item.kind ?? 'venta') === use)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+                <option value="__nuevo">+ Producto que todavía no está…</option>
+              </select>
+              {line.fresh ? (
+                <input
+                  style={{ marginTop: 6 }}
+                  value={line.description}
+                  onChange={(event) => setLine(index, { description: event.target.value })}
+                  placeholder="Nombre para el proveedor"
+                  aria-label="Nombre del producto"
+                />
+              ) : null}
+            </Field>
+            <Field label={index === 0 ? 'Cant.' : ' '}>
+              <input className="num" inputMode="numeric" value={line.qty} onChange={(event) => setLine(index, { qty: event.target.value })} />
+            </Field>
+            <button type="button" className="icon-btn" aria-label="Quitar línea" onClick={() => setLines((current) => (current.length > 1 ? current.filter((_, at) => at !== index) : [blankOrder()]))}>
+              ×
+            </button>
+          </div>
+        ))}
+        <button type="button" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }} onClick={() => setLines((current) => [...current, blankOrder()])}>
+          + Agregar producto
+        </button>
+      </div>
+      <Field label="Nota">
+        <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Opcional. No sale en el PDF." />
+      </Field>
+      <div className="biz-row" style={{ justifyContent: 'flex-end' }}>
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {busy ? 'Generando PDF…' : 'Registrar pedido'}
+        </button>
+      </div>
+      <Flash error={error} />
+    </form>
+  )
+}
+
+function Arrivals({ onReceived }: { onReceived: (message: string) => void }) {
+  const { state } = useStore()
+  const pending = (state.purchases ?? []).filter((item) => item.stage === 'pedida')
+  if (pending.length === 0) return <p className="empty">No hay pedidos esperando mercadería.</p>
+  return (
+    <div className="biz-stack">
+      {pending.map((item) => (
+        <ArrivalCard key={item.id} purchase={item} onReceived={onReceived} />
+      ))}
+    </div>
+  )
+}
+
+function ArrivalCard({ purchase, onReceived }: { purchase: Purchase; onReceived: (message: string) => void }) {
+  const { state, receiveSupplierOrder } = useStore()
+  const products = shelfOf(state.products)
+  const categories = categoryNames(state.settings)
+  const [uses, setUses] = useState<ProductUse[]>(() => purchase.lines.map((line) => line.use ?? 'venta'))
+  const [category, setCategory] = useState<string[]>(() => purchase.lines.map(() => categories[0] ?? 'Accesorios'))
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  return (
+    <article className="ledger order-receive">
+      <header className="module-bar">
+        <div>
+          <h2>
+            {purchase.number} · {purchase.supplierName}
+          </h2>
+          <p className="hint">{longDate(purchase.date)}</p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            void downloadSupplierPdf(state, purchase)
+              .then((saved) => setNotice(saved === 'cancel' ? '' : `Se descargó Pedido-${purchase.number}.pdf sin precios.`))
+              .catch(() => setError('No se pudo armar el PDF.'))
+          }}
+        >
+          PDF sin precios
+        </button>
+      </header>
+      <div className="table-wrap">
+        <table className="biz-table">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th className="num">Cant.</th>
+              <th>Al llegar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchase.lines.map((line, index) => {
+              const current = line.productId ? products.find((item) => item.id === line.productId) : undefined
+              const use = uses[index] ?? 'venta'
+              return (
+                <tr key={`${purchase.id}-${index}`}>
+                  <td>
+                    <strong>{line.description}</strong>
+                    <small>{current ? (current.kind === 'insumo' ? 'Hoy es consumible' : 'Hoy está en la tienda') : 'Producto nuevo'}</small>
+                  </td>
+                  <td className="num">{line.qty}</td>
+                  <td>
+                    <div className="choice-row" role="group" aria-label={`Destino de ${line.description}`}>
+                      <button
+                        type="button"
+                        aria-pressed={use === 'insumo'}
+                        onClick={() => setUses((list) => list.map((item, at) => (at === index ? 'insumo' : item)))}
+                      >
+                        Consumible
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={use === 'venta'}
+                        onClick={() => setUses((list) => list.map((item, at) => (at === index ? 'venta' : item)))}
+                      >
+                        Tienda en línea
+                      </button>
+                    </div>
+                    {!current && use === 'venta' ? (
+                      <Field label="Categoría">
+                        <select value={category[index]} onChange={(event) => setCategory((list) => list.map((item, at) => (at === index ? event.target.value : item)))}>
+                          {categories.map((item) => (
+                            <option key={item}>{item}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint">Consumible entra al inventario de servicio y no sale en la tienda. Tienda en línea entra como producto de venta; si es nuevo, se publica cuando tenga foto. No lo registres otra vez en Nueva compra: la existencia se sumaría de nuevo.</p>
+      <div className="biz-row" style={{ justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            const result = receiveSupplierOrder(
+              purchase.id,
+              purchase.lines.map((_, index) => ({
+                index,
+                use: uses[index] ?? 'venta',
+                category: category[index],
+              })),
+            )
+            setBusy(false)
+            if (!result.ok) {
+              setError(result.error)
+              setNotice('')
+              return
+            }
+            setError('')
+            onReceived(`${purchase.number} entró al inventario y al kárdex.`)
+          }}
+        >
+          Ingresar al inventario
+        </button>
+      </div>
+      <Flash error={error} notice={notice} />
+    </article>
   )
 }
 
@@ -319,6 +638,7 @@ function PurchaseUse({ purchase }: { purchase: Purchase }) {
 
 function History() {
   const { state } = useStore()
+  const [pdfError, setPdfError] = useState('')
   const purchases = state.purchases ?? []
   const payables = new Map((state.payables ?? []).map((item) => [item.id, item]))
   if (purchases.length === 0) return <p className="empty">Todavía no hay compras registradas.</p>
@@ -350,12 +670,20 @@ function History() {
                   </td>
                   <td>{item.supplierName}</td>
                   <td>
-                    <small>{item.lines.map((line) => `${line.qty}× ${line.description} (${money(line.cost)})`).join(', ')}</small>
+                    <small>
+                      {item.lines
+                        .map((line) => (item.stage ? `${line.qty}× ${line.description}` : `${line.qty}× ${line.description} (${money(line.cost)})`))
+                        .join(', ')}
+                    </small>
                     <PurchaseUse purchase={item} />
                   </td>
-                  <td className="num">{money(item.total)}</td>
+                  <td className="num">{item.stage ? 'Sin precios' : money(item.total)}</td>
                   <td>
-                    {item.terms === 'contado' ? (
+                    {item.stage === 'pedida' ? (
+                      <Tag tone="warn">Por llegar</Tag>
+                    ) : item.stage === 'recibida' ? (
+                      <Tag tone="ok">En inventario{item.receivedOn ? ` · ${longDate(item.receivedOn)}` : ''}</Tag>
+                    ) : item.terms === 'contado' ? (
                       <Tag tone="ok">
                         {item.method} · {item.document}
                       </Tag>
@@ -364,6 +692,17 @@ function History() {
                     ) : (
                       <Tag tone="ok">Crédito pagado</Tag>
                     )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        void downloadSupplierPdf(state, item)
+                          .then(() => setPdfError(''))
+                          .catch(() => setPdfError('No se pudo armar el PDF.'))
+                      }}
+                    >
+                      PDF sin precios
+                    </button>
                   </td>
                 </tr>
               )
@@ -371,6 +710,7 @@ function History() {
           </tbody>
         </table>
       </div>
+      <Flash error={pdfError} />
     </div>
   )
 }

@@ -16,7 +16,9 @@ import {
 } from '../access'
 import { saveBackupFile } from '../backup'
 import { SiteContent } from '../components/SiteContent'
+import { IssuedKey } from '../components/IssuedKey'
 import { Field } from '../components/ui'
+import { temporaryPassword } from '../password'
 import { initials, PROMO_MAX, safeLink } from '../format'
 import { useStore } from '../store'
 import type { Permission, Role, User } from '../types'
@@ -24,7 +26,6 @@ import type { Permission, Role, User } from '../types'
 type Draft = {
   name: string
   username: string
-  password: string
   role: Role
   permissions: Permission[]
 }
@@ -32,7 +33,6 @@ type Draft = {
 const emptyDraft = (): Draft => ({
   name: '',
   username: '',
-  password: '',
   role: 'Recepción',
   permissions: defaultsFor('Recepción'),
 })
@@ -41,7 +41,6 @@ function draftFrom(user: User): Draft {
   return {
     name: user.name,
     username: user.username,
-    password: '',
     role: user.role,
     permissions: resolvePermissions(user),
   }
@@ -61,6 +60,7 @@ export function Usuarios() {
   const [settingsTouched, setSettingsTouched] = useState(false)
   const [settingsError, setSettingsError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [issued, setIssued] = useState<{ username: string; password: string } | null>(null)
 
   useEffect(() => {
     if (!settingsTouched) setSettings(state.settings)
@@ -158,29 +158,31 @@ export function Usuarios() {
           event.preventDefault()
           if (busy) return
           setBusy(true)
+          const password = editingId ? '' : temporaryPassword()
           const message = editingId
             ? await updateUser(editingId, {
                 name: form.name,
                 username: form.username,
                 role: form.role,
                 permissions: form.permissions,
-                password: form.password || undefined,
               })
             : await addUser({
                 name: form.name,
                 username: form.username,
-                password: form.password,
+                password,
                 role: form.role,
                 permissions: form.permissions,
               })
           setBusy(false)
           setError(message ?? '')
           if (message) return
+          if (!editingId) setIssued({ username: form.username.trim(), password })
           setEditingId(null)
           setForm(emptyDraft())
         }}
       >
         <h2>{editingId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
+        {issued ? <IssuedKey username={issued.username} password={issued.password} /> : null}
         <div className="team-fields">
           <Field label="Nombre">
             <input value={form.name} autoComplete="off" onChange={(event) => setForm({ ...form, name: event.target.value })} required />
@@ -188,17 +190,31 @@ export function Usuarios() {
           <Field label="Usuario">
             <input value={form.username} autoComplete="off" onChange={(event) => setForm({ ...form, username: event.target.value })} required />
           </Field>
-          <Field label={editingId ? 'Nueva clave' : 'Clave'}>
-            <input
-              type="password"
-              value={form.password}
-              autoComplete="new-password"
-              placeholder={editingId ? 'Vacía si se queda la actual' : 'Mínimo 8 caracteres'}
-              minLength={8}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              required={!editingId}
-            />
-          </Field>
+          {editingId ? (
+            <Field label="Clave temporal">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={async () => {
+                  const password = temporaryPassword()
+                  setBusy(true)
+                  const message = await updateUser(editingId, {
+                    name: form.name,
+                    username: form.username,
+                    role: form.role,
+                    permissions: form.permissions,
+                    password,
+                  })
+                  setBusy(false)
+                  setError(message ?? '')
+                  if (!message) setIssued({ username: form.username.trim(), password })
+                }}
+              >
+                Generar clave temporal
+              </button>
+            </Field>
+          ) : null}
           <Field label="Rol">
             <select value={form.role} onChange={(event) => setRole(event.target.value as Role)}>
               <option>Trabajador</option>
@@ -207,7 +223,11 @@ export function Usuarios() {
             </select>
           </Field>
         </div>
-        <p className="hint">Al cambiar el rol se marcan los del rol. Marca el módulo y, debajo, las acciones sensibles que sí puede hacer dentro de él.</p>
+        <p className="hint">
+          {editingId
+            ? 'Al cambiar el rol se marcan los del rol. Marca el módulo y, debajo, las acciones sensibles que sí puede hacer dentro de él.'
+            : 'Al crearlo se genera una clave temporal. Dásela a la persona: al entrar tendrá que elegir la suya. El rol marca los módulos; debajo ajustas las acciones sensibles.'}
+        </p>
         <PermissionEditor value={form.permissions} locked={form.role === 'Administrador'} onChange={setPermissions} focus={focusModule} />
         {error ? <p className="form-error">{error}</p> : null}
         <div className="team-actions">

@@ -62,6 +62,8 @@
 .biz-table th,
 .biz-table td { padding: 8px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
 .biz-table td { height: 48px; }
+.inventory-load .biz-table td { height: auto; }
+.order-receive .biz-table td { height: auto; }
 .biz-table th {
   height: 40px;
   font-size: 12px;
@@ -198,6 +200,7 @@
 .biz-form h2 { margin: 0; font-size: 1rem; }
 .line-editor { display: grid; gap: 8px; }
 .line-editor .line { display: grid; grid-template-columns: minmax(0, 1.6fr) 80px 110px 36px; gap: 8px; align-items: end; }
+.line-editor.order-lines .line { grid-template-columns: minmax(0, 1fr) 90px 36px; }
 .line-editor .line .field span { font-size: 12px; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .line-editor .line-use { display: block; margin-top: 4px; color: var(--muted); font-size: 0.76rem; }
@@ -282,6 +285,7 @@
 @media (max-width: 720px) {
   .form-pair, .form-trio { grid-template-columns: 1fr; }
   .line-editor .line { grid-template-columns: 1fr 70px 96px 36px; }
+  .line-editor.order-lines .line { grid-template-columns: minmax(0, 1fr) 80px 36px; }
   .line-editor .line-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .line-editor .line-new .choice-row { grid-column: 1 / -1; }
   .pos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

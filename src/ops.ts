@@ -1,5 +1,6 @@
 import { addDays, isoDate, money, newId, normalizePhone } from './format'
-import { applyShopOrder, shelfOf, type ShopLine } from './shop'
+import { fold, matchProduct, type InventoryImportRow } from './inventoryImport'
+import { applyShopOrder, categoryNames, normalizeCategory, shelfOf, type ShopLine } from './shop'
 import type {
   Appointment,
   AppState,
@@ -505,6 +506,8 @@ export function saveProduct(state: AppState, product: CatalogItem, canCost = tru
   if (!Number.isFinite(product.stock) || product.stock < 0) return fail('La existencia no es válida.')
   if (product.cost !== undefined && (!Number.isFinite(product.cost) || product.cost < 0)) return fail('El costo no es válido.')
   if (product.kind !== 'insumo' && !product.image.trim()) return fail('El producto necesita una foto.')
+  const expiresOn = product.expiresOn?.trim() ?? ''
+  if (product.expiresOn !== undefined && expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) return fail('La fecha de vencimiento no es válida.')
   const products = shelfOf(state.products).map((item) => ({ ...item }))
   const previous = products.find((item) => item.id === product.id)
   if (previous && product.cost !== undefined && round2(product.cost) !== (previous.cost ?? undefined) && !canCost) {
@@ -523,6 +526,7 @@ export function saveProduct(state: AppState, product: CatalogItem, canCost = tru
     cost: product.cost !== undefined ? round2(product.cost) : previous?.cost,
     minStock: product.minStock !== undefined && Number.isFinite(product.minStock) ? Math.max(0, Math.floor(product.minStock)) : previous?.minStock,
     sku: product.sku?.trim() || undefined,
+    expiresOn: product.expiresOn === undefined ? previous?.expiresOn : expiresOn || undefined,
   }
   const index = products.findIndex((item) => item.id === next.id)
   if (index >= 0) products[index] = next
@@ -538,6 +542,128 @@ export function saveProduct(state: AppState, product: CatalogItem, canCost = tru
     value: products.find((item) => item.id === next.id) ?? next,
     patch: { products, stockMoves: [...moves, ...(state.stockMoves ?? [])] },
   }
+}
+
+export type InventoryImportResult = { created: number; updated: number; unchanged: number }
+
+/** Deja la existencia de cada fila y marca si el producto es de venta o de servicio. */
+export function importInventory(state: AppState, rows: InventoryImportRow[]): Op<InventoryImportResult> {
+  if (rows.length === 0) return fail('El archivo no tiene productos.')
+  if (rows.length > 2000) return fail('El archivo trae más de 2000 productos. Divídelo para subirlo.')
+  const names = new Set<string>()
+  for (const row of rows) {
+    const name = row.name.trim()
+    if (!name) return fail('Hay un producto sin nombre.')
+    const key = fold(name)
+    if (names.has(key)) return fail(`${name} está repetido en el archivo.`)
+    names.add(key)
+    if (!Number.isInteger(row.qty) || row.qty < 0) return fail(`La existencia de ${name} tiene que ser un número entero.`)
+    if (row.use !== 'venta' && row.use !== 'insumo') return fail(`Define si ${name} va a ventas o a servicio.`)
+    if (row.cost !== undefined && (!Number.isFinite(row.cost) || row.cost < 0)) return fail(`El costo de ${name} no es válido.`)
+    if (row.price !== undefined && (!Number.isFinite(row.price) || row.price < 0)) return fail(`El precio de ${name} no es válido.`)
+    if (row.expiresOn !== undefined && row.expiresOn !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(row.expiresOn)) return fail(`La fecha de vencimiento de ${name} no es válida.`)
+    if (row.minStock !== undefined && (!Number.isInteger(row.minStock) || row.minStock < 0)) return fail(`El mínimo de ${name} tiene que ser un número entero.`)
+  }
+
+  const products = shelfOf(state.products).map((item) => ({ ...item }))
+  const seen = new Map<string, string>()
+  for (const row of rows) {
+    const found = matchProduct(products, row)
+    if (!found) continue
+    const previous = seen.get(found.id)
+    if (previous) return fail(`${row.name.trim()} y ${previous} son el mismo producto.`)
+    seen.set(found.id, found.name)
+  }
+
+  const moves: StockMove[] = []
+  const today = isoDate()
+  const known = new Set(categoryNames(state.settings).map((item) => fold(item)))
+  const extras = [...(state.settings.productCategories ?? [])]
+  let created = 0
+  let updated = 0
+  let unchanged = 0
+
+  const rememberCategory = (category: string | undefined) => {
+    if (!category) return
+    const name = normalizeCategory(category)
+    const key = fold(name)
+    if (known.has(key)) return
+    extras.push(name)
+    known.add(key)
+  }
+
+  for (const row of rows) {
+    const name = row.name.trim()
+    const found = matchProduct(products, row)
+    rememberCategory(row.category)
+    if (!found) {
+      const item: CatalogItem = {
+        id: newId(),
+        name,
+        detail: row.detail?.trim() || '',
+        category: normalizeCategory(row.category || 'Consumible'),
+        price: row.use === 'insumo' ? 0 : round2(row.price ?? 0),
+        unit: row.unit?.trim() || 'pieza',
+        stock: 0,
+        image: row.image || '',
+        active: false,
+        kind: row.use,
+        ...(row.sku?.trim() ? { sku: row.sku.trim() } : {}),
+        ...(row.cost !== undefined ? { cost: round2(row.cost) } : {}),
+        ...(row.minStock !== undefined ? { minStock: row.minStock } : {}),
+        ...(row.expiresOn ? { expiresOn: row.expiresOn } : {}),
+      }
+      products.unshift(item)
+      if (row.qty > 0) {
+        const move = shift(products, item.id, row.qty, 'inicial', 'Excel', 'Carga de inventario', today, item.cost)
+        if (move) moves.push(move)
+      }
+      created += 1
+      continue
+    }
+
+    const snapshot = () =>
+      JSON.stringify({
+        kind: found.kind ?? 'venta',
+        category: found.category,
+        unit: found.unit,
+        sku: found.sku ?? '',
+        detail: found.detail,
+        image: found.image ? '1' : '',
+        cost: found.cost ?? null,
+        price: found.price,
+        expiresOn: found.expiresOn ?? '',
+        minStock: found.minStock ?? null,
+        stock: found.stock,
+        active: found.active !== false,
+      })
+    const before = snapshot()
+    found.kind = row.use
+    if (row.use === 'insumo') found.active = false
+    if (row.category) found.category = normalizeCategory(row.category)
+    if (row.unit?.trim()) found.unit = row.unit.trim()
+    if (row.detail?.trim() && !found.detail.trim()) found.detail = row.detail.trim()
+    if (row.image && !found.image) found.image = row.image
+    if (row.sku?.trim() && fold(row.sku) !== fold(found.sku ?? '')) found.sku = row.sku.trim()
+    if (row.cost !== undefined) found.cost = round2(row.cost)
+    if (row.price !== undefined && row.use !== 'insumo') found.price = round2(row.price)
+    if (row.expiresOn) found.expiresOn = row.expiresOn
+    if (row.minStock !== undefined) found.minStock = row.minStock
+    const delta = row.qty - found.stock
+    if (delta !== 0) {
+      const move = shift(products, found.id, delta, 'ajuste', 'Excel', 'Carga de inventario', today)
+      if (!move) return fail(`No se pudo actualizar ${name}.`)
+      moves.push(move)
+    }
+    if (snapshot() === before) unchanged += 1
+    else updated += 1
+  }
+
+  const patch: Partial<AppState> = { products, stockMoves: [...moves, ...(state.stockMoves ?? [])] }
+  if (extras.length !== (state.settings.productCategories ?? []).length) {
+    patch.settings = { ...state.settings, productCategories: extras }
+  }
+  return { ok: true, value: { created, updated, unchanged }, patch }
 }
 
 export function adjustStock(state: AppState, input: { productId: string; qty: number; kind: 'ajuste' | 'consumo'; note: string }): Op<StockMove> {
@@ -704,6 +830,129 @@ export function recordPurchase(state: AppState, input: PurchaseInput): Op<Purcha
   }
   patch.purchases = [purchase, ...(state.purchases ?? [])]
   return { ok: true, value: purchase, patch }
+}
+
+export type SupplierOrderInput = {
+  date: string
+  supplierId?: string
+  notes: string
+  lines: { productId?: string; description: string; qty: number }[]
+}
+
+/** Lista para el proveedor, sin precios y sin tocar existencia. El ingreso al inventario ocurre al recibirla. */
+export function placeSupplierOrder(state: AppState, input: SupplierOrderInput): Op<Purchase> {
+  const supplier = (state.suppliers ?? []).find((item) => item.id === input.supplierId)
+  if (!supplier) return fail('Elige el proveedor.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return fail('La fecha no es válida.')
+  const products = shelfOf(state.products)
+  const lines: PurchaseLine[] = []
+  const seen = new Set<string>()
+  for (const raw of input.lines) {
+    if (!Number.isInteger(raw.qty)) return fail('La cantidad tiene que ser un número entero.')
+    if (raw.qty <= 0) continue
+    const named = raw.productId ? products.find((item) => item.id === raw.productId) : matchProduct(products, { name: raw.description })
+    if (raw.productId && !named) return fail('Un producto del pedido ya no existe.')
+    const description = (named?.name ?? raw.description).trim()
+    if (!description) return fail('Cada línea necesita un producto.')
+    const key = named ? `id:${named.id}` : `name:${fold(description)}`
+    if (seen.has(key)) return fail(`${description} está repetido en el pedido.`)
+    seen.add(key)
+    lines.push({
+      ...(named ? { productId: named.id, use: named.kind ?? 'venta' } : {}),
+      description,
+      qty: raw.qty,
+      cost: 0,
+    })
+  }
+  if (lines.length === 0) return fail('Agrega al menos un producto al pedido.')
+  const purchase: Purchase = {
+    id: newId(),
+    number: nextSerial(state.purchases ?? [], 'COM', state.counters?.COM),
+    date: input.date,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    invoice: '',
+    withTax: false,
+    lines,
+    total: 0,
+    terms: 'contado',
+    notes: input.notes.trim(),
+    stage: 'pedida',
+  }
+  return { ok: true, value: purchase, patch: { purchases: [purchase, ...(state.purchases ?? [])] } }
+}
+
+export type ReceiveChoice = { index: number; use: ProductUse; category?: string }
+
+/** Al llegar la mercadería, cada línea entra al inventario como consumible o como producto de la tienda. */
+export function receiveSupplierOrder(state: AppState, purchaseId: string, choices: ReceiveChoice[]): Op<Purchase> {
+  const purchase = (state.purchases ?? []).find((item) => item.id === purchaseId)
+  if (!purchase || purchase.stage !== 'pedida') return fail('Este pedido ya no está pendiente de llegar.')
+  const choiceOf = new Map<number, ReceiveChoice>()
+  for (const choice of choices) {
+    if (choice.use !== 'venta' && choice.use !== 'insumo') return fail('Elige si cada producto es consumible o para la tienda en línea.')
+    if (choiceOf.has(choice.index)) return fail('Hay un producto repetido al recibir el pedido.')
+    choiceOf.set(choice.index, choice)
+  }
+  if (purchase.lines.some((_, index) => !choiceOf.has(index))) return fail('Falta definir el destino de cada producto.')
+
+  const products = shelfOf(state.products).map((item) => ({ ...item }))
+  const moves: StockMove[] = []
+  const today = isoDate()
+  const known = new Set(categoryNames(state.settings).map((item) => fold(item)))
+  const extras = [...(state.settings.productCategories ?? [])]
+  const remember = (category: string) => {
+    const name = normalizeCategory(category)
+    const key = fold(name)
+    if (known.has(key)) return name
+    extras.push(name)
+    known.add(key)
+    return name
+  }
+  const lines: PurchaseLine[] = []
+  const seen = new Set<string>()
+  for (let index = 0; index < purchase.lines.length; index += 1) {
+    const line = purchase.lines[index]
+    const choice = choiceOf.get(index)!
+    let found = line.productId ? products.find((item) => item.id === line.productId) : matchProduct(products, { name: line.description })
+    if (line.productId && !found) return fail(`${line.description} ya no está en el inventario.`)
+    if (!found) {
+      const category = choice.use === 'insumo' ? 'Consumible' : remember(choice.category || categoryNames(state.settings)[0] || 'Accesorios')
+      found = {
+        id: newId(),
+        name: line.description.trim(),
+        detail: '',
+        category,
+        price: 0,
+        unit: 'pieza',
+        stock: 0,
+        image: '',
+        active: false,
+        kind: choice.use,
+      }
+      products.unshift(found)
+    } else {
+      found.kind = choice.use
+      if (choice.use === 'insumo') found.active = false
+    }
+    if (seen.has(found.id)) return fail(`${found.name} está repetido en el pedido.`)
+    seen.add(found.id)
+    const move = shift(products, found.id, line.qty, 'compra', purchase.number, purchase.supplierName, today)
+    if (!move) return fail(`No se pudo ingresar ${found.name}.`)
+    moves.push(move)
+    lines.push({ ...line, productId: found.id, use: choice.use })
+  }
+
+  const next: Purchase = { ...purchase, stage: 'recibida', receivedOn: today, lines }
+  const patch: Partial<AppState> = {
+    products,
+    stockMoves: [...moves, ...(state.stockMoves ?? [])],
+    purchases: (state.purchases ?? []).map((item) => (item.id === purchase.id ? next : item)),
+  }
+  if (extras.length !== (state.settings.productCategories ?? []).length) {
+    patch.settings = { ...state.settings, productCategories: extras }
+  }
+  return { ok: true, value: next, patch }
 }
 
 export type PurchaseSplit = { venta: number; insumo: number; gasto: number }

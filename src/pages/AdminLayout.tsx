@@ -4,7 +4,8 @@ import { allows } from '../access'
 import { alertBadges } from '../alerts'
 import { saveBackupFile } from '../backup'
 import { CommandPalette, type Command } from '../components/CommandPalette'
-import { NoticeBar } from '../components/NoticeBar'
+import { NoticeBar, PasswordForm } from '../components/NoticeBar'
+import { Dialog } from '../components/ui'
 import { PermissionsBar } from '../components/PermissionsBar'
 import { initials } from '../format'
 import { ACCOUNTING_LINKS, iconTone, linkAllowed, MODULE_GROUPS, MODULES_PATH, ModuleIcon, moduleAt, normalizePath } from '../modules'
@@ -57,7 +58,7 @@ function Icon({ name }: { name: 'grid' | 'search' | 'logout' | 'back' }) {
 const SHORTCUT = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'
 
 export function AdminLayout() {
-  const { state, currentUser, logout, exportBackup, unsynced } = useStore()
+  const { state, currentUser, logout, exportBackup, unsynced, mustChangePassword } = useStore()
   const badges = alertBadges(state, currentUser)
   const navigate = useNavigate()
   const location = useLocation()
@@ -231,7 +232,20 @@ export function AdminLayout() {
           <Outlet />
         </Suspense>
       </main>
-      <CommandPalette commands={commands} open={palette} onClose={() => setPalette(false)} />
+      {mustChangePassword ? (
+        <Dialog labelledBy="clave-obligatoria" onClose={() => undefined} escape={false}>
+          <div className="drawer">
+            <p className="eyebrow">Primer ingreso</p>
+            <h2 id="clave-obligatoria">Elige tu clave</h2>
+            <p className="hint">Entraste con una clave temporal. Elige una propia, de al menos 8 caracteres, para seguir en el panel.</p>
+            <PasswordForm required />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={leave}>
+              Salir
+            </button>
+          </div>
+        </Dialog>
+      ) : null}
+      <CommandPalette commands={commands} open={palette && !mustChangePassword} onClose={() => setPalette(false)} />
     </div>
   )
 }

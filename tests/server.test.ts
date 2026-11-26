@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -106,6 +107,33 @@ describe('servidor', () => {
     await login('recepcion', 'NuevaClave2026')
   })
 
+  it('una clave puesta por el administrador obliga a cambiarla al entrar', async () => {
+    const admin = await login('admin')
+    const current = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+    const id = 'temp-user'
+    const saved = await call(
+      'PUT',
+      '/api/state',
+      {
+        base: current.revision ?? 0,
+        state: {
+          ...current,
+          users: [...current.users, { id, name: 'Temporal', username: 'temp-user', role: 'Trabajador', active: true, permissions: ['citas'], permissionsVersion: 3 }],
+        },
+      },
+      admin.token,
+    )
+    expect(saved.status).toBe(200)
+    expect((await call('POST', '/api/password', { userId: id, password: 'ClaveTemporal1' }, admin.token)).status).toBe(204)
+    const first = await call('POST', '/api/login', { username: 'temp-user', password: 'ClaveTemporal1' })
+    expect(first.status).toBe(200)
+    expect(first.body.mustChange).toBe(true)
+    expect((await call('POST', '/api/password', { userId: id, current: 'ClaveTemporal1', password: 'ClavePropia2026' }, first.body.token)).status).toBe(204)
+    const second = await call('POST', '/api/login', { username: 'temp-user', password: 'ClavePropia2026' })
+    expect(second.status).toBe(200)
+    expect(second.body.mustChange).toBe(false)
+  })
+
   it('recepción no lee planillas ni salarios y no puede borrar ingresos ni cambiar costos', async () => {
     const admin = await login('admin')
     const full = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
@@ -182,6 +210,13 @@ describe('servidor', () => {
     expect(before.body.configured).toBe(false)
     expect((await call('GET', '/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=x&hub.challenge=1')).status).toBe(503)
 
+    process.env.WA_VERIFY_TOKEN = 'verify-me'
+    const handshake = await call('GET', '/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=solo')
+    expect(handshake.status).toBe(200)
+    expect(handshake.body).toBe('solo')
+    expect((await call('GET', '/api/whatsapp/status', undefined, admin.token)).body.configured).toBe(false)
+    delete process.env.WA_VERIFY_TOKEN
+
     process.env.WA_TOKEN = 'token'
     process.env.WA_PHONE_NUMBER_ID = '100'
     process.env.WA_VERIFY_TOKEN = 'verify-me'
@@ -193,6 +228,59 @@ describe('servidor', () => {
       const status = await call('GET', '/api/whatsapp/status', undefined, admin.token)
       expect(status.body.configured).toBe(true)
       expect((await call('POST', '/api/whatsapp/send', { conversationId: 'wa-nube', text: 'Hola' }, admin.token)).status).toBe(400)
+    } finally {
+      delete process.env.WA_TOKEN
+      delete process.env.WA_PHONE_NUMBER_ID
+      delete process.env.WA_VERIFY_TOKEN
+      delete process.env.WA_APP_SECRET
+    }
+  })
+
+  it('whatsapp: los archivos del cliente solo los ve quien tiene permiso y solo si pertenecen a un mensaje', async () => {
+    const admin = await login('admin')
+    process.env.WA_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '100'
+    process.env.WA_VERIFY_TOKEN = 'verify-me'
+    process.env.WA_APP_SECRET = 'secret'
+    try {
+      const payload = JSON.stringify({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  metadata: { phone_number_id: '100' },
+                  contacts: [{ wa_id: '50255554321', profile: { name: 'Marta' } }],
+                  messages: [{ id: 'wamid.media1', from: '50255554321', timestamp: String(Math.floor(Date.now() / 1000)), type: 'image', image: { id: '90001', mime_type: 'image/png' } }],
+                },
+              },
+            ],
+          },
+        ],
+      })
+      const signature = `sha256=${createHmac('sha256', 'secret').update(payload).digest('hex')}`
+      const hook = await fetch(`${base}/api/whatsapp/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature }, body: payload })
+      expect(hook.status).toBe(200)
+      const state = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+      const stored = state.conversations.flatMap((item) => item.messages).find((item) => item.externalId === 'wamid.media1')
+      expect(stored).toMatchObject({ body: '📷 Foto', media: { kind: 'image', id: '90001' } })
+
+      fs.mkdirSync(path.join(dataDir, 'wa-media'), { recursive: true })
+      fs.writeFileSync(path.join(dataDir, 'wa-media', '90001.bin'), Buffer.from([137, 80, 78, 71]))
+      fs.writeFileSync(path.join(dataDir, 'wa-media', '90001.mime'), 'image/png')
+
+      const noSession = await fetch(`${base}/api/whatsapp/media/90001`)
+      expect(noSession.status).toBe(401)
+      const outsider = await limitedUser('sinWhatsapp', ['citas'])
+      expect((await fetch(`${base}/api/whatsapp/media/90001`, { headers: { authorization: `Bearer ${outsider.token}` } })).status).toBe(403)
+      expect((await fetch(`${base}/api/whatsapp/media/12345`, { headers: { authorization: `Bearer ${admin.token}` } })).status).toBe(404)
+
+      const seen = await fetch(`${base}/api/whatsapp/media/90001`, { headers: { authorization: `Bearer ${admin.token}` } })
+      expect(seen.status).toBe(200)
+      expect(seen.headers.get('content-type')).toBe('image/png')
+      expect(seen.headers.get('cache-control')).toContain('private')
+      expect(Buffer.from(await seen.arrayBuffer()).length).toBe(4)
     } finally {
       delete process.env.WA_TOKEN
       delete process.env.WA_PHONE_NUMBER_ID
@@ -295,7 +383,7 @@ describe('servidor', () => {
       const state = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
       const mine = state.appointments.filter((item) => item.date === day && item.time === '11:00')
       expect(mine.map((item) => item.petName).sort()).toEqual(['Nube', 'Rocky'])
-      const messages = state.conversations.flatMap((thread) => thread.messages).filter((message) => message.externalId?.startsWith('wamid.'))
+      const messages = state.conversations.flatMap((thread) => thread.messages).filter((message) => message.direction === 'out' && message.externalId?.startsWith('wamid.'))
       expect(messages).toHaveLength(2)
     } finally {
       globalThis.fetch = original

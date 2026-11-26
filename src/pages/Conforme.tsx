@@ -61,42 +61,35 @@ export function Conforme() {
   }
 
   return (
-    <main className="login">
-      <section className="login-stage" style={{ maxWidth: 420 }}>
-        <div className="login-mark">
-          <img className="login-logo" src="/logo.png" alt="PUP'S" />
-          <div>
-            <p className="eyebrow">Constancia de visita</p>
-            <h1>Conforme</h1>
-            <p>Confirma que recibiste a tu mascota y revisaste el egreso.</p>
-          </div>
-        </div>
-        <div className="login-panel form-grid">
-          {error ? <p className="form-error">{error}</p> : null}
-          {!info && !error ? <p className="hint">Cargando…</p> : null}
-          {info ? (
-            <>
-              <p>
-                <strong>{info.petName}</strong>
-                <br />
-                Folio #{info.folio} · {longDate(info.date)}
+    <main className="conforme">
+      <section className="conforme-card">
+        <img className="login-logo" src="/logo.png" alt="PUP'S" />
+        <p className="eyebrow">Constancia de visita</p>
+        <h1>Conforme</h1>
+        <p className="conforme-lead">Confirma que recibiste a tu mascota y revisaste el egreso.</p>
+        {error ? <p className="form-error">{error}</p> : null}
+        {!info && !error ? <p className="hint">Cargando…</p> : null}
+        {info ? (
+          <>
+            <p className="conforme-pet">
+              <strong>{info.petName}</strong>
+              <span>Folio #{info.folio} · {longDate(info.date)}</span>
+            </p>
+            {done ? (
+              <p className="banner" role="status">
+                Gracias. Quedó registrado el conforme
+                {info.ackedAt ? ` el ${longDate(info.ackedAt.slice(0, 10))}` : ''}.
               </p>
-              {done ? (
-                <p className="banner" role="status">
-                  Gracias. Quedó registrado el conforme
-                  {info.ackedAt ? ` el ${longDate(info.ackedAt.slice(0, 10))}` : ''}.
-                </p>
-              ) : (
-                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void confirm()}>
-                  {busy ? 'Guardando…' : 'Conforme'}
-                </button>
-              )}
-            </>
-          ) : null}
-          <p className="hint">
-            <Link to="/">Volver al sitio</Link>
-          </p>
-        </div>
+            ) : (
+              <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void confirm()}>
+                {busy ? 'Guardando…' : 'Conforme'}
+              </button>
+            )}
+          </>
+        ) : null}
+        <p className="hint">
+          <Link to="/">Volver al sitio</Link>
+        </p>
       </section>
     </main>
   )

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultsFor } from '../src/access'
 import { alertBadges, buildAlerts, openCashDays } from '../src/alerts'
 import { clientProfiles } from '../src/clients'
+import { supplierOrderPdf } from '../src/constanciaPdf'
 import { addDays, isoDate } from '../src/format'
 import { balanceSheet, balances, buildJournal, incomeStatement } from '../src/ledger'
 import * as ops from '../src/ops'
@@ -61,6 +62,33 @@ describe('ventas de mostrador', () => {
     expect(ops.recordSale(seed, { clientName: '', phone: '', lines: [{ productId: 'collar', name: 'Collar', qty: 99, price: 45 }], discount: 0, method: 'Efectivo' }).ok).toBe(false)
     const insumo = apply(seed, ops.saveProduct(seed, { id: 'gel', name: 'Gel', detail: '', category: 'Insumos', price: 0, unit: 'galón', stock: 3, image: '', kind: 'insumo' })).state
     expect(ops.recordSale(insumo, { clientName: '', phone: '', lines: [{ productId: 'gel', name: 'Gel', qty: 1, price: 10 }], discount: 0, method: 'Efectivo' }).ok).toBe(false)
+  })
+
+  it('conserva la categoría elegida y la fecha de vencimiento', () => {
+    const seed = createSeed()
+    const saved = apply(
+      seed,
+      ops.saveProduct(seed, {
+        id: 'shampoo-galon',
+        name: 'Shampoo galón',
+        detail: '',
+        category: 'Alimento',
+        price: 0,
+        unit: 'galón',
+        stock: 2,
+        image: '',
+        kind: 'insumo',
+        expiresOn: '2026-12-01',
+      }),
+    )
+    const item = saved.state.products!.find((product) => product.id === 'shampoo-galon')!
+    expect(item.category).toBe('Alimento')
+    expect(item.expiresOn).toBe('2026-12-01')
+    const kept = apply(saved.state, ops.saveProduct(saved.state, { ...item, detail: 'Galón de servicio' }))
+    expect(kept.state.products!.find((product) => product.id === 'shampoo-galon')?.expiresOn).toBe('2026-12-01')
+    const cleared = apply(kept.state, ops.saveProduct(kept.state, { ...item, detail: 'Galón de servicio', expiresOn: '' }))
+    expect(cleared.state.products!.find((product) => product.id === 'shampoo-galon')?.expiresOn).toBeUndefined()
+    expect(ops.saveProduct(seed, { ...item, expiresOn: 'mañana' }).ok).toBe(false)
   })
 
   it('anular devuelve la existencia y deja una devolución sin tocar el ingreso original', () => {
@@ -153,6 +181,79 @@ describe('compras y cuentas por pagar', () => {
       notes: '',
     })
     expect(again.ok).toBe(false)
+  })
+
+  it('el pedido al proveedor sale sin precios y entra al inventario al llegar', () => {
+    const seed = withSupplier(createSeed()).state
+    const supplierId = seed.suppliers![0].id
+    const beforeMoves = seed.movements.length
+    const beforeJournal = buildJournal(seed).length
+    const placed = apply(
+      seed,
+      ops.placeSupplierOrder(seed, {
+        date: isoDate(),
+        supplierId,
+        notes: 'para el local',
+        lines: [
+          { productId: 'collar', description: '', qty: 4 },
+          { description: 'Jabón de prueba', qty: 2 },
+          { description: 'Alcohol de prueba', qty: 1 },
+        ],
+      }),
+    )
+    expect(placed.value.stage).toBe('pedida')
+    expect(placed.value.total).toBe(0)
+    expect(placed.value.lines.map((line) => line.cost)).toEqual([0, 0, 0])
+    expect(placed.value.lines[0].productId).toBe('collar')
+    expect(stockOf(placed.state, 'collar')).toBe(18)
+    expect(placed.state.movements).toHaveLength(beforeMoves)
+    expect(placed.state.stockMoves?.some((move) => move.reference === placed.value.number)).toBeFalsy()
+    expect(buildJournal(placed.state)).toHaveLength(beforeJournal)
+    expect(ops.placeSupplierOrder(seed, { date: isoDate(), supplierId, notes: '', lines: [{ description: 'collar de nylon', qty: 1 }, { productId: 'collar', description: '', qty: 1 }] }).ok).toBe(false)
+
+    const received = apply(
+      placed.state,
+      ops.receiveSupplierOrder(placed.state, placed.value.id, [
+        { index: 0, use: 'insumo' },
+        { index: 1, use: 'venta', category: 'Accesorios' },
+        { index: 2, use: 'insumo' },
+      ]),
+    )
+    expect(received.value.stage).toBe('recibida')
+    expect(received.value.receivedOn).toBe(isoDate())
+    const collar = received.state.products!.find((item) => item.id === 'collar')!
+    expect(collar).toMatchObject({ kind: 'insumo', stock: 22, active: false, category: 'Accesorios', cost: 22 })
+    const soap = received.state.products!.find((item) => item.name === 'Jabón de prueba')!
+    expect(soap).toMatchObject({ kind: 'venta', stock: 2, category: 'Accesorios', price: 0, active: false })
+    const alcohol = received.state.products!.find((item) => item.name === 'Alcohol de prueba')!
+    expect(alcohol).toMatchObject({ kind: 'insumo', stock: 1, category: 'Consumible', price: 0, active: false })
+    const moves = received.state.stockMoves?.filter((move) => move.reference === placed.value.number) ?? []
+    expect(moves.map((move) => move.kind)).toEqual(['compra', 'compra', 'compra'])
+    expect(moves.map((move) => move.qty)).toEqual([4, 2, 1])
+    expect(moves.every((move) => move.note === 'Distribuidora')).toBe(true)
+    expect(received.state.movements).toHaveLength(beforeMoves)
+    expect(buildJournal(received.state)).toHaveLength(beforeJournal)
+    expect(ops.receiveSupplierOrder(received.state, placed.value.id, [{ index: 0, use: 'venta' }]).ok).toBe(false)
+
+    const file = new TextDecoder('latin1').decode(
+      supplierOrderPdf({
+        number: placed.value.number,
+        when: '25 nov 2026',
+        supplier: 'Distribuidora',
+        contact: '55550001',
+        lines: [
+          { name: 'Collar de nylon', qty: 4 },
+          { name: 'Jabón de prueba', qty: 2 },
+        ],
+      }),
+    )
+    const hex = (value: string) => [...value].map((char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('')
+    expect(file.startsWith('%PDF-1.4')).toBe(true)
+    expect(file).toContain(hex('Pedido al proveedor'))
+    expect(file).toContain(hex('Collar de nylon'))
+    expect(file).toContain(hex('no incluye precios'))
+    expect(file).not.toContain(hex('Q 45'))
+    expect(file).not.toContain(hex('Q45'))
   })
 
   it('al crédito crea la factura por pagar y los abonos bajan el saldo', () => {
@@ -498,5 +599,30 @@ describe('alertas', () => {
     expect(alertBadges(state, admin, today)['/admin/corte']).toBeGreaterThan(0)
     expect(alertBadges(state, admin, today)['/admin/whatsapp']).toBe(1)
     expect(alertBadges(state, admin, today)['/admin/tareas']).toBe(1)
+  })
+
+  it('avisa productos vencidos y los que vencen en 30 días', () => {
+    const seed = createSeed()
+    const today = '2026-11-24'
+    const admin = { ...seed.users[0], permissions: defaultsFor('Administrador') }
+    const base = seed.products[0]
+    const state: AppState = {
+      ...seed,
+      products: [
+        { ...base, id: 'vence-pronto', name: 'Shampoo', stock: 2, expiresOn: '2026-12-10' },
+        { ...base, id: 'ya-vencio', name: 'Toalla', stock: 1, expiresOn: '2026-11-01' },
+        { ...base, id: 'lejos', name: 'Collar', stock: 4, expiresOn: '2027-06-01' },
+        { ...base, id: 'sin-fecha', name: 'Peine', stock: 3 },
+        { ...base, id: 'agotado', name: 'Gel', stock: 0, expiresOn: '2026-11-20' },
+      ],
+    }
+    const alerts = buildAlerts(state, admin, today)
+    const expiry = alerts.find((item) => item.id === 'inventario-vence')
+    expect(expiry?.tone).toBe('bad')
+    expect(expiry?.title).toBe('1 producto vencido')
+    expect(expiry?.to).toBe('/admin/inventario')
+    expect(alertBadges(state, admin, today)['/admin/inventario']).toBe(2)
+    const soonOnly: AppState = { ...state, products: state.products.filter((item) => item.id === 'vence-pronto') }
+    expect(buildAlerts(soonOnly, admin, today).find((item) => item.id === 'inventario-vence')?.title).toBe('1 producto por vencer')
   })
 })

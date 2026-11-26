@@ -7,6 +7,7 @@ import { installedApp } from './standalone'
 import * as ops from './ops'
 import { resolvePetCode, slotTaken } from './visit'
 import type { ChargeNote, Op } from './ops'
+import type { InventoryImportRow } from './inventoryImport'
 import type { ShopLine } from './shop'
 import {
   PERMISSIONS_VERSION,
@@ -55,6 +56,7 @@ const SYNC = 'pups-sync'
 const TOKEN = 'pups-token'
 const PUBLIC = 'pups-public'
 const WEAK = 'pups-weak'
+const MUST_CHANGE = 'pups-must-change'
 const EXPIRED = 'pups-expired'
 const POLL_MS = 3000
 const PUBLIC_POLL_MS = 20_000
@@ -338,6 +340,7 @@ function saveSession(session: { token: string; userId: string }, remember: boole
 function clearSession() {
   sessionStorage.removeItem(TOKEN)
   sessionStorage.removeItem(WEAK)
+  sessionStorage.removeItem(MUST_CHANGE)
   localStorage.removeItem(TOKEN)
 }
 
@@ -392,6 +395,8 @@ type Store = {
   syncNotice: string
   dismissSyncNotice: () => void
   weakPassword: boolean
+  /** Entró con una clave temporal y todavía no elige la suya. */
+  mustChangePassword: boolean
   allows: (permission: Permission) => boolean
   login: (username: string, password: string, remember?: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
   logout: () => void
@@ -424,12 +429,15 @@ type Store = {
   toggleUser: (id: string) => string | null
   addMovement: (movement: Omit<Movement, 'id' | 'document'> & { document?: string }) => Result<Movement>
   saveProduct: (product: CatalogItem) => string | null
+  importInventory: (rows: InventoryImportRow[]) => Result<ops.InventoryImportResult>
   recordSale: (input: Omit<ops.SaleInput, 'userId'>) => Result<Sale>
   settleOrder: (movementId: string, method: string, invoiced?: boolean) => Result<Movement>
   voidSale: (saleId: string, reason: string) => Result<Sale>
   adjustStock: (input: { productId: string; qty: number; kind: 'ajuste' | 'consumo'; note: string }) => Result<StockMove>
   saveSupplier: (supplier: Supplier) => Result<Supplier>
   recordPurchase: (input: ops.PurchaseInput) => Result<Purchase>
+  placeSupplierOrder: (input: ops.SupplierOrderInput) => Result<Purchase>
+  receiveSupplierOrder: (purchaseId: string, choices: ops.ReceiveChoice[]) => Result<Purchase>
   savePayable: (input: Parameters<typeof ops.savePayable>[1]) => Result<Payable>
   payPayable: (input: { payableId: string; amount: number; method: string; date: string }) => Result<Movement>
   saveFixedCost: (item: FixedCost) => Result<FixedCost>
@@ -454,6 +462,8 @@ type Store = {
   ensureThread: (phone: string, name: string, petName: string) => string | null
   sendMessage: (conversationId: string, body: string, template?: boolean) => Promise<string | null>
   waCloudStatus: () => Promise<{ configured: boolean; phoneNumberId: string; template: string } | null>
+  /** Baja un archivo de WhatsApp con la sesión y lo deja listo para mostrar. */
+  waMedia: (id: string) => Promise<{ url: string; mime: string } | { error: string }>
   markRead: (conversationId: string) => void
   resetDemo: () => void
   exportBackup: () => string | null
@@ -464,6 +474,7 @@ const Ctx = createContext<Store | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const bootSession = useRef(readSession())
+  const mediaCache = useRef(new Map<string, { url: string; mime: string }>())
   /** Copia de este equipo con cambios sin subir; se une una sola vez al llegar los datos del servidor. */
   const restoreRef = useRef(bootSession.current ? readCache() : null)
   const [state, setState] = useState<AppState>(() => {
@@ -476,6 +487,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [booting, setBooting] = useState(() => Boolean(bootSession.current && !restoreRef.current))
   const [syncNotice, setSyncNotice] = useState('')
   const [weakPassword, setWeakPassword] = useState(() => sessionStorage.getItem(WEAK) === '1')
+  const [mustChangePassword, setMustChangePassword] = useState(() => sessionStorage.getItem(MUST_CHANGE) === '1')
   const latest = useRef(state)
   const server = useRef<AppState | null>(null)
   const pending = useRef<Mutation[]>([])
@@ -732,6 +744,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncNotice,
       dismissSyncNotice: () => setSyncNotice(''),
       weakPassword,
+      mustChangePassword,
       allows: can,
       login: async (username, password, remember = false) => {
         let response: Response
@@ -745,13 +758,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         } catch {
           return { ok: false, error: OFFLINE }
         }
-        const body = (await response.json().catch(() => ({}))) as { token?: string; userId?: string; weak?: boolean; error?: string }
+        const body = (await response.json().catch(() => ({}))) as { token?: string; userId?: string; weak?: boolean; mustChange?: boolean; error?: string }
         if (!response.ok || !body.token || !body.userId) return { ok: false, error: body.error ?? 'Usuario o clave incorrectos.' }
         saveSession({ token: body.token, userId: body.userId }, remember)
         sessionStorage.removeItem(EXPIRED)
         if (body.weak) sessionStorage.setItem(WEAK, '1')
         else sessionStorage.removeItem(WEAK)
+        if (body.mustChange) sessionStorage.setItem(MUST_CHANGE, '1')
+        else sessionStorage.removeItem(MUST_CHANGE)
         setWeakPassword(Boolean(body.weak))
+        setMustChangePassword(Boolean(body.mustChange))
         token.current = body.token
         server.current = null
         latest.current = { ...latest.current, sessionUserId: body.userId }
@@ -774,6 +790,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pending.current = []
         if (!dirty) clearCache()
         setWeakPassword(false)
+        setMustChangePassword(false)
         show(anonymous(readJson<PublicData>(localStorage, PUBLIC)))
         void engine.current?.loadPublic()
       },
@@ -782,7 +799,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const problem = await setPassword(currentUser.id, next, current)
         if (!problem) {
           sessionStorage.removeItem(WEAK)
+          sessionStorage.removeItem(MUST_CHANGE)
           setWeakPassword(false)
+          setMustChangePassword(false)
         }
         return problem
       },
@@ -964,12 +983,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = run(onlyVisibility ? ['tienda_visibilidad', 'tienda_precios'] : ['tienda_precios', 'inventario_crear', 'ajustar', 'compras'], (current) => ops.saveProduct(current, product, can('ajustar')))
         return result.ok ? null : result.error
       },
+      importInventory: (rows) => {
+        if (!can('inventario_crear') || !can('ajustar')) {
+          return { ok: false, error: 'Para subir el inventario hace falta permiso de crear productos y de ajustar existencias.' }
+        }
+        return run('ajustar', (current) => ops.importInventory(current, rows))
+      },
       recordSale: (input) => run('caja', (current) => ops.recordSale(current, { ...input, userId: currentUser?.id })),
       settleOrder: (movementId, method, invoiced) => run('pedidos_cobrar', (current) => ops.settleOrder(current, movementId, method, undefined, invoiced)),
       voidSale: (saleId, reason) => run('anular', (current) => ops.voidSale(current, saleId, reason)),
       adjustStock: (input) => run('ajustar', (current) => ops.adjustStock(current, input)),
       saveSupplier: (supplier) => run('compras', (current) => ops.saveSupplier(current, supplier)),
       recordPurchase: (input) => run('compras', (current) => ops.recordPurchase(current, input)),
+      placeSupplierOrder: (input) => run('compras', (current) => ops.placeSupplierOrder(current, input)),
+      receiveSupplierOrder: (purchaseId, choices) => run('compras', (current) => ops.receiveSupplierOrder(current, purchaseId, choices)),
       savePayable: (input) => run('por_pagar', (current) => ops.savePayable(current, input)),
       payPayable: (input) => run('por_pagar', (current) => ops.payPayable(current, input)),
       saveFixedCost: (item) => run('gastos', (current) => ops.saveFixedCost(current, item)),
@@ -1041,6 +1068,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return null
         }
       },
+      waMedia: async (id) => {
+        const hit = mediaCache.current.get(id)
+        if (hit) return hit
+        try {
+          const response = await request('GET', `/api/whatsapp/media/${encodeURIComponent(id)}`)
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as { error?: string } | null
+            return { error: body?.error ?? 'No se pudo cargar el archivo.' }
+          }
+          const blob = await response.blob()
+          const loaded = { url: URL.createObjectURL(blob), mime: blob.type }
+          mediaCache.current.set(id, loaded)
+          return loaded
+        } catch {
+          return { error: 'No se pudo cargar el archivo. Revisa la conexión.' }
+        }
+      },
       markRead: (conversationId) => {
         if (!state.conversations.some((item) => item.id === conversationId && item.unread > 0)) return
         run('whatsapp', (current) => ({
@@ -1065,7 +1109,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         run('equipo', () => ({ ok: true, value: null, patch: { ...createSeed(), sessionUserId: state.sessionUserId, revision: undefined } }))
       },
     }
-  }, [state, booting, unsynced, syncNotice, weakPassword])
+  }, [state, booting, unsynced, syncNotice, weakPassword, mustChangePassword])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }

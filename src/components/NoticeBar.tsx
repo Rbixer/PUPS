@@ -14,6 +14,7 @@ const KIND_LABEL: Record<Alert['kind'], string> = {
   whatsapp: 'WhatsApp',
   metas: 'Metas',
   tareas: 'Tareas',
+  inventario: 'Inventario',
 }
 
 /** Mayor número, más urgente: decide el ícono de la barra cerrada. */
@@ -77,9 +78,9 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /** Clave débil: el formulario vive aquí mismo y conserva lo escrito mientras la barra se pliega. */
-function PasswordForm() {
+export function PasswordForm({ required = false }: { required?: boolean }) {
   const { changeOwnPassword } = useStore()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(required)
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -102,6 +103,10 @@ function PasswordForm() {
         event.preventDefault()
         if (next !== repeat) {
           setError('Las claves nuevas no coinciden.')
+          return
+        }
+        if (next.trim() === current.trim()) {
+          setError('Elige una clave distinta a la actual.')
           return
         }
         setBusy(true)

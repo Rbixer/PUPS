@@ -1201,11 +1201,78 @@ body:has(.install-banner) .wa-float { display: none; }
 .wa-thread header span { display: block; color: var(--muted); font-size: 0.85rem; }
 .wa-log { display: grid; align-content: start; gap: 10px; padding: 16px; overflow: auto; }
 .bubble { max-width: min(440px, 86%); padding: 10px 12px; border-radius: 16px; }
-.bubble p { margin: 0; }
+.bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble p a, .wa-place { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.wa-place { display: inline-block; margin-top: 6px; font-size: 0.86rem; font-weight: 600; }
+.emoji-toggle, .emoji-panel button {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.wa-media { display: grid; gap: 6px; margin-bottom: 6px; max-width: 100%; }
+.wa-media + p { margin-top: 2px; }
+.wa-media img, .wa-media video { display: block; max-width: 100%; max-height: 320px; border-radius: 10px; background: rgba(0, 0, 0, 0.06); }
+.wa-media video { width: 100%; }
+.wa-media audio { width: min(300px, 100%); height: 40px; }
+.wa-zoom { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 10px; line-height: 0; }
+.wa-zoom:focus-visible { outline: 3px solid var(--focus, #1d8aa3); outline-offset: 2px; }
+.wa-sticker img { max-height: 150px; background: none; }
+.wa-media-loading, .wa-media-error { font-size: 0.84rem; opacity: 0.8; }
+.wa-media-missing { justify-items: start; }
+.wa-doc { grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.06); }
+.wa-doc-name { overflow-wrap: anywhere; font-weight: 600; font-size: 0.9rem; }
+.wa-doc .wa-media-error { grid-column: 1 / -1; }
+.wa-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(8, 12, 20, 0.88);
+}
+.wa-lightbox img { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; align-self: center; border-radius: 8px; }
+.wa-lightbox-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.emoji { position: relative; align-self: end; }
+.emoji-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card, #fff);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.emoji-toggle:hover:not(:disabled), .emoji-toggle[aria-expanded="true"] { background: var(--accent-soft); }
+.emoji-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.emoji-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  gap: 6px;
+  width: min(320px, calc(100vw - 32px));
+  max-height: 340px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card, #fff);
+  box-shadow: 0 12px 32px rgba(11, 31, 77, 0.18);
+}
+.emoji-panel small { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.emoji-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.emoji-tabs button { flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: none; font-size: 1.2rem; cursor: pointer; }
+.emoji-tabs button.active { background: var(--accent-soft); }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 2px; }
+.emoji-grid button { min-height: 38px; border: 0; border-radius: 8px; background: none; font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.emoji-grid button:hover, .emoji-grid button:focus-visible { background: var(--accent-soft); }
 .bubble time { display: block; margin-top: 6px; color: var(--muted); font-size: 0.72rem; }
 .bubble.in { background: #f3f6f8; border-bottom-left-radius: 6px; }
 .bubble.out { justify-self: end; background: var(--accent-soft); color: #6d2c1c; border-bottom-right-radius: 6px; }
-.wa-compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; padding: 12px; border-top: 1px solid var(--line); }
+.wa-compose { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: end; padding: 12px; border-top: 1px solid var(--line); }
 .wa-compose textarea {
   width: 100%;
   resize: vertical;
@@ -1421,7 +1488,8 @@ body:has(.nav.open) { overflow: hidden; }
 /* Paleta de PUP'S: turquesa y azul marino del arte de la marca, en el sitio, el acceso y el panel. */
 .site,
 .admin,
-.login {
+.login,
+.conforme {
   --brand-aqua: #5ce1e6;
   --brand-navy: #123376;
   --surface: #ffffff;
@@ -1840,6 +1908,9 @@ body:has(.nav.open) { overflow: hidden; }
 .admin .permit[aria-pressed='true'] { background: var(--aqua-soft); border-color: var(--aqua-ink); }
 .admin .choice-row button { border-radius: 8px; }
 .admin .choice-row button[aria-pressed='true'] { background: var(--navy); border-color: var(--navy); }
+.admin .inventory-load .choice-row { flex-wrap: nowrap; }
+.admin .inventory-load .choice-row button { padding: 6px 10px; font-size: 0.85rem; }
+.admin .order-receive .choice-row button { padding: 6px 10px; font-size: 0.85rem; }
 
 
 .admin .wa-shell,
@@ -1889,6 +1960,37 @@ body:has(.nav.open) { overflow: hidden; }
 .login .btn-primary { background: var(--surface); color: #121418; min-height: 46px; }
 .login .btn-primary:hover { background: #e7e9ee; }
 .login :focus-visible { outline-color: #17191d; }
+
+.conforme {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background-color: var(--brand-aqua);
+  background-image: url('/login-pattern.svg');
+  background-size: 220px 220px;
+}
+.conforme-card {
+  width: min(420px, 100%);
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 28px 24px 22px;
+  background: #fff;
+  color: #17191d;
+  border: 1px solid #e3e6eb;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(16, 20, 26, 0.12);
+}
+.conforme-card .login-logo { width: 132px; }
+.conforme-card .eyebrow { margin: 8px 0 0; }
+.conforme-card h1 { margin: 0; font-size: 2rem; letter-spacing: -0.04em; line-height: 1.1; }
+.conforme-lead { margin: 0; max-width: 28rem; color: #5c6570; }
+.conforme-pet { margin: 6px 0 0; font-size: 1.2rem; }
+.conforme-pet span { display: block; margin-top: 2px; color: #5c6570; font-size: 0.95rem; font-weight: 500; }
+.conforme-card .btn-primary { width: 100%; min-height: 48px; }
+.conforme-card .hint { margin: 4px 0 0; }
 
 @media (max-width: 860px) {
   .login {
@@ -2394,9 +2496,9 @@ body:has(.nav.open) { overflow: hidden; }
   .constancia-sheet {
     display: flex !important;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
     box-sizing: border-box;
-    min-height: 9.95in;
+    min-height: 0;
     background: #fff !important;
     border: 0 !important;
     padding: 0 !important;
@@ -2545,6 +2647,66 @@ body:has(.nav.open) { overflow: hidden; }
     border: 0;
     border-radius: 0;
   }
+}
+
+/* La hoja tiene que verse en pantalla antes de imprimir.
+   En la PWA, Guardar como PDF captura la vista actual: si la constancia sigue en display:none, el archivo sale en blanco. */
+html:has(body.constancia-print),
+body.constancia-print {
+  overflow: visible !important;
+  height: auto !important;
+}
+body.constancia-print,
+body.constancia-print #root,
+body.constancia-print .admin {
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  background: #fff !important;
+}
+body.constancia-print .admin > :not(:has(.constancia-sheet)),
+body.constancia-print .admin-main > :not(:has(.constancia-sheet)) {
+  display: none !important;
+}
+body.constancia-print .no-print { display: none !important; }
+body.constancia-print .overlay,
+body.constancia-print .report-shell,
+body.constancia-print .constancia-page {
+  position: static !important;
+  display: block !important;
+  visibility: visible !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.constancia-print .constancia-sheet {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  background: #fff !important;
+}
+body.constancia-print .constancia-sheet,
+body.constancia-print .constancia-sheet * {
+  visibility: visible !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 @media (max-width: 560px) {

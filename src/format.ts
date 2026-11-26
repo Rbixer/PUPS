@@ -167,6 +167,16 @@ export function mapUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`PUP'S ${address}`)}`
 }
 
+/** Texto que se muestra cuando un archivo llega sin pie de foto. */
+export const MEDIA_LABEL = {
+  image: '📷 Foto',
+  sticker: '🏷️ Sticker',
+  audio: '🎵 Audio',
+  voice: '🎤 Nota de voz',
+  video: '🎥 Video',
+  document: '📄 Documento',
+} as const
+
 export const PROMO_MAX = 140
 export const REVIEW_MAX = 400
 export const SITE_LIST_MAX = 12

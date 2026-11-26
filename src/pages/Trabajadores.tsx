@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { defaultsFor, resolvePermissions } from '../access'
+import { IssuedKey } from '../components/IssuedKey'
 import { Field } from '../components/ui'
+import { temporaryPassword } from '../password'
 import { isoDate, money, parseAmount } from '../format'
 import { useStore } from '../store'
 import type { User } from '../types'
@@ -11,11 +13,10 @@ type Draft = {
   phone: string
   email: string
   username: string
-  password: string
   salary: string
 }
 
-const emptyDraft = (): Draft => ({ name: '', lastName: '', phone: '', email: '', username: '', password: '', salary: '' })
+const emptyDraft = (): Draft => ({ name: '', lastName: '', phone: '', email: '', username: '', salary: '' })
 
 function nextCode(users: User[]) {
   const numbers = users.map((item) => Number(item.employeeCode)).filter((value) => Number.isInteger(value) && value >= 1001)
@@ -32,6 +33,7 @@ export function Trabajadores() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Draft>(emptyDraft)
   const [busy, setBusy] = useState(false)
+  const [issued, setIssued] = useState<{ username: string; password: string } | null>(null)
   const workers = state.users
     .filter((item) => item.employeeCode)
     .sort((a, b) => (a.employeeCode ?? '').localeCompare(b.employeeCode ?? ''))
@@ -91,7 +93,6 @@ export function Trabajadores() {
                         phone: worker.phone ?? '',
                         email: worker.email ?? '',
                         username: worker.username,
-                        password: '',
                         salary: worker.salary != null ? String(worker.salary) : '',
                       })
                       setError('')
@@ -142,7 +143,6 @@ export function Trabajadores() {
               username: form.username,
               role: worker.role,
               permissions: resolvePermissions(worker),
-              password: form.password || undefined,
             })
             setBusy(false)
             setError(message ?? '')
@@ -152,6 +152,7 @@ export function Trabajadores() {
             }
             return
           }
+          const password = temporaryPassword()
           const message = await addUser({
             name: form.name,
             lastName: form.lastName.trim(),
@@ -159,17 +160,21 @@ export function Trabajadores() {
             email: form.email.trim(),
             salary,
             username: form.username,
-            password: form.password,
+            password,
             role: 'Trabajador',
             permissions: defaultsFor('Trabajador'),
             employeeCode: nextCode(state.users),
           })
           setBusy(false)
           setError(message ?? '')
-          if (!message) setForm(emptyDraft())
+          if (!message) {
+            setIssued({ username: form.username.trim(), password })
+            setForm(emptyDraft())
+          }
         }}
       >
         <h2>{editingId ? 'Editar trabajador' : 'Nuevo trabajador'}</h2>
+        {issued ? <IssuedKey username={issued.username} password={issued.password} /> : null}
         {error ? <p className="form-error">{error}</p> : null}
         <div className="team-fields">
           <Field label="Nombre">
@@ -187,17 +192,42 @@ export function Trabajadores() {
           <Field label="Usuario">
             <input value={form.username} autoComplete="off" autoCapitalize="none" onChange={(event) => set('username', event.target.value)} required />
           </Field>
-          <Field label={editingId ? 'Nueva contraseña' : 'Contraseña'}>
-            <input
-              type="password"
-              value={form.password}
-              autoComplete="new-password"
-              placeholder={editingId ? 'Vacía si se queda la actual' : 'Mínimo 8 caracteres'}
-              minLength={8}
-              onChange={(event) => set('password', event.target.value)}
-              required={!editingId}
-            />
-          </Field>
+          {editingId ? (
+            <Field label="Clave temporal">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busy}
+                onClick={async () => {
+                  const worker = state.users.find((item) => item.id === editingId)
+                  if (!worker) return
+                  const salary = parseAmount(form.salary)
+                  if (!Number.isFinite(salary) || salary < 0) {
+                    setError('El sueldo debe ser un número válido.')
+                    return
+                  }
+                  const password = temporaryPassword()
+                  setBusy(true)
+                  const message = await updateUser(editingId, {
+                    name: form.name,
+                    lastName: form.lastName,
+                    phone: form.phone,
+                    email: form.email,
+                    salary,
+                    username: form.username,
+                    role: worker.role,
+                    permissions: resolvePermissions(worker),
+                    password,
+                  })
+                  setBusy(false)
+                  setError(message ?? '')
+                  if (!message) setIssued({ username: form.username.trim(), password })
+                }}
+              >
+                Generar clave temporal
+              </button>
+            </Field>
+          ) : null}
           <Field label="Sueldo (Q)">
             <input className="num" inputMode="decimal" value={form.salary} onChange={(event) => set('salary', event.target.value)} required />
           </Field>
@@ -205,7 +235,11 @@ export function Trabajadores() {
             <input className="num" value={code} readOnly />
           </Field>
         </div>
-        <p className="hint">El código no cambia. Al guardar una cita con su usuario, esa cita suma en su cuenta.</p>
+        <p className="hint">
+          {editingId
+            ? 'El código no cambia. Al guardar una cita con su usuario, esa cita suma en su cuenta.'
+            : 'Al crearlo se genera una clave temporal. Dásela al trabajador: al entrar tendrá que elegir la suya. El código no cambia y se guarda en las citas que registra.'}
+        </p>
         <button type="submit" className="btn btn-primary" disabled={busy}>
           {busy ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Crear trabajador'}
         </button>

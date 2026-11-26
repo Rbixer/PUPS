@@ -159,6 +159,9 @@ export function Tienda() {
               placeholder="Aviso para reponer"
             />
           </Field>
+          <Field label="Vence">
+            <input type="date" value={form.expiresOn ?? ''} onChange={(event) => setForm({ ...form, expiresOn: event.target.value })} />
+          </Field>
           {editing ? (
             <p className="hint" id="stock-hint">
               La existencia cambia con ventas, compras y ajustes de Inventario, así el kárdex cuadra.

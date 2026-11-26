@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { expiringStock, EXPIRY_WINDOW } from '../alerts'
+import { InventoryLoad } from '../components/InventoryLoad'
 import { amountOf, Field, Flash, Metrics, Tabs, Tag } from '../components/ui'
-import { count, longDate, money, newId } from '../format'
+import { addDays, count, isoDate, longDate, money, newId } from '../format'
 import { round2 } from '../ops'
 import { categoryNames, shelfOf } from '../shop'
 import { useStore } from '../store'
@@ -16,10 +18,17 @@ const KIND_LABEL: Record<StockKind, string> = {
   anulación: 'Anulación',
 }
 
-type Filter = 'todo' | 'bajo' | string
+type Filter = 'todo' | 'bajo' | 'vence' | string
 
 function low(item: CatalogItem) {
   return item.stock <= (item.minStock ?? 0)
+}
+
+function expiryTone(item: CatalogItem, today: string): 'bad' | 'warn' | null {
+  if (!item.expiresOn || item.stock <= 0) return null
+  if (item.expiresOn < today) return 'bad'
+  if (item.expiresOn <= addDays(today, EXPIRY_WINDOW)) return 'warn'
+  return null
 }
 
 export function Inventario() {
@@ -31,10 +40,15 @@ export function Inventario() {
   const [query, setQuery] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [categoryNotice, setCategoryNotice] = useState('')
+  const today = isoDate()
+  const expiring = expiringStock(products, today)
+  const expiringIds = new Set(expiring.map((item) => item.id))
+  const categoryOpen = filter !== 'todo' && filter !== 'bajo' && filter !== 'vence'
   const needle = query.trim().toLowerCase()
   const visible = products.filter((item) => {
     if (filter === 'bajo' && !low(item)) return false
-    if (filter !== 'todo' && filter !== 'bajo' && item.category !== filter) return false
+    if (filter === 'vence' && !expiringIds.has(item.id)) return false
+    if (categoryOpen && item.category !== filter) return false
     return !needle || `${item.name} ${item.sku ?? ''} ${item.category}`.toLowerCase().includes(needle)
   })
   const current = products.find((item) => item.id === picked) ?? null
@@ -64,6 +78,12 @@ export function Inventario() {
           { label: 'Valor a precio de venta', value: money(retail), tone: 'ok' },
           { label: 'Bajo mínimo', value: lows.length, tone: lows.length ? 'bad' : undefined, detail: lows.slice(0, 3).map((item) => item.name).join(', ') || 'Todo en orden' },
           { label: 'Productos', value: products.length, detail: count(products.filter((item) => item.kind === 'insumo').length, 'insumo', 'insumos') },
+          {
+            label: 'Por vencer',
+            value: expiring.length,
+            tone: expiring.some((item) => item.expiresOn! < today) ? 'bad' : expiring.length ? 'hot' : undefined,
+            detail: expiring.slice(0, 3).map((item) => item.name).join(', ') || `Aviso ${EXPIRY_WINDOW} días antes`,
+          },
         ]}
       />
       <div className="biz-row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -74,6 +94,7 @@ export function Inventario() {
           tabs={[
             { id: 'todo', label: 'Todos' },
             ...categories.map((name) => ({ id: name, label: name, count: products.filter((item) => item.category === name).length })),
+            { id: 'vence', label: 'Por vencer', count: expiring.length },
             { id: 'bajo', label: 'Bajo mínimo', count: lows.length },
           ]}
         />
@@ -107,6 +128,7 @@ export function Inventario() {
           {categoryNotice ? <span className="hint">{categoryNotice}</span> : null}
         </form>
       ) : null}
+      {allows('inventario_crear') || allows('ajustar') ? <InventoryLoad /> : null}
 
       <div className="biz-split wide-left">
         <div className="ledger">
@@ -130,8 +152,9 @@ export function Inventario() {
                         {item.name}
                       </button>
                       <small>
-                        {item.kind === 'insumo' ? 'Uso en servicio' : `Para venta · ${item.category}`} · {item.unit}
+                        {item.kind === 'insumo' ? `Uso en servicio · ${item.category}` : `Para venta · ${item.category}`} · {item.unit}
                         {item.sku ? ` · ${item.sku}` : ''}
+                        {item.expiresOn ? ` · vence ${longDate(item.expiresOn)}` : ''}
                         {item.kind !== 'insumo' && item.active === false ? ' · no sale en la tienda en línea' : ''}
                       </small>
                     </td>
@@ -139,7 +162,13 @@ export function Inventario() {
                     <td className="num">{item.minStock ?? '—'}</td>
                     {allows('ajustar') ? <td className="num">{item.cost !== undefined ? money(item.cost) : '—'}</td> : null}
                     {allows('ajustar') ? <td className="num">{item.cost !== undefined ? money(Math.max(0, item.stock) * item.cost) : '—'}</td> : null}
-                    <td>{item.stock <= 0 ? <Tag tone="bad">Agotado</Tag> : low(item) ? <Tag tone="warn">Reponer</Tag> : <Tag tone="ok">Bien</Tag>}</td>
+                    <td>
+                      <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                        {item.stock <= 0 ? <Tag tone="bad">Agotado</Tag> : low(item) ? <Tag tone="warn">Reponer</Tag> : <Tag tone="ok">Bien</Tag>}
+                        {expiryTone(item, today) === 'bad' ? <Tag tone="bad">Vencido</Tag> : null}
+                        {expiryTone(item, today) === 'warn' ? <Tag tone="warn">Por vencer</Tag> : null}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -148,19 +177,57 @@ export function Inventario() {
           {visible.length === 0 ? <p className="empty empty-inset">Sin productos con ese filtro.</p> : null}
         </div>
         <div className="biz-stack">
-          {current ? <Kardex key={current.id} item={current} canAdjust={allows('ajustar')} /> : <p className="empty">Elige un producto para ver su kárdex y ajustar existencia.</p>}
-          {allows('inventario_crear') ? <NewSupply /> : null}
+          {current ? (
+            <Kardex
+              key={current.id}
+              item={current}
+              canAdjust={allows('ajustar')}
+              canEdit={allows('inventario_crear') || allows('ajustar')}
+              categories={categories}
+              onSaved={(category) => {
+                if (categoryOpen && category !== filter) setFilter(category)
+              }}
+            />
+          ) : (
+            <p className="empty">Elige un producto para ver su kárdex y ajustar existencia.</p>
+          )}
+          {allows('inventario_crear') ? (
+            <NewSupply
+              category={categoryOpen ? filter : (categories[0] ?? 'Consumible')}
+              categories={categories}
+              onCreated={(category) => {
+                if (categoryOpen) setFilter(category)
+              }}
+            />
+          ) : null}
         </div>
       </div>
     </section>
   )
 }
 
-function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) {
+function Kardex({
+  item,
+  canAdjust,
+  canEdit,
+  categories,
+  onSaved,
+}: {
+  item: CatalogItem
+  canAdjust: boolean
+  canEdit: boolean
+  categories: string[]
+  onSaved: (category: string) => void
+}) {
   const { state, adjustStock, saveProduct } = useStore()
   const moves = (state.stockMoves ?? []).filter((move) => move.productId === item.id)
   const [form, setForm] = useState({ kind: 'consumo' as 'consumo' | 'sube' | 'baja', qty: '', note: '' })
-  const [limits, setLimits] = useState({ minStock: String(item.minStock ?? ''), cost: item.cost !== undefined ? String(item.cost) : '' })
+  const [limits, setLimits] = useState({
+    minStock: String(item.minStock ?? ''),
+    cost: item.cost !== undefined ? String(item.cost) : '',
+    category: item.category,
+    expiresOn: item.expiresOn ?? '',
+  })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -171,7 +238,6 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
         <span>Hay {item.stock}</span>
       </header>
       {canAdjust ? (
-        <>
           <form
             className="biz-form"
             onSubmit={(event) => {
@@ -212,6 +278,8 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
               Registrar movimiento
             </button>
           </form>
+      ) : null}
+          {canEdit ? (
           <form
             className="biz-form"
             style={{ borderTop: '1px solid var(--line)' }}
@@ -219,30 +287,46 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
               event.preventDefault()
               const result = saveProduct({
                 ...item,
+                category: limits.category,
+                expiresOn: limits.expiresOn,
                 minStock: limits.minStock.trim() ? amountOf(limits.minStock) : undefined,
-                cost: limits.cost.trim() ? amountOf(limits.cost) : undefined,
+                ...(canAdjust ? { cost: limits.cost.trim() ? amountOf(limits.cost) : undefined } : {}),
               })
               setError(result ?? '')
-              setNotice(result ? '' : 'Mínimo y costo guardados.')
+              setNotice(result ? '' : 'Datos del producto guardados.')
+              if (!result) onSaved(limits.category)
             }}
           >
             <div className="biz-row">
+              <Field label="Categoría">
+                <select value={limits.category} onChange={(event) => setLimits({ ...limits, category: event.target.value })}>
+                  {categories.map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Vence">
+                <input type="date" value={limits.expiresOn} onChange={(event) => setLimits({ ...limits, expiresOn: event.target.value })} />
+              </Field>
               <Field label="Existencia mínima">
                 <input className="num" inputMode="numeric" value={limits.minStock} onChange={(event) => setLimits({ ...limits, minStock: event.target.value })} />
               </Field>
-              <Field label="Costo unitario (Q)">
-                <input className="num" inputMode="decimal" value={limits.cost} onChange={(event) => setLimits({ ...limits, cost: event.target.value })} />
-              </Field>
+              {canAdjust ? (
+                <Field label="Costo unitario (Q)">
+                  <input className="num" inputMode="decimal" value={limits.cost} onChange={(event) => setLimits({ ...limits, cost: event.target.value })} />
+                </Field>
+              ) : null}
               <button type="submit" className="btn btn-ghost btn-sm">
                 Guardar
               </button>
             </div>
           </form>
+          ) : null}
+          {canAdjust || canEdit ? (
           <div style={{ padding: '0 18px' }}>
             <Flash error={error} notice={notice} />
           </div>
-        </>
-      ) : null}
+          ) : null}
       <header className="module-bar">
         <h2>Kárdex</h2>
         <span>{moves.length} movimientos</span>
@@ -282,27 +366,32 @@ function Kardex({ item, canAdjust }: { item: CatalogItem; canAdjust: boolean }) 
   )
 }
 
-function NewSupply() {
+function NewSupply({ category, categories, onCreated }: { category: string; categories: string[]; onCreated: (category: string) => void }) {
   const { saveProduct } = useStore()
-  const [form, setForm] = useState({ name: '', unit: '', stock: '', minStock: '', cost: '' })
+  const [form, setForm] = useState({ name: '', unit: '', stock: '', minStock: '', cost: '', category, expiresOn: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  useEffect(() => {
+    setForm((current) => (current.category === category ? current : { ...current, category }))
+  }, [category])
   return (
     <form
       className="ledger biz-form"
       onSubmit={(event) => {
         event.preventDefault()
+        const savedCategory = form.category
         const result = saveProduct({
           id: newId(),
           name: form.name,
           detail: '',
-          category: 'Consumible',
+          category: savedCategory,
           price: 0,
           unit: form.unit,
           stock: amountOf(form.stock) || 0,
           image: '',
           kind: 'insumo',
           active: false,
+          expiresOn: form.expiresOn,
           minStock: form.minStock.trim() ? amountOf(form.minStock) : undefined,
           cost: form.cost.trim() ? amountOf(form.cost) : undefined,
         })
@@ -312,29 +401,44 @@ function NewSupply() {
           return
         }
         setError('')
-        setNotice(`${form.name.trim()} agregado a insumos.`)
-        setForm({ name: '', unit: '', stock: '', minStock: '', cost: '' })
+        setNotice(`${form.name.trim()} quedó en ${savedCategory}.`)
+        setForm({ name: '', unit: '', stock: '', minStock: '', cost: '', category: savedCategory, expiresOn: '' })
+        onCreated(savedCategory)
       }}
     >
       <h2>Nuevo insumo de grooming</h2>
-      <p className="hint" style={{ margin: 0 }}>Shampoo de galón, toallas, cuchillas… Se controla aquí y no sale en la tienda.</p>
+      <p className="hint" style={{ margin: 0 }}>
+        Se guarda en {form.category} y no sale en la tienda. El aviso de vencimiento aparece {EXPIRY_WINDOW} días antes.
+      </p>
       <div className="form-pair">
         <Field label="Nombre">
-          <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
         </Field>
+        <Field label="Categoría">
+          <select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>
+            {categories.map((name) => (
+              <option key={name}>{name}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="form-pair">
         <Field label="Unidad">
-          <input value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="galón, pieza…" />
+          <input value={form.unit} onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))} placeholder="galón, pieza…" />
+        </Field>
+        <Field label="Vence">
+          <input type="date" value={form.expiresOn} onChange={(event) => setForm((current) => ({ ...current, expiresOn: event.target.value }))} />
         </Field>
       </div>
       <div className="form-trio">
         <Field label="Existencia">
-          <input className="num" inputMode="numeric" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} />
+          <input className="num" inputMode="numeric" value={form.stock} onChange={(event) => setForm((current) => ({ ...current, stock: event.target.value }))} />
         </Field>
         <Field label="Mínimo">
-          <input className="num" inputMode="numeric" value={form.minStock} onChange={(event) => setForm({ ...form, minStock: event.target.value })} />
+          <input className="num" inputMode="numeric" value={form.minStock} onChange={(event) => setForm((current) => ({ ...current, minStock: event.target.value }))} />
         </Field>
         <Field label="Costo (Q)">
-          <input className="num" inputMode="decimal" value={form.cost} onChange={(event) => setForm({ ...form, cost: event.target.value })} />
+          <input className="num" inputMode="decimal" value={form.cost} onChange={(event) => setForm((current) => ({ ...current, cost: event.target.value }))} />
         </Field>
       </div>
       <Flash error={error} notice={notice} />

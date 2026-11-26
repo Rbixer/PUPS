@@ -84,6 +84,9 @@
   .login .btn-primary {
     @apply min-h-12 rounded-xl bg-white bg-none text-stone-900 shadow-[0_8px_24px_-12px_rgba(255,255,255,0.5)] hover:bg-cream hover:bg-none;
   }
+  .conforme .btn-primary {
+    @apply min-h-12 w-full rounded-xl bg-(--brand-navy) bg-none text-white shadow-none hover:bg-(--brand-navy) hover:bg-none;
+  }
   .btn-sm {
     @apply rounded-lg px-3 py-2 text-[13px];
   }

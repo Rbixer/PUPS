@@ -15,14 +15,18 @@ import {
   applyWebhook,
   dispatchOutbound,
   findThread,
+  fromMetaNetwork,
+  isOwnWebhook,
   loadWaConfig,
+  loadWaMedia,
+  MediaError,
   validSignature,
   verifyWebhook,
   waStatus,
 } from './whatsapp'
 
 type Session = { userId: string; expires: number; remember: boolean }
-type Auth = { passwords: Record<string, string>; sessions: Record<string, Session> }
+type Auth = { passwords: Record<string, string>; sessions: Record<string, Session>; mustChange?: Record<string, true> }
 type Lock = { count: number; strikes: number; until: number }
 
 const HOUR = 3_600_000
@@ -310,7 +314,7 @@ export function createApi(dataDir = path.resolve('data')) {
 
   function loadAuth(): Auth {
     const raw = readJson<Auth>(authFile)
-    return { passwords: raw?.passwords ?? {}, sessions: raw?.sessions ?? {} }
+    return { passwords: raw?.passwords ?? {}, sessions: raw?.sessions ?? {}, mustChange: raw?.mustChange ?? {} }
   }
 
   function saveAuth(auth: Auth) {
@@ -604,7 +608,7 @@ export function createApi(dataDir = path.resolve('data')) {
     const remember = body.remember === true
     auth.sessions[sha(token)] = { userId: user.id, remember, expires: now + (remember ? REMEMBER_MS : SESSION_MS) }
     saveAuth(auth)
-    send(response, 200, { token, userId: user.id, weak: weakSecret(password) })
+    send(response, 200, { token, userId: user.id, weak: weakSecret(password), mustChange: auth.mustChange?.[user.id] === true })
   }
 
   async function changePassword(request: IncomingMessage, response: ServerResponse) {
@@ -623,6 +627,9 @@ export function createApi(dataDir = path.resolve('data')) {
     if (password.trim().length < 8) throw new HttpError(400, 'La clave debe tener al menos 8 caracteres.')
     if (password.trim() === DEMO_PASSWORD) throw new HttpError(400, 'Elige una clave distinta a la de demostración.')
     auth.passwords[userId] = hashSecret(password)
+    auth.mustChange = auth.mustChange ?? {}
+    if (userId === user.id) delete auth.mustChange[userId]
+    else auth.mustChange[userId] = true
     for (const [other, session] of Object.entries(auth.sessions)) if (session.userId === userId && other !== key) delete auth.sessions[other]
     saveAuth(auth)
     send(response, 204)
@@ -855,10 +862,32 @@ export function createApi(dataDir = path.resolve('data')) {
       requireUser(request)
       return send(response, 200, waStatus(loadWaConfig()))
     }
+    if (at.startsWith('/api/whatsapp/media/') && method === 'GET') {
+      const { user, state: current } = requireUser(request)
+      if (!allows(user, 'whatsapp') && !allows(user, 'whatsapp_enviar')) throw new HttpError(403, 'No tienes permiso para ver los mensajes de WhatsApp.')
+      const id = decodeURIComponent(at.slice('/api/whatsapp/media/'.length))
+      // Solo se entregan archivos que pertenecen a un mensaje guardado: no es un túnel hacia Meta.
+      if (!current.conversations.some((thread) => thread.messages.some((message) => message.media?.id === id))) {
+        throw new HttpError(404, 'Archivo no encontrado.')
+      }
+      try {
+        const file = await loadWaMedia(loadWaConfig(), id, path.join(dataDir, 'wa-media'))
+        response.statusCode = 200
+        response.setHeader('Content-Type', file.mime)
+        response.setHeader('Content-Length', file.data.length)
+        response.setHeader('Cache-Control', 'private, max-age=86400')
+        response.setHeader('Content-Disposition', file.inline ? 'inline' : 'attachment')
+        response.end(file.data)
+      } catch (error) {
+        if (error instanceof MediaError) throw new HttpError(error.status, error.message)
+        throw error
+      }
+      return
+    }
     if (at === '/api/whatsapp/webhook' && method === 'GET') {
-      const config = loadWaConfig()
-      if (!config) return send(response, 503, { error: 'WhatsApp Cloud API no está configurada.' })
-      const challenge = verifyWebhook(config, url.searchParams)
+      const verifyToken = process.env.WA_VERIFY_TOKEN?.trim() || ''
+      if (!verifyToken) return send(response, 503, { error: 'WhatsApp Cloud API no está configurada.' })
+      const challenge = verifyWebhook({ verifyToken }, url.searchParams)
       if (!challenge) return send(response, 403, { error: 'Verificación rechazada.' })
       response.statusCode = 200
       response.setHeader('Content-Type', 'text/plain; charset=utf-8')
@@ -870,15 +899,20 @@ export function createApi(dataDir = path.resolve('data')) {
       const config = loadWaConfig()
       if (!config) return send(response, 503, { error: 'WhatsApp Cloud API no está configurada.' })
       const raw = await readBody(request, PUBLIC_LIMIT)
-      if (!validSignature(config, raw, request.headers['x-hub-signature-256'])) {
-        return send(response, 401, { error: 'Firma inválida.' })
-      }
       let payload: unknown
       try {
         payload = JSON.parse(raw)
       } catch {
-        throw new HttpError(400, 'La solicitud no es válida.')
+        payload = undefined
       }
+      if (!validSignature(config, raw, request.headers['x-hub-signature-256'])) {
+        // Meta a veces firma con una clave que no es la de la app. Solo con el permiso explícito se acepta
+        // por red (IP de Meta, que Nginx fija y el cliente no puede falsear) y por el número de la tienda.
+        const trusted = config.trustMetaNetwork === true && fromMetaNetwork(clientIp(request)) && isOwnWebhook(config, payload)
+        if (!trusted) return send(response, 401, { error: 'Firma inválida.' })
+        console.error('[whatsapp] aviso aceptado sin firma válida (red de Meta y número de la tienda)')
+      }
+      if (payload === undefined) throw new HttpError(400, 'La solicitud no es válida.')
       const current = readState()
       const merged = applyWebhook(current, payload as Parameters<typeof applyWebhook>[1])
       if (merged !== current) commit(merged, current)

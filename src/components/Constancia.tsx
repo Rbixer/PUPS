@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Dialog, Field } from './ui'
 import { SEXES } from '../catalog'
+import { constanciaPdf, jpegFromDataUrl, saveConstanciaPdf } from '../constanciaPdf'
 import { formatName, longDate, money, newId } from '../format'
 import { BEHAVIOR_AREAS, EGRESO_GROUPS, EGRESO_ITEMS, GROOMING_PACKAGES, INGRESO_ITEMS, packageLabel, PHOTO_SLOTS, readReport } from '../grooming'
 import { shrinkImage } from '../image'
@@ -36,6 +38,19 @@ function fromAppointment(appointment: Appointment): Draft {
   }
 }
 
+/** La hoja tiene que salir del diálogo fijo antes de imprimir; si no, el PDF del celular queda en blanco. */
+function armConstanciaPrint() {
+  const on = () => document.body.classList.add('constancia-print')
+  const off = () => {
+    document.body.classList.remove('constancia-print')
+    window.removeEventListener('beforeprint', on)
+    window.removeEventListener('afterprint', off)
+  }
+  on()
+  window.addEventListener('beforeprint', on)
+  window.addEventListener('afterprint', off)
+}
+
 function markLabel(value: Mark) {
   if (value === 'si') return 'Sí'
   if (value === 'no') return 'No'
@@ -63,6 +78,7 @@ export function Constancia({
   const [dirty, setDirty] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [printError, setPrintError] = useState('')
+  const [fileNote, setFileNote] = useState('')
   const report = draft.report
   const suggested = priceFor(report.plan, appointment.size)
   const missingPremium = report.plan === 'premium' ? premiumGaps(report) : []
@@ -74,8 +90,12 @@ export function Constancia({
       setPrintError(`Premium no se imprime todavía. Falta: ${gaps.join(', ')}.`)
       return
     }
-    const timer = window.setTimeout(() => window.print(), 300)
-    return () => window.clearTimeout(timer)
+    const frame = window.requestAnimationFrame(() => {
+      armConstanciaPrint()
+      void document.body.offsetHeight
+      window.print()
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [intent])
 
   const tutors = useMemo(() => {
@@ -166,24 +186,69 @@ export function Constancia({
       beforePhoto: report.photos[0] ?? '',
       afterPhoto: report.photos[2] ?? '',
     })
-    setSaveError(problem ?? '')
-    setSaved(!problem)
-    if (!problem) {
-      setDirty(false)
-      if (!report.ackToken) setDraft((current) => ({ ...current, report: { ...current.report, ackToken } }))
-    }
-    return !problem
+    flushSync(() => {
+      setSaveError(problem ?? '')
+      setSaved(!problem)
+      if (!problem) {
+        setDirty(false)
+        if (!report.ackToken) setDraft((current) => ({ ...current, report: { ...current.report, ackToken } }))
+      }
+    })
+    return problem ? false : ackToken
+  }
+
+  function blockedPremium() {
+    const gaps = report.plan === 'premium' ? premiumGaps(report) : []
+    if (!gaps.length) return false
+    setPrintError(`Premium no se imprime todavía. Falta: ${gaps.join(', ')}.`)
+    setFileNote('')
+    return true
   }
 
   function printSheet() {
-    const gaps = report.plan === 'premium' ? premiumGaps(report) : []
-    if (gaps.length) {
-      setPrintError(`Premium no se imprime todavía. Falta: ${gaps.join(', ')}.`)
-      return
-    }
+    if (blockedPremium()) return
     setPrintError('')
+    setFileNote('')
     if (!save()) return
-    window.setTimeout(() => window.print(), 60)
+    armConstanciaPrint()
+    void document.body.offsetHeight
+    window.print()
+  }
+
+  async function downloadSheet() {
+    if (blockedPremium()) return
+    setPrintError('')
+    setFileNote('')
+    const token = save()
+    if (!token) return
+    const filename = `Constancia-${appointment.folio}.pdf`
+    const bytes = constanciaPdf({
+      folio: appointment.folio,
+      when: `${longDate(appointment.date)} · ${appointment.time}`,
+      packageLabel: packageLabel(report),
+      petName: pet,
+      encargado: encargadoLines,
+      pet: [petTitle, petMeta, allergy].filter(Boolean),
+      voice: `Hoy fui a grooming. Me llamo ${pet} y me realizaron lo siguiente.`,
+      ingreso: checkLines(INGRESO_ITEMS, report.ingreso),
+      egreso: checkLines(EGRESO_ITEMS, report.egreso),
+      behavior: BEHAVIOR_AREAS.flatMap((area) => {
+        const current = report.behavior?.[area.key]
+        if (!current?.value && !current?.note?.trim()) return []
+        const mark = current.value === 'si' ? 'Con dificultad' : current.value === 'no' ? 'Sin dificultad' : ''
+        return [[mark, area.label, current.note?.trim()].filter(Boolean).join(' · ')]
+      }),
+      recommendations: report.recommendations,
+      photos: PHOTO_SLOTS.flatMap(({ label, index }) => {
+        const jpeg = jpegFromDataUrl(report.photos[index] ?? '')
+        return jpeg ? [{ label, jpeg }] : []
+      }),
+      conformeUrl: `${window.location.origin}/conforme/${token}`,
+      ackedLabel: report.ackedAt ? `El cliente marcó Conforme el ${longDate(report.ackedAt.slice(0, 10))}.` : '',
+    })
+    const result = await saveConstanciaPdf(bytes, filename)
+    if (result === 'cancel') return
+    setFileNote(result === 'shared' ? `PDF listo: ${filename}.` : `Se descargó ${filename}.`)
   }
 
   const pet = formatName(draft.petName) === '—' ? 'tu perrito' : formatName(draft.petName)
@@ -250,7 +315,10 @@ export function Constancia({
                   ))}
                 </select>
               </label>
-              <button type="button" className="btn btn-primary btn-sm" onClick={printSheet}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => void downloadSheet()}>
+                Descargar PDF
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={printSheet}>
                 Imprimir
               </button>
               {embedded ? null : (
@@ -496,8 +564,9 @@ export function Constancia({
           {report.ackedAt ? (
             <p className="banner">El cliente marcó Conforme el {longDate(report.ackedAt.slice(0, 10))}.</p>
           ) : report.ackToken ? (
-            <p className="hint">Al imprimir sale el QR para que el cliente marque Conforme en su celular.</p>
+            <p className="hint">Descargar PDF guarda el archivo en el celular. Imprimir abre Guardar como PDF, con el QR del conforme.</p>
           ) : null}
+          {fileNote ? <p className="banner">{fileNote}</p> : null}
           {saveError ? (
             <p className="form-error" role="alert">
               {saveError}
@@ -509,7 +578,10 @@ export function Constancia({
             <button type="submit" className="btn btn-ghost">
               Guardar
             </button>
-            <button type="button" className="btn btn-primary" onClick={printSheet}>
+            <button type="button" className="btn btn-primary" onClick={() => void downloadSheet()}>
+              Descargar PDF
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={printSheet}>
               Imprimir
             </button>
           </div>
@@ -646,6 +718,14 @@ function YesNo({
       />
     </div>
   )
+}
+
+function checkLines(items: readonly { key: string; label: string }[], values: Record<string, CheckItem>) {
+  return pickedItems(items, values).map((item) => {
+    const current = values[item.key]
+    const note = current?.note?.trim()
+    return [markLabel(current?.value ?? ''), item.label, note].filter(Boolean).join(' · ')
+  })
 }
 
 function pickedItems(items: readonly { key: string; label: string }[], values: Record<string, CheckItem>) {

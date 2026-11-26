@@ -240,6 +240,8 @@ export type CatalogItem = {
   /** Costo unitario promedio, se actualiza con cada compra. */
   cost?: number
   minStock?: number
+  /** Fecha de vencimiento (AAAA-MM-DD). Vacía si el producto no vence. */
+  expiresOn?: string
   /** Los insumos se controlan en inventario y no salen en la tienda. */
   kind?: ProductUse
   sku?: string
@@ -301,7 +303,7 @@ export type PurchaseLine = {
   description: string
   qty: number
   cost: number
-  /** Para venta o para uso en servicio, según el producto al momento de la compra. */
+  /** Para venta o para uso en servicio. En un pedido se confirma cuando llega la mercadería. */
   use?: ProductUse
 }
 
@@ -324,6 +326,10 @@ export type Purchase = {
   payableId?: string
   document?: string
   notes: string
+  /** Pedido al proveedor: `pedida` todavía no entra al inventario. Las compras con factura no llevan etapa. */
+  stage?: 'pedida' | 'recibida'
+  /** Día en que la mercadería entró al inventario. */
+  receivedOn?: string
 }
 
 export type PayablePayment = { id: string; date: string; amount: number; method: string; document: string }
@@ -485,6 +491,18 @@ export type WaDirection = 'in' | 'out'
 /** Estado de entrega según Cloud API. Los mensajes viejos pueden traer solo recibido/enviado. */
 export type WaDelivery = 'pendiente' | 'enviado' | 'entregado' | 'leido' | 'fallido' | 'recibido'
 
+export type WaMediaKind = 'image' | 'sticker' | 'audio' | 'video' | 'document'
+
+/** Archivo que mandó el cliente. El contenido se baja de Meta al abrirlo y se guarda en el servidor. */
+export type WaMedia = {
+  kind: WaMediaKind
+  id: string
+  mime?: string
+  name?: string
+  /** Nota de voz (audio grabado en el momento). */
+  voice?: boolean
+}
+
 export type WaMessage = {
   id: string
   direction: WaDirection
@@ -494,6 +512,9 @@ export type WaMessage = {
   /** Id que devolvió Meta; sirve para actualizar entregado/leído. */
   externalId?: string
   error?: string
+  media?: WaMedia
+  /** Enlace a un mapa cuando el cliente comparte su ubicación. */
+  link?: string
 }
 
 export type Conversation = {

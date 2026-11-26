@@ -1,10 +1,20 @@
 import { allows } from './access'
-import { count, isoDate, longDate, money } from './format'
+import { addDays, count, isoDate, longDate, money } from './format'
 import { closedOn, PETTY_CASH, PETTY_REFILL } from './ops'
 import { behindGoal, goalProgress, workersOf } from './payroll'
-import type { AppState, Permission, User } from './types'
+import { shelfOf } from './shop'
+import type { AppState, CatalogItem, Permission, User } from './types'
 
-export type AlertKind = 'citas' | 'caja' | 'whatsapp' | 'metas' | 'tareas'
+/** Días de anticipación para avisar que un producto está por vencer. */
+export const EXPIRY_WINDOW = 30
+
+/** Productos con existencia cuya fecha de vencimiento ya pasó o cae dentro de la ventana. */
+export function expiringStock(products: CatalogItem[] | undefined, today = isoDate()) {
+  const limit = addDays(today, EXPIRY_WINDOW)
+  return shelfOf(products).filter((item) => item.stock > 0 && Boolean(item.expiresOn) && item.expiresOn! <= limit)
+}
+
+export type AlertKind = 'citas' | 'caja' | 'whatsapp' | 'metas' | 'tareas' | 'inventario'
 
 export type Alert = {
   id: string
@@ -156,6 +166,26 @@ export function buildAlerts(state: AppState, user: User | null, today = isoDate(
     }
   }
 
+  if (can(user, 'inventario')) {
+    const expiring = expiringStock(state.products, today)
+    if (expiring.length) {
+      const expired = expiring.filter((item) => item.expiresOn! < today)
+      alerts.push({
+        id: 'inventario-vence',
+        kind: 'inventario',
+        title: expired.length
+          ? count(expired.length, 'producto vencido', 'productos vencidos')
+          : count(expiring.length, 'producto por vencer', 'productos por vencer'),
+        detail: expiring
+          .slice(0, 3)
+          .map((item) => `${item.name} · ${longDate(item.expiresOn!)}`)
+          .join(' · '),
+        to: '/admin/inventario',
+        tone: expired.length ? 'bad' : 'warn',
+      })
+    }
+  }
+
   if (can(user, 'tareas')) {
     const late = overdueTasks(state, today)
     if (late.length) {
@@ -212,6 +242,10 @@ export function alertBadges(state: AppState, user: User | null, today = isoDate(
   } else {
     const n = (state.tasks ?? []).filter((item) => item.assigneeId === user.id && item.status !== 'hecha').length
     if (n) badges['/admin/tareas'] = n
+  }
+  if (can(user, 'inventario')) {
+    const n = expiringStock(state.products, today).length
+    if (n) badges['/admin/inventario'] = n
   }
   if (can(user, 'planilla') || can(user, 'equipo') || can(user, 'estadisticas')) {
     const n = workersBehind(state, today).length

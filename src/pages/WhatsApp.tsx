@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { EmojiPicker } from '../components/EmojiPicker'
 import { Field, Flash } from '../components/ui'
-import { digits, formatName } from '../format'
+import { Linkified, MediaView } from '../components/WaMedia'
+import { MEDIA_LABEL, digits, formatName } from '../format'
 import { useStore } from '../store'
 import type { WaDelivery } from '../types'
 
@@ -24,12 +26,14 @@ const STATUS_LABEL: Record<WaDelivery, string> = {
 }
 
 export function WhatsApp() {
-  const { state, allows, updateSettings, ensureThread, sendMessage, waCloudStatus, markRead } = useStore()
+  const { state, allows, updateSettings, ensureThread, sendMessage, waCloudStatus, waMedia, markRead } = useStore()
   const canSend = allows('whatsapp_enviar')
   const [params, setParams] = useSearchParams()
   const [line, setLine] = useState(state.settings.whatsapp)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const field = useRef<HTMLTextAreaElement>(null)
+  const log = useRef<HTMLDivElement>(null)
   const [savedLine, setSavedLine] = useState(false)
   const [lineTouched, setLineTouched] = useState(false)
   const [sending, setSending] = useState(false)
@@ -81,6 +85,24 @@ export function WhatsApp() {
     if (active && active.unread > 0) markRead(active.id)
   }, [active, markRead])
 
+  const shown = active?.messages.length ?? 0
+  useEffect(() => {
+    const box = log.current
+    if (box) box.scrollTop = box.scrollHeight
+  }, [active?.id, shown])
+
+  function insertEmoji(emoji: string) {
+    const input = field.current
+    const start = input?.selectionStart ?? draft.length
+    const end = input?.selectionEnd ?? draft.length
+    setDraft(draft.slice(0, start) + emoji + draft.slice(end))
+    const caret = start + emoji.length
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(caret, caret)
+    })
+  }
+
   const lineReady = digits(state.settings.whatsapp).length >= 8
   const apiReady = Boolean(cloud?.configured)
 
@@ -104,7 +126,7 @@ export function WhatsApp() {
             En el servidor configura <code>WA_TOKEN</code>, <code>WA_PHONE_NUMBER_ID</code>, <code>WA_VERIFY_TOKEN</code> y <code>WA_APP_SECRET</code>.
           </li>
           <li>
-            Webhook: <code>https://tu-dominio/api/whatsapp/webhook</code> con el campo <code>messages</code>.
+            Webhook: <code>{`${window.location.origin}/api/whatsapp/webhook`}</code> con el campo <code>messages</code>.
           </li>
           <li>
             Aprueba la plantilla <code>{cloud?.template ?? 'reserva_nueva'}</code> en español para reservas y mensajes fuera de 24 h.
@@ -190,11 +212,21 @@ export function WhatsApp() {
                 </span>
               </div>
             </header>
-            <div className="wa-log">
+            <div className="wa-log" ref={log}>
               {active.messages.length === 0 ? <p className="empty">Este hilo todavía no tiene mensajes.</p> : null}
               {active.messages.map((message) => (
                 <article key={message.id} className={message.direction === 'out' ? 'bubble out' : 'bubble in'}>
-                  <p>{message.body}</p>
+                  {message.media ? <MediaView media={message.media} load={waMedia} /> : null}
+                  {message.media && message.body === MEDIA_LABEL[message.media.voice ? 'voice' : message.media.kind] ? null : (
+                    <p>
+                      <Linkified text={message.body} />
+                    </p>
+                  )}
+                  {message.link ? (
+                    <a className="wa-place" href={message.link} target="_blank" rel="noopener noreferrer">
+                      Abrir ubicación en el mapa
+                    </a>
+                  ) : null}
                   <time className="num">
                     {clock(message.at)} · {STATUS_LABEL[message.status] ?? message.status}
                     {message.error ? ` · ${message.error}` : ''}
@@ -220,7 +252,9 @@ export function WhatsApp() {
                 setNotice('Mensaje enviado.')
               }}
             >
+              <EmojiPicker onPick={insertEmoji} disabled={!canSend || !apiReady || sending} />
               <textarea
+                ref={field}
                 value={draft}
                 rows={2}
                 placeholder={!canSend ? 'Solo lectura: tu usuario no puede enviar mensajes' : apiReady ? 'Escribe la respuesta' : 'Configura la API en el servidor para enviar'}

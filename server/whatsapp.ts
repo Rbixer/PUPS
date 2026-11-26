@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { digits, newId, normalizePhone } from '../src/format'
-import type { AppState, Conversation, WaDelivery, WaMessage } from '../src/types'
+import fs from 'node:fs'
+import path from 'node:path'
+import { MEDIA_LABEL, digits, newId, normalizePhone } from '../src/format'
+import type { AppState, Conversation, WaDelivery, WaMedia, WaMediaKind, WaMessage } from '../src/types'
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
 const WINDOW_MS = 24 * 60 * 60 * 1000
@@ -12,6 +14,8 @@ export type WaConfig = {
   verifyToken: string
   appSecret: string
   template: string
+  /** Si la firma de Meta no coincide, acepta avisos que vengan de sus redes y traigan el número de la tienda. */
+  trustMetaNetwork?: boolean
 }
 
 export function loadWaConfig(env: NodeJS.ProcessEnv = process.env): WaConfig | null {
@@ -20,7 +24,81 @@ export function loadWaConfig(env: NodeJS.ProcessEnv = process.env): WaConfig | n
   const verifyToken = env.WA_VERIFY_TOKEN?.trim() ?? ''
   const appSecret = env.WA_APP_SECRET?.trim() ?? ''
   if (!token || !phoneNumberId || !verifyToken || !appSecret) return null
-  return { token, phoneNumberId, verifyToken, appSecret, template: env.WA_TEMPLATE?.trim() || RESERVA_TEMPLATE }
+  return {
+    token,
+    phoneNumberId,
+    verifyToken,
+    appSecret,
+    template: env.WA_TEMPLATE?.trim() || RESERVA_TEMPLATE,
+    trustMetaNetwork: env.WA_TRUST_META_NETWORK?.trim() === '1',
+  }
+}
+
+/** Redes de Meta (AS32934). Se usan solo cuando la firma no se puede comprobar. */
+const META_NETWORKS = [
+  '31.13.24.0/21',
+  '31.13.64.0/18',
+  '31.13.96.0/19',
+  '45.64.40.0/22',
+  '57.141.0.0/19',
+  '57.141.32.0/23',
+  '57.144.0.0/15',
+  '66.220.144.0/20',
+  '69.63.176.0/20',
+  '69.171.224.0/19',
+  '74.119.76.0/22',
+  '102.132.96.0/20',
+  '103.4.96.0/22',
+  '129.134.0.0/16',
+  '147.75.208.0/20',
+  '157.240.0.0/16',
+  '163.70.128.0/17',
+  '163.77.128.0/17',
+  '173.252.64.0/18',
+  '179.60.192.0/22',
+  '185.60.216.0/22',
+  '185.89.216.0/22',
+  '204.15.20.0/22',
+]
+
+function ipv4Number(ip: string) {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return null
+  let value = 0
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null
+    const octet = Number(part)
+    if (octet > 255) return null
+    value = value * 256 + octet
+  }
+  return value
+}
+
+export function fromMetaNetwork(ip: string) {
+  const value = ipv4Number(ip.replace(/^::ffff:/, ''))
+  if (value === null) return false
+  return META_NETWORKS.some((entry) => {
+    const [base, bits] = entry.split('/')
+    const start = ipv4Number(base)
+    if (start === null) return false
+    const size = 2 ** (32 - Number(bits))
+    return value >= start && value < start + size
+  })
+}
+
+/** El aviso es de WhatsApp y todos sus eventos son del número de la tienda. */
+export function isOwnWebhook(config: Pick<WaConfig, 'phoneNumberId'>, payload: unknown) {
+  if (!payload || typeof payload !== 'object') return false
+  const data = payload as { object?: unknown; entry?: { changes?: { value?: { metadata?: { phone_number_id?: unknown } } }[] }[] }
+  if (data.object !== 'whatsapp_business_account' || !Array.isArray(data.entry) || !data.entry.length) return false
+  let events = 0
+  for (const entry of data.entry) {
+    for (const change of entry.changes ?? []) {
+      if (String(change.value?.metadata?.phone_number_id ?? '') !== config.phoneNumberId) return false
+      events += 1
+    }
+  }
+  return events > 0
 }
 
 export function waStatus(config: WaConfig | null) {
@@ -31,7 +109,7 @@ export function waStatus(config: WaConfig | null) {
   }
 }
 
-export function verifyWebhook(config: WaConfig, params: URLSearchParams) {
+export function verifyWebhook(config: { verifyToken: string }, params: URLSearchParams) {
   const mode = params.get('hub.mode')
   const token = params.get('hub.verify_token')
   const challenge = params.get('hub.challenge')
@@ -197,12 +275,86 @@ const STATUS_MAP: Record<string, WaDelivery> = {
   failed: 'fallido',
 }
 
+type MediaRef = { id?: string; mime_type?: string; caption?: string; filename?: string; voice?: boolean }
+
+type InboundItem = {
+  id?: string
+  from?: string
+  timestamp?: string
+  type?: string
+  text?: { body?: string }
+  image?: MediaRef
+  video?: MediaRef
+  audio?: MediaRef
+  sticker?: MediaRef
+  document?: MediaRef
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string }
+  contacts?: { name?: { formatted_name?: string }; phones?: { phone?: string }[] }[]
+  reaction?: { emoji?: string }
+  interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } }
+  button?: { text?: string }
+}
+
+const MEDIA_ID = /^[A-Za-z0-9_-]{1,64}$/
+const MEDIA_KINDS: WaMediaKind[] = ['image', 'sticker', 'audio', 'video', 'document']
+
+function clean(value: unknown, max = 500) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+/** Convierte un mensaje entrante de cualquier tipo en algo que se pueda ver en el chat. */
+export function describeInbound(item: InboundItem): { body: string; media?: WaMedia; link?: string } | null {
+  const type = item.type ?? 'text'
+  if (type === 'text') {
+    const body = clean(item.text?.body, 4096)
+    return body ? { body } : null
+  }
+  if ((MEDIA_KINDS as string[]).includes(type)) {
+    const kind = type as WaMediaKind
+    const ref = item[kind]
+    const id = clean(ref?.id, 64)
+    if (!ref || !MEDIA_ID.test(id)) return { body: `${MEDIA_LABEL[kind]} (no se pudo recibir el archivo)` }
+    const voice = kind === 'audio' && ref.voice === true
+    const media: WaMedia = { kind, id }
+    const mime = clean(ref.mime_type, 100)
+    const name = clean(ref.filename, 120)
+    if (mime) media.mime = mime
+    if (name) media.name = name
+    if (voice) media.voice = true
+    const caption = clean(ref.caption, 1024)
+    return { body: caption || MEDIA_LABEL[voice ? 'voice' : kind], media }
+  }
+  if (type === 'location' && item.location) {
+    const { latitude, longitude } = item.location
+    const place = [clean(item.location.name, 120), clean(item.location.address, 200)].filter(Boolean).join(' · ')
+    const link =
+      Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? `https://www.google.com/maps?q=${latitude},${longitude}`
+        : undefined
+    return { body: `📍 Ubicación${place ? `: ${place}` : ''}`, ...(link ? { link } : {}) }
+  }
+  if (type === 'contacts') {
+    const names = (item.contacts ?? []).map((contact) => clean(contact.name?.formatted_name, 80)).filter(Boolean)
+    const phones = (item.contacts ?? []).flatMap((contact) => (contact.phones ?? []).map((phone) => clean(phone.phone, 30))).filter(Boolean)
+    return { body: `👤 Contacto: ${[...names, ...phones].join(' · ') || 'compartido'}` }
+  }
+  if (type === 'reaction') {
+    const emoji = clean(item.reaction?.emoji, 16)
+    return emoji ? { body: `${emoji} reaccionó a un mensaje` } : null
+  }
+  if (type === 'interactive' || type === 'button') {
+    const title = clean(item.interactive?.button_reply?.title ?? item.interactive?.list_reply?.title ?? item.button?.text, 200)
+    return title ? { body: title } : null
+  }
+  return { body: 'Mensaje que este chat no puede mostrar. Ábrelo en WhatsApp.' }
+}
+
 type WebhookPayload = {
   entry?: {
     changes?: {
       value?: {
         contacts?: { wa_id?: string; profile?: { name?: string } }[]
-        messages?: { id?: string; from?: string; timestamp?: string; type?: string; text?: { body?: string } }[]
+        messages?: InboundItem[]
         statuses?: { id?: string; status?: string; timestamp?: string; errors?: { message?: string }[] }[]
       }
     }[]
@@ -219,9 +371,8 @@ export function applyWebhook(state: AppState, payload: WebhookPayload): AppState
       const contactName = value.contacts?.[0]?.profile?.name ?? ''
       for (const item of value.messages ?? []) {
         if (!item.id || !item.from) continue
-        if (item.type && item.type !== 'text') continue
-        const body = item.text?.body?.trim()
-        if (!body) continue
+        const described = describeInbound(item)
+        if (!described) continue
         const at = item.timestamp ? new Date(Number(item.timestamp) * 1000).toISOString() : new Date().toISOString()
         const existing = findThread(next.conversations, item.from)
         if (existing?.messages.some((message) => message.externalId === item.id)) continue
@@ -230,10 +381,12 @@ export function applyWebhook(state: AppState, payload: WebhookPayload): AppState
         const message: WaMessage = {
           id: newId(),
           direction: 'in',
-          body,
+          body: described.body,
           at,
           status: 'recibido',
           externalId: item.id,
+          ...(described.media ? { media: described.media } : {}),
+          ...(described.link ? { link: described.link } : {}),
         }
         next = pushMessage(next, prepared.thread.id, message, true)
       }
@@ -301,5 +454,65 @@ export async function dispatchOutbound(
     return { result: { ok: true, externalId, mode: useTemplate ? 'template' : 'text' }, state: next }
   } catch (error) {
     return { result: { ok: false, error: error instanceof Error ? error.message : 'No se pudo enviar por WhatsApp.' }, state }
+  }
+}
+
+const MEDIA_MAX = 16 * 1024 * 1024
+const MEDIA_HOSTS = /(^|\.)(fbsbx\.com|fbcdn\.net|whatsapp\.net|whatsapp\.com|facebook\.com)$/
+const INLINE_MIME = /^(image\/(jpeg|png|webp|gif)|audio\/(ogg|mpeg|mp4|aac|amr|opus|webm)|video\/(mp4|3gpp|webm)|application\/pdf)$/
+
+export class MediaError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+export type WaFile = { data: Buffer; mime: string; inline: boolean }
+
+function describeMime(raw: string) {
+  const mime = raw.split(';')[0]?.trim().toLowerCase() ?? ''
+  return { mime: INLINE_MIME.test(mime) ? mime : 'application/octet-stream', inline: INLINE_MIME.test(mime) }
+}
+
+/**
+ * Trae el archivo de un mensaje desde Meta y lo deja en disco: Meta borra los archivos a los pocos días
+ * y así el historial del chat sigue mostrándolos.
+ */
+export async function loadWaMedia(
+  config: Pick<WaConfig, 'token'> | null,
+  id: string,
+  dir: string,
+  fetcher: typeof fetch = fetch,
+): Promise<WaFile> {
+  if (!MEDIA_ID.test(id)) throw new MediaError(404, 'Archivo no encontrado.')
+  const data = path.join(dir, `${id}.bin`)
+  const meta = path.join(dir, `${id}.mime`)
+  if (fs.existsSync(data) && fs.existsSync(meta)) {
+    return { data: fs.readFileSync(data), ...describeMime(fs.readFileSync(meta, 'utf8')) }
+  }
+  if (!config) throw new MediaError(503, 'WhatsApp no está conectado.')
+  const headers = { authorization: `Bearer ${config.token}` }
+  try {
+    const info = await fetcher(`${GRAPH}/${id}`, { headers, signal: AbortSignal.timeout(15000) })
+    if (!info.ok) throw new MediaError(404, 'Meta ya no tiene este archivo. Ábrelo en WhatsApp.')
+    const found = (await info.json()) as { url?: string; mime_type?: string; file_size?: number }
+    const url = found.url ? new URL(found.url) : null
+    if (!url || url.protocol !== 'https:' || !MEDIA_HOSTS.test(url.hostname)) throw new MediaError(502, 'Meta devolvió una dirección no válida.')
+    if (typeof found.file_size === 'number' && found.file_size > MEDIA_MAX) throw new MediaError(413, 'El archivo es muy pesado para verlo aquí. Ábrelo en WhatsApp.')
+    const file = await fetcher(url, { headers, signal: AbortSignal.timeout(30000) })
+    if (!file.ok) throw new MediaError(502, 'No se pudo bajar el archivo de Meta.')
+    const bytes = Buffer.from(await file.arrayBuffer())
+    if (bytes.length > MEDIA_MAX) throw new MediaError(413, 'El archivo es muy pesado para verlo aquí. Ábrelo en WhatsApp.')
+    const mime = found.mime_type ?? file.headers.get('content-type') ?? ''
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(data, bytes)
+    fs.writeFileSync(meta, mime)
+    return { data: bytes, ...describeMime(mime) }
+  } catch (error) {
+    if (error instanceof MediaError) throw error
+    throw new MediaError(502, 'No se pudo bajar el archivo de Meta.')
   }
 }

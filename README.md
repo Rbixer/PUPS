@@ -40,14 +40,14 @@ Servidor:
 
 ## Despliegue (Lightsail, Ubuntu + Nginx + systemd)
 
-Producción: `https://44-204-98-229.sslip.io`. El servicio `pups` corre en `127.0.0.1:8080` detrás de Nginx con HTTPS (certbot renueva solo).
+Producción: `https://3-239-70-231.sslip.io`. El servicio `pups` corre en `127.0.0.1:8080` detrás de Nginx con HTTPS (certbot renueva solo).
 
 ```bash
 # 1. Compilar en tu equipo, SIEMPRE con la demostración apagada
 VITE_DEMO=false npm run build
 
 # 2. Subir y reiniciar (ajusta la llave y la dirección)
-K=~/Downloads/krodas.pem; H=ubuntu@44.204.98.229
+K=~/Downloads/pups.pem; H=ubuntu@3.239.70.231
 ssh -i $K $H 'rm -rf /tmp/pups-release && mkdir -p /tmp/pups-release'
 scp -q -i $K -r dist dist-server $H:/tmp/pups-release/
 ssh -i $K $H 'set -e; sudo rm -rf /opt/pups/dist /opt/pups/dist-server; sudo cp -r /tmp/pups-release/dist /tmp/pups-release/dist-server /opt/pups/; sudo chown -R root:root /opt/pups; sudo systemctl restart pups; rm -rf /tmp/pups-release; sleep 1; systemctl is-active pups; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/public'

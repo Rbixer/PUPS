@@ -11,7 +11,19 @@ export function Egresos() {
   const egresos = state.movements.filter((item) => item.type === 'egreso')
   const visits = [...state.appointments].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
   const [visitId, setVisitId] = useState<string | null>(visits[0]?.id ?? null)
-  const visit = visits.find((item) => item.id === visitId) ?? visits[0] ?? null
+  const [query, setQuery] = useState('')
+  const needle = query.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const visible = needle
+    ? visits.filter((item) =>
+        [item.petName, item.clientName, item.phone, item.breed, String(item.folio), item.date, item.time]
+          .join(' ')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .includes(needle),
+      )
+    : visits
+  const visit = visible.find((item) => item.id === visitId) ?? visible[0] ?? null
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [doc, setDoc] = useState<Movement | null>(null)
@@ -37,8 +49,21 @@ export function Egresos() {
         <p className="empty">Todavía no hay visitas para armar una constancia.</p>
       ) : (
         <>
+          <form className="filters filters-search no-print" onSubmit={(event) => event.preventDefault()}>
+            <Field label="Buscar visita">
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Mascota, tutor, teléfono o número de visita"
+              />
+            </Field>
+          </form>
+          {visible.length === 0 ? (
+            <p className="empty no-print">Ninguna visita coincide con la búsqueda.</p>
+          ) : (
           <div className="visit-pick" role="group" aria-label="Visitas">
-            {visits.map((item) => (
+            {visible.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -47,11 +72,12 @@ export function Egresos() {
               >
                 <strong>{formatName(item.petName)}</strong>
                 <span>
-                  #{item.folio} · {longDate(item.date)} · {item.time}
+                  {formatName(item.clientName)} · #{item.folio} · {longDate(item.date)} · {item.time}
                 </span>
               </button>
             ))}
           </div>
+          )}
           {visit ? (
             <Constancia
               key={visit.id}

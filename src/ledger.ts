@@ -192,7 +192,7 @@ export function buildJournal(state: AppState): Entry[] {
   }
 
   for (const purchase of state.purchases ?? []) {
-    if (purchase.terms !== 'credito') continue
+    if (purchase.stage || purchase.terms !== 'credito') continue
     push({
       id: `compra-${purchase.id}`,
       date: purchase.date,
