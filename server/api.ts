@@ -20,6 +20,7 @@ import {
   fromMetaNetwork,
   isOwnWebhook,
   loadWaConfig,
+  webhookReceipt,
   loadWaMedia,
   MediaError,
   readOutboundImage,
@@ -914,8 +915,12 @@ export function createApi(dataDir = path.resolve('data')) {
       if (!validSignature(config, raw, request.headers['x-hub-signature-256'])) {
         // Meta a veces firma con una clave que no es la de la app. Solo con el permiso explícito se acepta
         // por red (IP de Meta, que Nginx fija y el cliente no puede falsear) y por el número de la tienda.
-        const trusted = config.trustMetaNetwork === true && fromMetaNetwork(clientIp(request)) && isOwnWebhook(config, payload)
-        if (!trusted) return send(response, 401, { error: 'Firma inválida.' })
+        const fromMeta = config.trustMetaNetwork === true && fromMetaNetwork(clientIp(request))
+        const trusted = fromMeta && isOwnWebhook(config, payload)
+        if (!trusted) {
+          if (fromMeta) console.error('[whatsapp] aviso rechazado', webhookReceipt(payload))
+          return send(response, 401, { error: 'Firma inválida.' })
+        }
         console.error('[whatsapp] aviso aceptado sin firma válida (red de Meta y número de la tienda)')
       }
       if (payload === undefined) throw new HttpError(400, 'La solicitud no es válida.')

@@ -11,6 +11,8 @@ export const RESERVA_TEMPLATE = 'reserva_nueva'
 export type WaConfig = {
   token: string
   phoneNumberId: string
+  /** Cuenta de WhatsApp. Algunos avisos del celular traen esta cuenta y no el id del número. */
+  wabaId: string
   verifyToken: string
   appSecret: string
   template: string
@@ -27,6 +29,7 @@ export function loadWaConfig(env: NodeJS.ProcessEnv = process.env): WaConfig | n
   return {
     token,
     phoneNumberId,
+    wabaId: env.WA_WABA_ID?.trim() ?? '',
     verifyToken,
     appSecret,
     template: env.WA_TEMPLATE?.trim() || RESERVA_TEMPLATE,
@@ -86,19 +89,70 @@ export function fromMetaNetwork(ip: string) {
   })
 }
 
-/** El aviso es de WhatsApp y todos sus eventos son del número de la tienda. */
-export function isOwnWebhook(config: Pick<WaConfig, 'phoneNumberId'>, payload: unknown) {
-  if (!payload || typeof payload !== 'object') return false
-  const data = payload as { object?: unknown; entry?: { changes?: { value?: { metadata?: { phone_number_id?: unknown } } }[] }[] }
-  if (data.object !== 'whatsapp_business_account' || !Array.isArray(data.entry) || !data.entry.length) return false
+type WebhookChange = {
+  field?: unknown
+  value?: {
+    metadata?: { phone_number_id?: unknown }
+    message_echoes?: unknown[]
+    messages?: unknown[]
+    statuses?: unknown[]
+  }
+}
+
+type WebhookEntry = { id?: unknown; changes?: WebhookChange[] }
+
+function asWebhook(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null
+  const data = payload as { object?: unknown; entry?: WebhookEntry[] }
+  if (!Array.isArray(data.entry)) return { object: data.object, entry: [] as WebhookEntry[] }
+  return { object: data.object, entry: data.entry }
+}
+
+/** Resumen del aviso, sin el texto de los mensajes. */
+export function webhookReceipt(payload: unknown) {
+  const data = asWebhook(payload)
+  if (!data) return 'sin cuerpo'
+  const parts = data.entry.map((entry) => {
+    const fields = (entry.changes ?? []).map((change) => {
+      const phone = change.value?.metadata?.phone_number_id
+      const echoes = Array.isArray(change.value?.message_echoes) ? change.value.message_echoes.length : 0
+      const inbound = Array.isArray(change.value?.messages) ? change.value.messages.length : 0
+      const statuses = Array.isArray(change.value?.statuses) ? change.value.statuses.length : 0
+      return `${String(change.field ?? '?')} phone=${phone ?? '-'} in=${inbound} eco=${echoes} st=${statuses}`
+    })
+    return `entry=${entry.id ?? '-'} ${fields.join(',') || 'vacio'}`
+  })
+  return `${String(data.object ?? 'sin objeto')} ${parts.join(' | ') || 'sin entry'}`
+}
+
+function isEchoChange(change: WebhookChange) {
+  const field = String(change.field ?? '')
+  return field === 'smb_message_echoes' || field === 'message_echoes' || Array.isArray(change.value?.message_echoes)
+}
+
+/**
+ * El aviso es de WhatsApp y es de esta tienda.
+ * Un eco del celular a veces no trae el id del número: basta la cuenta o el campo del eco.
+ * Si trae el id de otro número, se rechaza.
+ */
+export function isOwnWebhook(config: { phoneNumberId: string; wabaId?: string }, payload: unknown) {
+  const data = asWebhook(payload)
+  if (!data || data.object !== 'whatsapp_business_account' || !data.entry.length) return false
   let events = 0
+  let ownPhone = false
+  let ownAccount = false
+  let echo = false
   for (const entry of data.entry) {
+    if (config.wabaId && String(entry.id ?? '') === config.wabaId) ownAccount = true
     for (const change of entry.changes ?? []) {
-      if (String(change.value?.metadata?.phone_number_id ?? '') !== config.phoneNumberId) return false
       events += 1
+      const phone = String(change.value?.metadata?.phone_number_id ?? '')
+      if (phone && phone !== config.phoneNumberId) return false
+      if (phone === config.phoneNumberId) ownPhone = true
+      if (isEchoChange(change)) echo = true
     }
   }
-  return events > 0
+  return events > 0 && (ownPhone || ownAccount || echo)
 }
 
 export function waStatus(config: WaConfig | null) {
@@ -491,7 +545,7 @@ export function applyWebhook(state: AppState, payload: WebhookPayload): AppState
         next = pushMessage(next, prepared.thread.id, message, true)
       }
       for (const item of value.message_echoes ?? []) {
-        const phone = item.to?.trim() ?? ''
+        const phone = item.to?.trim() || value.contacts?.find((entry) => entry.wa_id)?.wa_id?.trim() || ''
         if (!item.id || !phone || !ECHO_TYPES.has(item.type ?? '')) continue
         const described = describeInbound(item)
         if (!described) continue

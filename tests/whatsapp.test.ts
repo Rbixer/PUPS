@@ -16,6 +16,7 @@ import {
   IMAGE_MAX,
   isOwnWebhook,
   loadWaConfig,
+  webhookReceipt,
   loadWaMedia,
   MediaError,
   readOutboundImage,
@@ -28,6 +29,7 @@ import {
 const config: WaConfig = {
   token: 'token',
   phoneNumberId: '123',
+  wabaId: '',
   verifyToken: 'verify-me',
   appSecret: 'secret',
   template: 'reserva_nueva',
@@ -99,6 +101,9 @@ describe('whatsapp cloud', () => {
     const own = { phoneNumberId: '1027451207127204' }
     const event = (phone: string) => ({ value: { metadata: { phone_number_id: phone } } })
     expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ changes: [event('1027451207127204')] }] })).toBe(true)
+    expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ id: '1303233661713926', changes: [{ field: 'smb_message_echoes', value: {} }] }] })).toBe(true)
+    expect(isOwnWebhook({ ...own, wabaId: '1303233661713926' }, { object: 'whatsapp_business_account', entry: [{ id: '1303233661713926', changes: [{ field: 'account_update', value: {} }] }] })).toBe(true)
+    expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ id: '999', changes: [{ field: 'account_update', value: {} }] }] })).toBe(false)
     expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ changes: [event('123456123')] }] })).toBe(false)
     expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ changes: [event('1027451207127204'), event('999')] }] })).toBe(false)
     expect(isOwnWebhook(own, { object: 'page', entry: [{ changes: [event('1027451207127204')] }] })).toBe(false)
@@ -106,6 +111,13 @@ describe('whatsapp cloud', () => {
     expect(isOwnWebhook(own, { object: 'whatsapp_business_account', entry: [{ changes: [] }] })).toBe(false)
     expect(isOwnWebhook(own, undefined)).toBe(false)
     expect(isOwnWebhook(own, 'texto')).toBe(false)
+    const receipt = webhookReceipt({
+      object: 'whatsapp_business_account',
+      entry: [{ id: '1303233661713926', changes: [{ field: 'smb_message_echoes', value: { message_echoes: [{ text: { body: 'Quedan reservados' } }] } }] }],
+    })
+    expect(receipt).toContain('smb_message_echoes')
+    expect(receipt).toContain('eco=1')
+    expect(receipt).not.toContain('Quedan reservados')
   })
 
   it('ingesta mensajes entrantes, actualiza estados y respeta la ventana de 24 h', () => {
@@ -187,7 +199,7 @@ describe('whatsapp cloud', () => {
     })
     const thread = next.conversations.find((item) => item.phone.includes('38269336'))!
     expect(thread.unread).toBe(2)
-    expect(thread.messages.map((item) => item.externalId)).toEqual(['wamid.in-a', 'wamid.echo', 'wamid.in-b'])
+    expect(thread.messages.map((item) => item.externalId)).toEqual(['wamid.in-a', 'wamid.echo', 'wamid.no-to', 'wamid.in-b'])
     expect(thread.messages[1]).toMatchObject({ direction: 'out', body: 'Quedan reservados', status: 'enviado' })
     expect(next.conversations.some((item) => item.phone.includes('31966123'))).toBe(false)
   })
