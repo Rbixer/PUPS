@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { allows, settingAllowed } from '../src/access'
 import { BOOKABLE_SERVICES } from '../src/catalog'
-import { isoDate, longDate, newId, normalizePhone, publicSiteContent } from '../src/format'
+import { isoDate, longDate, MEDIA_LABEL, newId, normalizePhone, publicSiteContent } from '../src/format'
 import { closedOn, nextFolio, placeOrder, withCounters } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { visibleCatalog } from '../src/shop'
@@ -13,6 +13,8 @@ import { BOOKING_SLOTS, resolvePetCode, slotPassed, slotTaken, visitMinutes } fr
 import {
   appendOutbound,
   applyWebhook,
+  cacheWaMedia,
+  deliverImage,
   dispatchOutbound,
   findThread,
   fromMetaNetwork,
@@ -20,9 +22,11 @@ import {
   loadWaConfig,
   loadWaMedia,
   MediaError,
+  readOutboundImage,
   validSignature,
   verifyWebhook,
   waStatus,
+  withinServiceWindow,
 } from './whatsapp'
 
 type Session = { userId: string; expires: number; remember: boolean }
@@ -35,6 +39,8 @@ const REMEMBER_MS = 30 * 24 * HOUR
 const MAX_TRIES = 5
 const PRIVATE_LIMIT = 40 * 1024 * 1024
 const PUBLIC_LIMIT = 64 * 1024
+/** Una foto de 5 MB en base64 cabe aquí. Nginx del sitio ya acepta cuerpos más grandes. */
+const IMAGE_LIMIT = 8 * 1024 * 1024
 const PUBLIC_WINDOW = 10 * 60_000
 const PUBLIC_MAX = 20
 const KEEP_BACKUPS = 30
@@ -917,6 +923,49 @@ export function createApi(dataDir = path.resolve('data')) {
       const merged = applyWebhook(current, payload as Parameters<typeof applyWebhook>[1])
       if (merged !== current) commit(merged, current)
       return send(response, 200, { ok: true })
+    }
+    if (at === '/api/whatsapp/image' && method === 'POST') {
+      const { user, state: current } = requireUser(request)
+      if (!allows(user, 'whatsapp_enviar')) throw new HttpError(403, 'No tienes permiso para enviar mensajes de WhatsApp.')
+      const config = loadWaConfig()
+      if (!config) throw new HttpError(503, 'WhatsApp Cloud API no está configurada en el servidor.')
+      const body = await readJsonBody<{ conversationId?: string; caption?: string; image?: string }>(request, IMAGE_LIMIT)
+      let image: ReturnType<typeof readOutboundImage>
+      try {
+        image = readOutboundImage(typeof body.image === 'string' ? body.image : '')
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : 'La imagen no se pudo leer.')
+      }
+      const caption = text(body.caption, 1024)
+      const thread = body.conversationId ? current.conversations.find((item) => item.id === body.conversationId) : undefined
+      if (!thread) throw new HttpError(400, 'Elige una conversación.')
+      if (!withinServiceWindow(thread)) {
+        throw new HttpError(400, 'Han pasado más de 24 h desde el último mensaje del cliente. WhatsApp no deja enviar una foto fuera de esa ventana.')
+      }
+      let delivered: { externalId: string; mediaId: string }
+      try {
+        delivered = await deliverImage(config, { to: thread.phone, caption, image })
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : 'No se pudo enviar la imagen.')
+      }
+      try {
+        cacheWaMedia(path.join(dataDir, 'wa-media'), delivered.mediaId, image.data, image.mime)
+      } catch (error) {
+        console.error('[whatsapp] no se pudo guardar la foto enviada', error)
+      }
+      const fresh = readState()
+      commit(
+        appendOutbound(fresh, {
+          phone: thread.phone,
+          name: thread.name,
+          petName: thread.petName,
+          body: caption || MEDIA_LABEL.image,
+          externalId: delivered.externalId,
+          media: { kind: 'image', id: delivered.mediaId, mime: image.mime },
+        }),
+        fresh,
+      )
+      return send(response, 200, { state: viewFor(user, readState()) })
     }
     if (at === '/api/whatsapp/send' && method === 'POST') {
       const { user, state: current } = requireUser(request)

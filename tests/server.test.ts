@@ -445,4 +445,86 @@ describe('servidor', () => {
     const sent = await call('POST', '/api/whatsapp/send', { conversationId: 'x', text: 'hola' }, reader.token)
     expect(sent.status).toBe(403)
   })
+
+  it('manda una foto jpg al hilo abierto y la deja lista para verla', async () => {
+    const admin = await login('admin')
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')
+    expect((await call('POST', '/api/whatsapp/image', { conversationId: 'wa-nube', image: jpeg })).status).toBe(401)
+    const reader = await limitedUser('soloLeerFoto', ['whatsapp'])
+    expect((await call('POST', '/api/whatsapp/image', { conversationId: 'wa-nube', image: jpeg }, reader.token)).status).toBe(403)
+
+    process.env.WA_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '100'
+    process.env.WA_VERIFY_TOKEN = 'verify-me'
+    process.env.WA_APP_SECRET = 'secret'
+    const original = globalThis.fetch
+    try {
+      expect((await call('POST', '/api/whatsapp/image', { conversationId: 'wa-nube', image: Buffer.from('GIF89a').toString('base64') }, admin.token)).status).toBe(400)
+      const seen = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+      const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+      const closed = await call(
+        'PUT',
+        '/api/state',
+        { base: seen.revision ?? 0, state: { ...seen, conversations: seen.conversations.map((item) => (item.id === 'wa-luna' ? { ...item, lastInboundAt: old } : item)) } },
+        admin.token,
+      )
+      expect(closed.status).toBe(200)
+      const blocked = await call('POST', '/api/whatsapp/image', { conversationId: 'wa-luna', image: jpeg }, admin.token)
+      expect(blocked.status).toBe(400)
+      expect(blocked.body.error).toMatch(/24 h/)
+
+      const payload = JSON.stringify({
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  metadata: { phone_number_id: '100' },
+                  contacts: [{ wa_id: '50255550999', profile: { name: 'Nora' } }],
+                  messages: [{ id: 'wamid.fotoin', from: '50255550999', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Hola' } }],
+                },
+              },
+            ],
+          },
+        ],
+      })
+      const signature = `sha256=${createHmac('sha256', 'secret').update(payload).digest('hex')}`
+      expect((await fetch(`${base}/api/whatsapp/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature }, body: payload })).status).toBe(200)
+      const opened = (await call('GET', '/api/state', undefined, admin.token)).body as AppState
+      const thread = opened.conversations.find((item) => item.phone.includes('55550999'))!
+
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('graph.facebook.com') && url.endsWith('/media')) return Response.json({ id: '55501' })
+        if (url.includes('graph.facebook.com') && url.endsWith('/messages')) {
+          const sent = JSON.parse(String(init?.body)) as { type?: string; image?: { id?: string; caption?: string } }
+          expect(sent.type).toBe('image')
+          expect(sent.image).toEqual({ id: '55501', caption: 'Mira a Toby' })
+          return Response.json({ messages: [{ id: 'out.img.1' }] })
+        }
+        return original(input, init)
+      }) as typeof fetch
+
+      const sent = await call('POST', '/api/whatsapp/image', { conversationId: thread.id, caption: 'Mira a Toby', image: jpeg }, admin.token)
+      expect(sent.status).toBe(200)
+      const stored = (sent.body.state as AppState).conversations
+        .flatMap((item) => item.messages)
+        .find((item) => item.externalId === 'out.img.1')
+      expect(stored).toMatchObject({ direction: 'out', body: 'Mira a Toby', media: { kind: 'image', id: '55501', mime: 'image/jpeg' } })
+      expect(fs.readFileSync(path.join(dataDir, 'wa-media', '55501.bin'))).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))
+
+      globalThis.fetch = original
+      const file = await fetch(`${base}/api/whatsapp/media/55501`, { headers: { authorization: `Bearer ${admin.token}` } })
+      expect(file.status).toBe(200)
+      expect(file.headers.get('content-type')).toContain('image/jpeg')
+      expect(Buffer.from(await file.arrayBuffer())).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))
+    } finally {
+      globalThis.fetch = original
+      delete process.env.WA_TOKEN
+      delete process.env.WA_PHONE_NUMBER_ID
+      delete process.env.WA_VERIFY_TOKEN
+      delete process.env.WA_APP_SECRET
+    }
+  })
 })

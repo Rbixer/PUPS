@@ -253,7 +253,7 @@ function pushMessage(state: AppState, threadId: string, message: WaMessage, inbo
 /** Aplica un envío saliente ya aceptado por Meta. */
 export function appendOutbound(
   state: AppState,
-  input: { phone: string; name?: string; petName?: string; body: string; externalId: string; at?: string },
+  input: { phone: string; name?: string; petName?: string; body: string; externalId: string; at?: string; media?: WaMedia },
 ): AppState {
   const stamped = input.at ?? new Date().toISOString()
   const { state: withThread, thread } = upsertThread(state, input.phone, input.name ?? '', input.petName ?? '')
@@ -264,6 +264,7 @@ export function appendOutbound(
     at: stamped,
     status: 'enviado',
     externalId: input.externalId,
+    ...(input.media ? { media: input.media } : {}),
   }
   return pushMessage(withThread, thread.id, message, false)
 }
@@ -297,6 +298,91 @@ type InboundItem = {
 
 const MEDIA_ID = /^[A-Za-z0-9_-]{1,64}$/
 const MEDIA_KINDS: WaMediaKind[] = ['image', 'sticker', 'audio', 'video', 'document']
+
+/** WhatsApp solo acepta JPG o PNG, y como máximo 5 MB, en un mensaje de imagen. */
+export const IMAGE_MAX = 5 * 1024 * 1024
+
+export type OutboundImage = { data: Buffer; mime: 'image/jpeg' | 'image/png' }
+
+export function readOutboundImage(raw: string): OutboundImage {
+  const payload = raw
+    .trim()
+    .replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '')
+    .replace(/\s/g, '')
+  if (!payload) throw new Error('Elige una imagen.')
+  if (payload.length > Math.ceil(IMAGE_MAX / 3) * 4) throw new Error('La imagen es muy pesada. El máximo es 5 MB.')
+  const data = Buffer.from(payload, 'base64')
+  const clean = payload.replace(/=+$/, '')
+  if (data.length === 0 || data.toString('base64').replace(/=+$/, '') !== clean) throw new Error('La imagen no se pudo leer.')
+  if (data.length > IMAGE_MAX) throw new Error('La imagen es muy pesada. El máximo es 5 MB.')
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return { data, mime: 'image/jpeg' }
+  if (
+    data.length >= 8 &&
+    data[0] === 0x89 &&
+    data[1] === 0x50 &&
+    data[2] === 0x4e &&
+    data[3] === 0x47 &&
+    data[4] === 0x0d &&
+    data[5] === 0x0a &&
+    data[6] === 0x1a &&
+    data[7] === 0x0a
+  ) {
+    return { data, mime: 'image/png' }
+  }
+  throw new Error('Solo se pueden enviar fotos JPG o PNG.')
+}
+
+async function uploadImage(config: Pick<WaConfig, 'token' | 'phoneNumberId'>, image: OutboundImage, fetcher: typeof fetch) {
+  const form = new FormData()
+  form.set('messaging_product', 'whatsapp')
+  form.set('type', image.mime)
+  form.set('file', new Blob([new Uint8Array(image.data)], { type: image.mime }), image.mime === 'image/png' ? 'foto.png' : 'foto.jpg')
+  let response: Response
+  try {
+    response = await fetcher(`${GRAPH}/${config.phoneNumberId}/media`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${config.token}` },
+      body: form,
+      signal: AbortSignal.timeout(60_000),
+    })
+  } catch {
+    throw new Error('No se pudo enviar la imagen por WhatsApp.')
+  }
+  const data = (await response.json().catch(() => ({}))) as { id?: string; error?: { message?: string } }
+  if (!response.ok || !data.id || !MEDIA_ID.test(data.id)) throw new Error(data.error?.message || 'WhatsApp no aceptó la imagen.')
+  return data.id
+}
+
+/** Sube la foto a Meta y la manda en el hilo. Solo sirve dentro de la ventana de 24 h; la plantilla no lleva foto. */
+export async function deliverImage(
+  config: WaConfig,
+  input: { to: string; caption: string; image: OutboundImage },
+  deps?: { fetcher?: typeof fetch; graph?: GraphClient },
+): Promise<{ externalId: string; mediaId: string }> {
+  const mediaId = await uploadImage(config, input.image, deps?.fetcher ?? fetch)
+  const caption = input.caption.trim().slice(0, 1024)
+  const image: { id: string; caption?: string } = { id: mediaId }
+  if (caption) image.caption = caption
+  const graph = deps?.graph ?? createGraphClient(config)
+  const data = await graph(`/${config.phoneNumberId}/messages`, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phoneKey(input.to),
+    type: 'image',
+    image,
+  })
+  const externalId = data.messages?.[0]?.id
+  if (!externalId) throw new Error('WhatsApp no devolvió el id del mensaje.')
+  return { externalId, mediaId }
+}
+
+/** Deja en disco la foto que acabamos de enviar, para mostrarla sin volver a pedírsela a Meta. */
+export function cacheWaMedia(dir: string, id: string, data: Buffer, mime: string) {
+  if (!MEDIA_ID.test(id)) return
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, `${id}.bin`), data)
+  fs.writeFileSync(path.join(dir, `${id}.mime`), mime)
+}
 
 function clean(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : ''

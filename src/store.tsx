@@ -39,6 +39,19 @@ import {
 
 export type { ChargeNote } from './ops'
 
+function readFileBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const value = typeof reader.result === 'string' ? reader.result : ''
+      const comma = value.indexOf(',')
+      resolve(comma >= 0 ? value.slice(comma + 1) : value)
+    }
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'))
+    reader.readAsDataURL(file)
+  })
+}
+
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
 type Mutation = (current: AppState) => AppState | null
@@ -462,6 +475,8 @@ type Store = {
   updateSettings: (patch: Partial<Settings>) => void
   ensureThread: (phone: string, name: string, petName: string) => string | null
   sendMessage: (conversationId: string, body: string, template?: boolean) => Promise<string | null>
+  /** Manda una foto JPG o PNG al hilo. El texto, si lo hay, va como pie de foto. */
+  sendImage: (conversationId: string, file: File, caption: string) => Promise<string | null>
   waCloudStatus: () => Promise<{ configured: boolean; phoneNumberId: string; template: string } | null>
   /** Baja un archivo de WhatsApp con la sesión y lo deja listo para mostrar. */
   waMedia: (id: string) => Promise<{ url: string; mime: string } | { error: string }>
@@ -1068,6 +1083,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const response = await request('POST', '/api/whatsapp/send', { conversationId, text, template })
           const data = (await response.json().catch(() => ({}))) as { error?: string; state?: AppState }
           if (!response.ok) return data.error ?? 'No se pudo enviar por WhatsApp.'
+          if (data.state) {
+            server.current = data.state
+            pending.current = []
+            show(absorb(data.state, latest.current.sessionUserId))
+          }
+          return null
+        } catch {
+          return OFFLINE
+        }
+      },
+      sendImage: async (conversationId, file, caption) => {
+        if (!can('whatsapp_enviar')) return DENIED
+        if (file.size === 0) return 'Elige una imagen.'
+        if (file.size > 5 * 1024 * 1024) return 'La imagen es muy pesada. El máximo es 5 MB.'
+        let image = ''
+        try {
+          image = await readFileBase64(file)
+        } catch (error) {
+          return error instanceof Error ? error.message : 'No se pudo leer la imagen.'
+        }
+        try {
+          const response = await request('POST', '/api/whatsapp/image', { conversationId, caption: caption.trim(), image })
+          const data = (await response.json().catch(() => ({}))) as { error?: string; state?: AppState }
+          if (!response.ok) return data.error ?? 'No se pudo enviar la imagen.'
           if (data.state) {
             server.current = data.state
             pending.current = []

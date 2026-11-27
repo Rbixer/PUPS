@@ -8,13 +8,17 @@ import { createSeed } from '../src/seed'
 import {
   appendOutbound,
   applyWebhook,
+  cacheWaMedia,
+  deliverImage,
   describeInbound,
   dispatchOutbound,
   fromMetaNetwork,
+  IMAGE_MAX,
   isOwnWebhook,
   loadWaConfig,
   loadWaMedia,
   MediaError,
+  readOutboundImage,
   validSignature,
   verifyWebhook,
   withinServiceWindow,
@@ -267,5 +271,64 @@ describe('whatsapp cloud', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('foto saliente', () => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+  it('acepta jpg y png, y rechaza otro tipo o más de 5 MB', () => {
+    expect(readOutboundImage(jpeg.toString('base64'))).toMatchObject({ mime: 'image/jpeg' })
+    expect(readOutboundImage(`data:image/png;base64,${png.toString('base64')}`).mime).toBe('image/png')
+    expect(() => readOutboundImage('')).toThrow(/Elige una imagen/)
+    expect(() => readOutboundImage(Buffer.from('GIF89a').toString('base64'))).toThrow(/JPG o PNG/)
+    expect(() => readOutboundImage('****')).toThrow(/no se pudo leer/)
+    expect(() => readOutboundImage('A'.repeat(Math.ceil(IMAGE_MAX / 3) * 4 + 4))).toThrow(/5 MB/)
+  })
+
+  it('sube la foto y la manda con pie, o sin él si el texto va vacío', async () => {
+    const calls: unknown[] = []
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const form = init?.body as FormData
+      expect(form.get('messaging_product')).toBe('whatsapp')
+      expect(form.get('type')).toBe('image/jpeg')
+      expect(form.get('file')).toBeInstanceOf(Blob)
+      expect(init?.headers).toMatchObject({ authorization: 'Bearer token' })
+      return Response.json({ id: '55501' })
+    }) as typeof fetch
+    const graph = async (_path: string, body: unknown) => {
+      calls.push(body)
+      return { messages: [{ id: 'out.img.1' }] }
+    }
+    const sent = await deliverImage(config, { to: '+502 5555-8888', caption: 'Mira a Toby', image: { data: jpeg, mime: 'image/jpeg' } }, { fetcher, graph })
+    expect(sent).toEqual({ externalId: 'out.img.1', mediaId: '55501' })
+    expect(calls[0]).toMatchObject({ type: 'image', to: '50255558888', image: { id: '55501', caption: 'Mira a Toby' } })
+    await deliverImage(config, { to: '50255558888', caption: '   ', image: { data: jpeg, mime: 'image/jpeg' } }, { fetcher, graph })
+    expect((calls[1] as { image: { id: string; caption?: string } }).image).toEqual({ id: '55501' })
+  })
+
+  it('guarda la foto enviada para mostrarla después', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pups-wa-out-'))
+    try {
+      cacheWaMedia(dir, '55501', jpeg, 'image/jpeg')
+      expect(fs.readFileSync(path.join(dir, '55501.bin'))).toEqual(jpeg)
+      expect(fs.readFileSync(path.join(dir, '55501.mime'), 'utf8')).toBe('image/jpeg')
+      cacheWaMedia(dir, '../x', jpeg, 'image/jpeg')
+      expect(fs.readdirSync(dir).some((name) => name.includes('..'))).toBe(false)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('deja la foto en el hilo saliente', () => {
+    const next = appendOutbound(createSeed(), {
+      phone: '50255558888',
+      body: '📷 Foto',
+      externalId: 'out.img.2',
+      media: { kind: 'image', id: '55501', mime: 'image/jpeg' },
+    })
+    const thread = next.conversations.find((item) => item.phone.includes('55558888'))!
+    expect(thread.messages.at(-1)).toMatchObject({ direction: 'out', body: '📷 Foto', media: { kind: 'image', id: '55501', mime: 'image/jpeg' } })
   })
 })
