@@ -235,16 +235,23 @@ function upsertThread(state: AppState, phone: string, name: string, petName = ''
   return { state: { ...state, conversations: [thread, ...list] }, thread }
 }
 
+function placeMessage(messages: WaMessage[], message: WaMessage) {
+  const index = messages.findIndex((item) => item.at > message.at)
+  if (index === -1) return [...messages, message]
+  return [...messages.slice(0, index), message, ...messages.slice(index)]
+}
+
 function pushMessage(state: AppState, threadId: string, message: WaMessage, inbound: boolean): AppState {
   return {
     ...state,
     conversations: state.conversations.map((item) => {
       if (item.id !== threadId) return item
+      if (message.externalId && item.messages.some((current) => current.externalId === message.externalId)) return item
       return {
         ...item,
         unread: inbound ? item.unread + 1 : item.unread,
-        lastInboundAt: inbound ? message.at : item.lastInboundAt,
-        messages: [...item.messages, message],
+        lastInboundAt: inbound && (!item.lastInboundAt || message.at >= item.lastInboundAt) ? message.at : item.lastInboundAt,
+        messages: placeMessage(item.messages, message),
       }
     }),
   }
@@ -253,7 +260,7 @@ function pushMessage(state: AppState, threadId: string, message: WaMessage, inbo
 /** Aplica un envío saliente ya aceptado por Meta. */
 export function appendOutbound(
   state: AppState,
-  input: { phone: string; name?: string; petName?: string; body: string; externalId: string; at?: string; media?: WaMedia },
+  input: { phone: string; name?: string; petName?: string; body: string; externalId: string; at?: string; media?: WaMedia; link?: string },
 ): AppState {
   const stamped = input.at ?? new Date().toISOString()
   const { state: withThread, thread } = upsertThread(state, input.phone, input.name ?? '', input.petName ?? '')
@@ -265,6 +272,7 @@ export function appendOutbound(
     status: 'enviado',
     externalId: input.externalId,
     ...(input.media ? { media: input.media } : {}),
+    ...(input.link ? { link: input.link } : {}),
   }
   return pushMessage(withThread, thread.id, message, false)
 }
@@ -281,6 +289,8 @@ type MediaRef = { id?: string; mime_type?: string; caption?: string; filename?: 
 type InboundItem = {
   id?: string
   from?: string
+  /** En un eco del celular, el cliente está en `to`, no en `from`. */
+  to?: string
   timestamp?: string
   type?: string
   text?: { body?: string }
@@ -435,12 +445,16 @@ export function describeInbound(item: InboundItem): { body: string; media?: WaMe
   return { body: 'Mensaje que este chat no puede mostrar. Ábrelo en WhatsApp.' }
 }
 
+const ECHO_TYPES = new Set(['text', 'image', 'sticker', 'audio', 'video', 'document', 'location', 'contacts', 'reaction', 'interactive', 'button'])
+
 type WebhookPayload = {
   entry?: {
     changes?: {
       value?: {
         contacts?: { wa_id?: string; profile?: { name?: string } }[]
         messages?: InboundItem[]
+        /** Respuestas escritas en el WhatsApp del celular, no desde este panel. */
+        message_echoes?: InboundItem[]
         statuses?: { id?: string; status?: string; timestamp?: string; errors?: { message?: string }[] }[]
       }
     }[]
@@ -475,6 +489,23 @@ export function applyWebhook(state: AppState, payload: WebhookPayload): AppState
           ...(described.link ? { link: described.link } : {}),
         }
         next = pushMessage(next, prepared.thread.id, message, true)
+      }
+      for (const item of value.message_echoes ?? []) {
+        const phone = item.to?.trim() ?? ''
+        if (!item.id || !phone || !ECHO_TYPES.has(item.type ?? '')) continue
+        const described = describeInbound(item)
+        if (!described) continue
+        const at = item.timestamp ? new Date(Number(item.timestamp) * 1000).toISOString() : new Date().toISOString()
+        const contact = value.contacts?.find((entry) => entry.wa_id && phoneKey(entry.wa_id) === phoneKey(phone))
+        next = appendOutbound(next, {
+          phone,
+          name: contact?.profile?.name,
+          body: described.body,
+          externalId: item.id,
+          at,
+          ...(described.media ? { media: described.media } : {}),
+          ...(described.link ? { link: described.link } : {}),
+        })
       }
       for (const item of value.statuses ?? []) {
         if (!item.id || !item.status) continue

@@ -160,6 +160,38 @@ describe('whatsapp cloud', () => {
     expect(updated.conversations.find((item) => item.id === thread.id)!.messages.find((item) => item.externalId === 'wamid.out1')!.status).toBe('leido')
   })
 
+  it('guarda en el hilo lo que se escribió en el celular y lo ordena por hora', () => {
+    const seed = createSeed()
+    const base = Math.floor(Date.now() / 1000)
+    const next = applyWebhook(seed, {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                contacts: [{ wa_id: '50238269336', profile: { name: 'julia<3' } }],
+                messages: [
+                  { id: 'wamid.in-a', from: '50238269336', timestamp: String(base), type: 'text', text: { body: 'Quisiera apartar' } },
+                  { id: 'wamid.in-b', from: '50238269336', timestamp: String(base + 120), type: 'text', text: { body: 'Julia Gómez' } },
+                ],
+                message_echoes: [
+                  { id: 'wamid.echo', from: '50231966123', to: '50238269336', timestamp: String(base + 60), type: 'text', text: { body: 'Quedan reservados' } },
+                  { id: 'wamid.echo', from: '50231966123', to: '50238269336', timestamp: String(base + 60), type: 'text', text: { body: 'Quedan reservados' } },
+                  { id: 'wamid.no-to', from: '50231966123', timestamp: String(base + 61), type: 'text', text: { body: 'sin destino' } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+    const thread = next.conversations.find((item) => item.phone.includes('38269336'))!
+    expect(thread.unread).toBe(2)
+    expect(thread.messages.map((item) => item.externalId)).toEqual(['wamid.in-a', 'wamid.echo', 'wamid.in-b'])
+    expect(thread.messages[1]).toMatchObject({ direction: 'out', body: 'Quedan reservados', status: 'enviado' })
+    expect(next.conversations.some((item) => item.phone.includes('31966123'))).toBe(false)
+  })
+
   it('envía texto dentro de la ventana y plantilla cuando se fuerza', async () => {
     const seed = createSeed()
     const withIn = applyWebhook(seed, {
