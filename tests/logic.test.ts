@@ -10,7 +10,7 @@ import { ACCOUNTING_LINKS, linkAllowed, MODULE_GROUPS, moduleAt } from '../src/m
 import { EMPLOYEE_CREDIT, employeeOwed, recordEmployeePurchase, settleEmployeeCredit } from '../src/ops'
 import { createSeed, DATA_VERSION } from '../src/seed'
 import { applyShopOrder, BASE_CATEGORY_NAMES, categoryNames, demoCatalog, normalizeCategory } from '../src/shop'
-import { nextPetCode, planOf, priceFor, resolvePetCode, SLOT_CAPACITY, slotCount, slotTaken } from '../src/visit'
+import { applyPlan, nextPetCode, planOf, premiumGaps, priceFor, resolvePetCode, SLOT_CAPACITY, slotCount, slotTaken } from '../src/visit'
 
 describe('formato', () => {
   it('normaliza teléfonos de Guatemala', () => {
@@ -92,6 +92,17 @@ describe('tarifas y agenda', () => {
     expect(priceFor('grooming', 'Pequeño')).toBe(155)
     expect(priceFor('premium', 'Grande')).toBe(340)
     expect(priceFor('grooming', 'Gigante')).toBeNull()
+  })
+
+  it('imprime Premium aunque dientes y glándulas hayan quedado en blanco', () => {
+    const report = applyPlan(emptyReport(), 'premium')
+    report.photos = ['antes.jpg', '', 'despues.jpg']
+    expect(report.egreso.dientes?.value).toBe('')
+    expect(report.egreso.glandulas?.value).toBe('')
+    expect(report.egreso.bano?.value).toBe('si')
+    expect(premiumGaps(report)).toEqual([])
+    report.egreso.dientes = { value: 'no', note: 'No lo pidió' }
+    expect(premiumGaps(report)).toEqual([])
   })
 
   it('reconoce el plan premium por servicio', () => {

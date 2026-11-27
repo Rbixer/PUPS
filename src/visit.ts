@@ -15,7 +15,8 @@ export const TARIFF: Record<PlanId, Record<string, number>> = {
 
 const INCLUDED: Record<PlanId, string[]> = {
   grooming: ['bano', 'cepillado', 'unas', 'oidos'],
-  premium: ['bano', 'cepillado', 'unas', 'oidos', 'deslanado', 'dientes', 'glandulas'],
+  // Dientes y glándulas van en el paquete, pero el cliente a veces no los pide: no se marcan solos ni frenan la constancia.
+  premium: ['bano', 'cepillado', 'unas', 'oidos', 'deslanado'],
 }
 
 export function priceFor(plan: PlanId, size: string) {
@@ -113,8 +114,6 @@ export function premiumGaps(report: GroomingReport) {
   if (!report.photos[2]) gaps.push('foto de después')
   if (report.egreso.bano?.value !== 'si') gaps.push('baño')
   if (report.egreso.deslanado?.value !== 'si' && report.egreso.desenredado?.value !== 'si') gaps.push('deslanado o desenredado')
-  if (report.egreso.dientes?.value !== 'si') gaps.push('cepillado de dientes')
-  if (report.egreso.glandulas?.value !== 'si') gaps.push('extracción de glándulas')
   return gaps
 }
 

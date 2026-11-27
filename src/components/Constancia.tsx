@@ -330,7 +330,7 @@ export function Constancia({
           </header>
           <p className="hint">
             {report.plan === 'premium'
-              ? 'Premium incluye baño, cepillado, uñas, oídos, deslanado, dientes y glándulas. La impresión pide foto de antes y de después.'
+              ? 'Premium incluye baño, cepillado, uñas, oídos y deslanado. Dientes y glándulas salen en la constancia solo si se marcan. La impresión pide foto de antes y de después.'
               : 'Grooming incluye baño, cepillado, uñas y oídos.'}{' '}
             {suggested != null
               ? `Tarifa de ${appointment.size}: ${money(suggested)}.`
