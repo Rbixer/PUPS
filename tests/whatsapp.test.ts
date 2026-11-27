@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { buildChimeWav, incomingCount } from '../src/chime'
 import { createSeed } from '../src/seed'
 import {
   appendOutbound,
@@ -27,6 +28,29 @@ const config: WaConfig = {
   appSecret: 'secret',
   template: 'reserva_nueva',
 }
+
+describe('aviso de mensaje', () => {
+  const threads = [
+    { messages: [{ id: 'a', direction: 'in' }, { id: 'b', direction: 'out' }] },
+    { messages: [{ id: 'c', direction: 'in' }] },
+  ]
+
+  it('cuenta solo los entrantes nuevos y recuerda los que ya sonaron', () => {
+    const first = incomingCount(new Set(), threads)
+    expect(first.count).toBe(2)
+    expect(incomingCount(first.next, threads).count).toBe(0)
+    const again = incomingCount(first.next, [...threads, { messages: [{ id: 'd', direction: 'in' }] }])
+    expect(again.count).toBe(1)
+    expect(incomingCount(again.next, [{ messages: [{ id: 'e', direction: 'out' }] }]).count).toBe(0)
+  })
+
+  it('arma un wav con las dos notas del aviso', () => {
+    const wav = buildChimeWav()
+    expect(String.fromCharCode(...wav.slice(0, 4))).toBe('RIFF')
+    expect(String.fromCharCode(...wav.slice(8, 12))).toBe('WAVE')
+    expect(wav.length).toBeGreaterThan(44)
+  })
+})
 
 describe('whatsapp cloud', () => {
   it('carga la config solo si están todas las variables', () => {

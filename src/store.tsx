@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { allows as userAllows, settingAllowed } from './access'
+import { allows as userAllows, allowsAny, settingAllowed } from './access'
+import { emitIncoming, incomingCount } from './chime'
 import { parseBackup } from './backup'
 import { createSeed, DATA_VERSION } from './seed'
 import { digits, newId, normalizePhone } from './format'
@@ -489,6 +490,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [weakPassword, setWeakPassword] = useState(() => sessionStorage.getItem(WEAK) === '1')
   const [mustChangePassword, setMustChangePassword] = useState(() => sessionStorage.getItem(MUST_CHANGE) === '1')
   const latest = useRef(state)
+  /** Ids de mensajes entrantes ya oídos. Null hasta la primera carga del servidor, para no sonar el historial. */
+  const heardInbound = useRef<Set<string> | null>(null)
   const server = useRef<AppState | null>(null)
   const pending = useRef<Mutation[]>([])
   const touched = useRef<Touched>({})
@@ -497,9 +500,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pushTimer = useRef<number | null>(null)
   const engine = useRef<{ push: () => void; loadPrivate: () => Promise<boolean>; loadPublic: () => Promise<void>; expire: () => void } | null>(null)
 
+  function noticeInbound(next: AppState) {
+    if (!token.current || !server.current) {
+      if (!token.current) heardInbound.current = null
+      return
+    }
+    const arrived = incomingCount(heardInbound.current ?? new Set(), next.conversations)
+    const first = heardInbound.current === null
+    heardInbound.current = arrived.next
+    if (first || arrived.count === 0) return
+    const user = next.users.find((item) => item.id === next.sessionUserId) ?? null
+    if (!allowsAny(user, ['whatsapp', 'whatsapp_enviar'])) return
+    emitIncoming(arrived.count)
+  }
+
   function show(next: AppState) {
     latest.current = next
     setState(next)
+    noticeInbound(next)
     setUnsynced(pending.current.length > 0)
     if (token.current) {
       const saved = readSync()
@@ -649,7 +667,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     else void engine.current?.loadPublic()
 
     const poll = async () => {
-      if (!token.current || pushing.current || pending.current.length > 0 || document.hidden) return
+      // También con la pestaña atrás: el aviso suena cuando cae el mensaje, no al volver.
+      if (!token.current || pushing.current || pending.current.length > 0) return
       if (!server.current) {
         await engine.current?.loadPrivate()
         return
